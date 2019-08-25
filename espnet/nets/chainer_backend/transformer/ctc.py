@@ -1,3 +1,5 @@
+# encoding: utf-8
+"""Class Declaration of Transformer's CTC."""
 import logging
 
 import chainer
@@ -5,9 +7,8 @@ import chainer.functions as F
 import chainer.links as L
 import numpy as np
 
-from chainer import cuda
 
-
+# TODO(nelson): Merge chainer_backend/transformer/ctc.py in chainer_backend/ctc.py
 class CTC(chainer.Chain):
     """Chainer implementation of ctc layer.
 
@@ -19,6 +20,7 @@ class CTC(chainer.Chain):
     """
 
     def __init__(self, odim, eprojs, dropout_rate):
+        """Initialize CTC."""
         super(CTC, self).__init__()
         self.dropout_rate = dropout_rate
         self.loss = None
@@ -87,42 +89,48 @@ class WarpCTC(chainer.Chain):
     """
 
     def __init__(self, odim, eprojs, dropout_rate):
+        """Initialize WarpCTC."""
         super(WarpCTC, self).__init__()
+        # The main difference between the ctc for transformer and
+        # the rnn is because the target (ys) is already a list of
+        # arrays located in the cpu, while in rnn routine the target is
+        # a list of variables located in cpu/gpu. If the target of rnn becomes
+        # a list of cpu arrays then this file would be no longer required.
+        from chainer_ctc.warpctc import ctc as warp_ctc
+        self.ctc = warp_ctc
         self.dropout_rate = dropout_rate
         self.loss = None
 
         with self.init_scope():
             self.ctc_lo = L.Linear(eprojs, odim)
 
-    def __call__(self, hs, ys):
+    def forward(self, hs, ys):
         """Core function of the Warp-CTC layer.
 
         Args:
             hs (iterable of chainer.Variable | N-dimention array): Input variable from encoder.
-            ys (iterable of chainer.Variable | N-dimension array): Input variable of decoder.
+            ys (iterable of N-dimension array): Input variable of decoder.
 
         Returns:
            chainer.Variable: A variable holding a scalar value of the CTC loss.
 
         """
         self.loss = None
-        ilens = [x.shape[0] for x in hs]
+        ilens = [hs.shape[1]] * hs.shape[0]
         olens = [x.shape[0] for x in ys]
 
         # zero padding for hs
+        # output batch x frames x hdim > frames x batch x hdim
         y_hat = self.ctc_lo(F.dropout(
-            F.pad_sequence(hs), ratio=self.dropout_rate), n_batch_axes=2)
-        y_hat = y_hat.transpose(1, 0, 2)  # batch x frames x hdim
+            hs, ratio=self.dropout_rate), n_batch_axes=2).transpose(1, 0, 2)
 
         # get length info
         logging.info(self.__class__.__name__ + ' input lengths:  ' + str(ilens))
         logging.info(self.__class__.__name__ + ' output lengths: ' + str(olens))
 
         # get ctc loss
-        from chainer_ctc.warpctc import ctc as warp_ctc
-        self.loss = warp_ctc(y_hat, ilens, [cuda.to_cpu(l.data) for l in ys])[0]
+        self.loss = self.ctc(y_hat, ilens, ys)[0]
         logging.info('ctc loss:' + str(self.loss.data))
-
         return self.loss
 
     def log_softmax(self, hs):
@@ -139,34 +147,10 @@ class WarpCTC(chainer.Chain):
         return F.log_softmax(y_hat.reshape(-1, y_hat.shape[-1])).reshape(y_hat.shape)
 
     def argmax(self, hs_pad):
-        """argmax of frame activations
+        """Argmax of frame activations.
 
         :param chainer variable hs_pad: 3d tensor (B, Tmax, eprojs)
         :return: argmax applied 2d tensor (B, Tmax)
-        :rtype: chainer.Variable
+        :rtype: chainer.Variable.
         """
         return F.argmax(self.ctc_lo(F.pad_sequence(hs_pad), n_batch_axes=2), axis=-1)
-
-
-def ctc_for(args, odim):
-    """Return the CTC layer corresponding to the args.
-
-    Args:
-        args (Namespace): The program arguments.
-        odim (int): The output dimension.
-
-    Returns:
-        The CTC module.
-
-    """
-    ctc_type = args.ctc_type
-    if ctc_type == 'builtin':
-        logging.info("Using chainer CTC implementation")
-        ctc = CTC(odim, args.eprojs, args.dropout_rate)
-    elif ctc_type == 'warpctc':
-        logging.info("Using warpctc CTC implementation")
-        ctc = WarpCTC(odim, args.eprojs, args.dropout_rate)
-    else:
-        raise ValueError('ctc_type must be "builtin" or "warpctc": {}'
-                         .format(ctc_type))
-    return ctc
