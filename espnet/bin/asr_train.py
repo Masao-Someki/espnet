@@ -287,6 +287,8 @@ def get_parser():
                         help='')
     parser.add_argument('--fbank-fmax', type=float, default=None,
                         help='')
+    parser.add_argument('--is_rtrans', action='store_true')
+    parser.add_argument('--is_rtrans_dec', action='store_true')
     return parser
 
 

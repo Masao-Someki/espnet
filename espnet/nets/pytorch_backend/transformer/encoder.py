@@ -8,7 +8,7 @@ from espnet.nets.pytorch_backend.transformer.multi_layer_conv import MultiLayere
 from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import PositionwiseFeedForward
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling
-
+from espnet.nets.pytorch_backend.transformer.rtransformer_block import RTransformer_Block
 
 class Encoder(torch.nn.Module):
     """Transformer encoder module
@@ -46,7 +46,12 @@ class Encoder(torch.nn.Module):
                  concat_after=False,
                  positionwise_layer_type="linear",
                  positionwise_conv_kernel_size=1,
-                 padding_idx=-1):
+                 padding_idx=-1,
+                 is_rtrans=False,
+                 rnn_type='LSTM',
+                 ksize=6,
+                 num_rnn=1
+                 ):
         super(Encoder, self).__init__()
         if input_layer == "linear":
             self.embed = torch.nn.Sequential(
@@ -83,17 +88,31 @@ class Encoder(torch.nn.Module):
             positionwise_layer_args = (attention_dim, linear_units, positionwise_conv_kernel_size, dropout_rate)
         else:
             raise NotImplementedError("Support only linear or conv1d.")
-        self.encoders = repeat(
-            num_blocks,
-            lambda: EncoderLayer(
-                attention_dim,
-                MultiHeadedAttention(attention_heads, attention_dim, attention_dropout_rate),
-                positionwise_layer(*positionwise_layer_args),
-                dropout_rate,
-                normalize_before,
-                concat_after
+        if is_rtrans:
+            self.encoders = repeat(
+                num_blocks,
+                lambda: RTransformer_Block(
+                    input_dim=attention_dim,
+                    output_dim=attention_dim,
+                    rnn_type=rnn_type,
+                    ksize=ksize,
+                    N=num_rnn,
+                    h=attention_heads,
+                    dropout=attention_dropout_rate
+                )
             )
-        )
+        else:
+            self.encoders = repeat(
+                num_blocks,
+                lambda: EncoderLayer(
+                    attention_dim,
+                    MultiHeadedAttention(attention_heads, attention_dim, attention_dropout_rate),
+                    positionwise_layer(*positionwise_layer_args),
+                    dropout_rate,
+                    normalize_before,
+                    concat_after
+                )
+            )
         if self.normalize_before:
             self.after_norm = LayerNorm(attention_dim)
 

@@ -6,6 +6,7 @@ from espnet.nets.pytorch_backend.transformer.embedding import PositionalEncoding
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import PositionwiseFeedForward
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
+from espnet.nets.pytorch_backend.transformer.rtransformer_block import RTransformer_Block
 
 
 class Decoder(torch.nn.Module):
@@ -40,7 +41,12 @@ class Decoder(torch.nn.Module):
                  use_output_layer=True,
                  pos_enc_class=PositionalEncoding,
                  normalize_before=True,
-                 concat_after=False):
+                 concat_after=False,
+                 is_rtrans=False,
+                 rnn_type='GRU',
+                 ksize=6,
+                 num_rnn=1
+                 ):
         super(Decoder, self).__init__()
         if input_layer == "embed":
             self.embed = torch.nn.Sequential(
@@ -63,18 +69,32 @@ class Decoder(torch.nn.Module):
         else:
             raise NotImplementedError("only `embed` or torch.nn.Module is supported.")
         self.normalize_before = normalize_before
-        self.decoders = repeat(
-            num_blocks,
-            lambda: DecoderLayer(
-                attention_dim,
-                MultiHeadedAttention(attention_heads, attention_dim, self_attention_dropout_rate),
-                MultiHeadedAttention(attention_heads, attention_dim, src_attention_dropout_rate),
-                PositionwiseFeedForward(attention_dim, linear_units, dropout_rate),
-                dropout_rate,
-                normalize_before,
-                concat_after
+        if is_rtrans:
+            self.decoders = repeat(
+                num_blocks,
+                lambda: RTransformer_Block(
+                    input_dim=attention_dim,
+                    output_dim=attention_dim,
+                    rnn_type=rnn_type,
+                    ksize=ksize,
+                    N=num_rnn,
+                    h=attention_heads,
+                    dropout=dropout_rate
+                )
             )
-        )
+        else:
+            self.decoders = repeat(
+                num_blocks,
+                lambda: DecoderLayer(
+                    attention_dim,
+                    MultiHeadedAttention(attention_heads, attention_dim, self_attention_dropout_rate),
+                    MultiHeadedAttention(attention_heads, attention_dim, src_attention_dropout_rate),
+                    PositionwiseFeedForward(attention_dim, linear_units, dropout_rate),
+                    dropout_rate,
+                    normalize_before,
+                    concat_after
+                )
+            )
         if self.normalize_before:
             self.after_norm = LayerNorm(attention_dim)
         if use_output_layer:
@@ -97,9 +117,12 @@ class Decoder(torch.nn.Module):
         :rtype: torch.Tensor
         """
         x = self.embed(tgt)
+        print('ok3.5')
         x, tgt_mask, memory, memory_mask = self.decoders(x, tgt_mask, memory, memory_mask)
+        print('ok4')
         if self.normalize_before:
             x = self.after_norm(x)
+        print('ok5')
         if self.output_layer is not None:
             x = self.output_layer(x)
         return x, tgt_mask
