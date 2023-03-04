@@ -26,6 +26,17 @@ espnet2.slu.espnet_model
     :show-inheritance:
 
 
+.. _espnet2.slu.postdecoder.abs_postdecoder:
+
+espnet2.slu.postdecoder.abs_postdecoder
+---------------------------------------
+
+.. automodule:: espnet2.slu.postdecoder.abs_postdecoder
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 .. _espnet2.slu.postdecoder.__init__:
 
 espnet2.slu.postdecoder.__init__
@@ -43,17 +54,6 @@ espnet2.slu.postdecoder.hugging_face_transformers_postdecoder
 -------------------------------------------------------------
 
 .. automodule:: espnet2.slu.postdecoder.hugging_face_transformers_postdecoder
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-.. _espnet2.slu.postdecoder.abs_postdecoder:
-
-espnet2.slu.postdecoder.abs_postdecoder
----------------------------------------
-
-.. automodule:: espnet2.slu.postdecoder.abs_postdecoder
     :members:
     :undoc-members:
     :show-inheritance:
