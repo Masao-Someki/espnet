@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>aggregate_stats_dirs.py &mdash; ESPnet 202301 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <title>aggregate_stats_dirs.py &mdash; ESPnet 202304 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -34,7 +34,7 @@
             ESPnet
           </a>
               <div class="version">
-                202301
+                202304
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
@@ -48,7 +48,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Usage</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../parallelization.html">Using Job scheduling system</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../parallelization.html">Using job scheduling system</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../faq.html">FAQ</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../docker.html">Docker</a></li>
 </ul>
@@ -57,11 +57,18 @@
 <li class="toctree-l1"><a class="reference internal" href="../espnet2_tutorial.html">ESPnet2</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../espnet2_tutorial.html#instruction-for-run-sh">Instruction for run.sh</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../espnet2_training_option.html">Change the configuration for training</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../espnet2_format_wav_scp.html">Converting audio file formats using format_wav_scp.py</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../espnet2_task.html">Task class and data input system for training</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../espnet2_distributed.html">Distributed training</a></li>
 </ul>
 <p><span class="caption-text">Notebook:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/DataPreparation_CMU_11492_692_Spring2023(Assignment0).html">CMU 11492/11692 Spring 2023: Data preparation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/DataPreparation_CMU_11492_692_Spring2023(Assignment0).html#Data-preparation-in-ESPnet">Data preparation in ESPnet</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/SpeechEnhancement_CMU_11492_692_Spring2023(Assignment7).html">CMU 11492/11692 Spring 2023: Speech Enhancement</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/SpeechEnhancement_CMU_11492_692_Spring2023(Assignment7).html#Contents">Contents</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/SpokenLanguageUnderstanding_CMU_11492_692_Spring2023(Assignment6).html">CMU 11492/11692 Spring 2023: Spoken Language Understanding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/TextToSpeech_CMU_11492_692_Spring2023(Assignment8).html">CMU 11492/11692 Spring 2023: Text to Speech</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../notebook/asr_cli.html">Speech Recognition (Recipe)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../notebook/asr_library.html">Speech Recognition (Library)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../notebook/espnet2_2pass_slu_demo.html">ESPNET 2 pass SLU Demonstration</a></li>
@@ -101,47 +108,48 @@
 </ul>
 <p><span class="caption-text">Package Reference:</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="espnet.optimizer.html">espnet.optimizer package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.scheduler.html">espnet.scheduler package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.tts.html">espnet.tts package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.utils.html">espnet.utils package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.st.html">espnet.st package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.lm.html">espnet.lm package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.mt.html">espnet.mt package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.nets.html">espnet.nets package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.transform.html">espnet.transform package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.bin.html">espnet.bin package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet.vc.html">espnet.vc package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet.distributed.html">espnet.distributed package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet.asr.html">espnet.asr package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.train.html">espnet2.train package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.tasks.html">espnet2.tasks package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.asr_transducer.html">espnet2.asr_transducer package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.svs.html">espnet2.svs package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.enh.html">espnet2.enh package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.hubert.html">espnet2.hubert package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.gan_svs.html">espnet2.gan_svs package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.tts.html">espnet2.tts package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.utils.html">espnet2.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.st.html">espnet.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.nets.html">espnet.nets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.utils.html">espnet.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.transform.html">espnet.transform package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.vc.html">espnet.vc package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.bin.html">espnet.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.mt.html">espnet.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.tts.html">espnet.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.optimizer.html">espnet.optimizer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.lm.html">espnet.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet.scheduler.html">espnet.scheduler package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet2.layers.html">espnet2.layers package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.st.html">espnet2.st package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.torch_utils.html">espnet2.torch_utils package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.lm.html">espnet2.lm package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.fileio.html">espnet2.fileio package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.mt.html">espnet2.mt package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.fst.html">espnet2.fst package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.optimizers.html">espnet2.optimizers package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.main_funcs.html">espnet2.main_funcs package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.schedulers.html">espnet2.schedulers package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.bin.html">espnet2.bin package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.slu.html">espnet2.slu package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.uasr.html">espnet2.uasr package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.gan_tts.html">espnet2.gan_tts package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.text.html">espnet2.text package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.diar.html">espnet2.diar package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.samplers.html">espnet2.samplers package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="espnet2.iterators.html">espnet2.iterators package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="espnet2.asr.html">espnet2.asr package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.svs.html">espnet2.svs package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.fileio.html">espnet2.fileio package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.optimizers.html">espnet2.optimizers package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.gan_svs.html">espnet2.gan_svs package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.asr_transducer.html">espnet2.asr_transducer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.hubert.html">espnet2.hubert package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.train.html">espnet2.train package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.st.html">espnet2.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.uasr.html">espnet2.uasr package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.samplers.html">espnet2.samplers package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.utils.html">espnet2.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.iterators.html">espnet2.iterators package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.text.html">espnet2.text package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.tasks.html">espnet2.tasks package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.bin.html">espnet2.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.mt.html">espnet2.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.gan_tts.html">espnet2.gan_tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.tts.html">espnet2.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.enh.html">espnet2.enh package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.slu.html">espnet2.slu package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.torch_utils.html">espnet2.torch_utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.schedulers.html">espnet2.schedulers package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.fst.html">espnet2.fst package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.asvspoof.html">espnet2.asvspoof package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.diar.html">espnet2.diar package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.lm.html">espnet2.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="espnet2.main_funcs.html">espnet2.main_funcs package</a></li>
 </ul>
 <p><span class="caption-text">Tool Reference:</span></p>
 <ul>
@@ -175,31 +183,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  
-<style>
-/* CSS overrides for sphinx_rtd_theme */
-
-/* 24px margin */
-.nbinput.nblast.container,
-.nboutput.nblast.container {
-    margin-bottom: 19px;  /* padding has already 5px */
-}
-
-/* ... except between code cells! */
-.nblast.container + .nbinput.container {
-    margin-top: -19px;
-}
-
-.admonition > p:before {
-    margin-right: 4px;  /* make room for the exclamation icon */
-}
-
-/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
-.math {
-    text-align: unset;
-}
-</style>
-<section id="aggregate-stats-dirs-py-1">
+  <section id="aggregate-stats-dirs-py-1">
 <span id="aggregate-stats-dirs-py"></span><h1>aggregate_stats_dirs.py<a class="headerlink" href="#aggregate-stats-dirs-py-1" title="Permalink to this headline">¶</a></h1>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: aggregate_stats_dirs.py [-h]
                                [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
@@ -226,6 +210,8 @@ optional arguments:
 [nltk_data]   Unzipping taggers/averaged_perceptron_tagger.zip.
 [nltk_data] Downloading package cmudict to /home/runner/nltk_data...
 [nltk_data]   Unzipping corpora/cmudict.zip.
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 usage: asr_align.py [-h] [--config CONFIG]
                     [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                     [--ngpu NGPU] [--dtype {float16,float32,float64}]
@@ -324,7 +310,9 @@ Input/output arguments:
 </section>
 <section id="asr-inference-streaming-py-1">
 <span id="asr-inference-streaming-py"></span><h1>asr_inference_streaming.py<a class="headerlink" href="#asr-inference-streaming-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: asr_inference_streaming.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: asr_inference_streaming.py [-h] [--config CONFIG]
                                   [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                                   --output_dir OUTPUT_DIR [--ngpu NGPU]
                                   [--seed SEED]
@@ -493,7 +481,7 @@ Text converter related:
                     [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                     [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                     [--optim_conf OPTIM_CONF]
-                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                     [--scheduler_conf SCHEDULER_CONF]
                     [--token_list TOKEN_LIST]
                     [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
@@ -756,6 +744,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -872,7 +867,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -951,12 +946,16 @@ Optimizer related:
                         The preprocessor type (default: default)
   --preprocessor_conf PREPROCESSOR_CONF
                         The keyword arguments for preprocessor (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="asr-transducer-inference-py-1">
 <span id="asr-transducer-inference-py"></span><h1>asr_transducer_inference.py<a class="headerlink" href="#asr-transducer-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: asr_transducer_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: asr_transducer_inference.py [-h] [--config CONFIG]
                                    [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                                    --output_dir OUTPUT_DIR [--ngpu NGPU]
                                    [--seed SEED]
@@ -980,10 +979,9 @@ Optimizer related:
                                    [--quantize_modules [QUANTIZE_MODULES [QUANTIZE_MODULES ...]]]
                                    [--quantize_dtype {float16,qint8}]
                                    [--streaming STREAMING]
-                                   [--chunk_size CHUNK_SIZE]
+                                   [--decoding_window DECODING_WINDOW]
                                    [--left_context LEFT_CONTEXT]
-                                   [--right_context RIGHT_CONTEXT]
-                                   [--display_partial_hypotheses DISPLAY_PARTIAL_HYPOTHESES]
+                                   [--display_hypotheses DISPLAY_HYPOTHESES]
 
 ASR Transducer Decoding
 
@@ -1013,18 +1011,17 @@ optional arguments:
   --streaming STREAMING
                         Whether to perform chunk-by-chunk inference. (default:
                         False)
-  --chunk_size CHUNK_SIZE
-                        Number of frames in chunk AFTER subsampling. (default:
-                        16)
+  --decoding_window DECODING_WINDOW
+                        Audio length (in milliseconds) to process during
+                        decoding. (default: 640)
   --left_context LEFT_CONTEXT
-                        Number of frames in left context of the chunk AFTER
-                        subsampling. (default: 32)
-  --right_context RIGHT_CONTEXT
-                        Number of frames in right context of the chunk AFTER
-                        subsampling. (default: 0)
-  --display_partial_hypotheses DISPLAY_PARTIAL_HYPOTHESES
-                        Whether to display partial hypotheses during chunk-by-
-                        chunk inference. (default: False)
+                        Number of previous frames (AFTER subsamplingà the
+                        attention module can see in current chunk (used by
+                        Conformer and Branchformer block). (default: 32)
+  --display_hypotheses DISPLAY_HYPOTHESES
+                        Whether to display hypotheses during inference. If
+                        streaming=True, partial hypotheses will also be shown.
+                        (default: False)
 
 Input data related:
   --data_path_and_name_and_type DATA_PATH_AND_NAME_AND_TYPE
@@ -1146,7 +1143,7 @@ Text converter related:
                                [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                                [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                                [--optim_conf OPTIM_CONF]
-                               [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                               [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                                [--scheduler_conf SCHEDULER_CONF]
                                [--token_list TOKEN_LIST]
                                [--input_size INPUT_SIZE] [--init INIT]
@@ -1171,7 +1168,7 @@ Text converter related:
                                [--specaug_conf SPECAUG_CONF]
                                [--normalize {global_mvn,utterance_mvn,None}]
                                [--normalize_conf NORMALIZE_CONF]
-                               [--decoder {rnn,stateless}]
+                               [--decoder {mega,rnn,rwkv,stateless}]
                                [--decoder_conf DECODER_CONF]
 
 base parser
@@ -1398,6 +1395,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -1514,7 +1518,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -1527,7 +1531,7 @@ Optimizer related:
                         The number of dimensions for input features. (default: None)
   --init INIT           Type of model initialization to use. (default: None)
   --model_conf MODEL_CONF
-                        The keyword arguments for the model class. (default: {&#39;transducer_weight&#39;: 1.0, &#39;fastemit_lambda&#39;: 0.0, &#39;auxiliary_ctc_weight&#39;: 0.0, &#39;auxiliary_ctc_dropout_rate&#39;: 0.0, &#39;auxiliary_lm_loss_weight&#39;: 0.0, &#39;auxiliary_lm_loss_smoothing&#39;: 0.05, &#39;ignore_id&#39;: -1, &#39;sym_space&#39;: &#39;&lt;space&gt;&#39;, &#39;sym_blank&#39;: &#39;&lt;blank&gt;&#39;, &#39;report_cer&#39;: False, &#39;report_wer&#39;: False, &#39;extract_feats_in_collect_stats&#39;: True})
+                        The keyword arguments for the model class. (default: {&#39;transducer_weight&#39;: 1.0, &#39;use_k2_pruned_loss&#39;: False, &#39;k2_pruned_loss_args&#39;: {}, &#39;warmup_steps&#39;: 25000, &#39;validation_nstep&#39;: 2, &#39;fastemit_lambda&#39;: 0.0, &#39;auxiliary_ctc_weight&#39;: 0.0, &#39;auxiliary_ctc_dropout_rate&#39;: 0.0, &#39;auxiliary_lm_loss_weight&#39;: 0.0, &#39;auxiliary_lm_loss_smoothing&#39;: 0.05, &#39;ignore_id&#39;: -1, &#39;sym_space&#39;: &#39;&lt;space&gt;&#39;, &#39;sym_blank&#39;: &#39;&lt;blank&gt;&#39;, &#39;report_cer&#39;: False, &#39;report_wer&#39;: False, &#39;extract_feats_in_collect_stats&#39;: True})
   --encoder_conf ENCODER_CONF
                         The keyword arguments for the encoder class. (default: {})
   --joint_network_conf JOINT_NETWORK_CONF
@@ -1569,16 +1573,20 @@ Optimizer related:
                         The normalize type (default: utterance_mvn)
   --normalize_conf NORMALIZE_CONF
                         The keyword arguments for normalize (default: {})
-  --decoder {rnn,stateless}
+  --decoder {mega,rnn,rwkv,stateless}
                         The decoder type (default: rnn)
   --decoder_conf DECODER_CONF
                         The keyword arguments for decoder (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="diar-inference-py-1">
 <span id="diar-inference-py"></span><h1>diar_inference.py<a class="headerlink" href="#diar-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: diar_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: diar_inference.py [-h] [--config CONFIG]
                          [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                          --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
                          [--dtype {float16,float32,float64}] [--fs FS]
@@ -1731,7 +1739,7 @@ Enh + Diar related:
                      [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                      [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                      [--optim_conf OPTIM_CONF]
-                     [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                     [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                      [--scheduler_conf SCHEDULER_CONF] [--num_spk NUM_SPK]
                      [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
                      [--input_size INPUT_SIZE] [--model_conf MODEL_CONF]
@@ -1973,6 +1981,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -2089,7 +2104,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -2135,12 +2150,16 @@ Optimizer related:
                         The attractor type (default: None)
   --attractor_conf ATTRACTOR_CONF
                         The keyword arguments for attractor (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="enh-inference-py-1">
 <span id="enh-inference-py"></span><h1>enh_inference.py<a class="headerlink" href="#enh-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: enh_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: enh_inference.py [-h] [--config CONFIG]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
                         [--dtype {float16,float32,float64}] [--fs FS]
@@ -2211,11 +2230,80 @@ SeparateSpeech related:
                         enhancement/separation (default: None)
   --normalize_segment_scale NORMALIZE_SEGMENT_SCALE
                         Whether to normalize the energy of the separated
-                        streams in each segment (default: False)
+                        streams in each segment (default: True)
   --show_progressbar SHOW_PROGRESSBAR
                         Whether to show a progress bar when performing
                         segment-wise speech enhancement/separation (default:
                         False)
+  --ref_channel REF_CHANNEL
+                        If not None, this will overwrite the ref_channel
+                        defined in the separator module (for multi-channel
+                        speech processing) (default: None)
+</pre></div>
+</div>
+</section>
+<section id="enh-inference-streaming-py-1">
+<span id="enh-inference-streaming-py"></span><h1>enh_inference_streaming.py<a class="headerlink" href="#enh-inference-streaming-py-1" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: enh_inference_streaming.py [-h] [--config CONFIG]
+                                  [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
+                                  --output_dir OUTPUT_DIR [--ngpu NGPU]
+                                  [--seed SEED]
+                                  [--dtype {float16,float32,float64}]
+                                  [--fs FS] [--num_workers NUM_WORKERS]
+                                  --data_path_and_name_and_type
+                                  DATA_PATH_AND_NAME_AND_TYPE
+                                  [--key_file KEY_FILE]
+                                  [--allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS]
+                                  [--train_config TRAIN_CONFIG]
+                                  [--model_file MODEL_FILE]
+                                  [--model_tag MODEL_TAG]
+                                  [--inference_config INFERENCE_CONFIG]
+                                  [--enh_s2t_task ENH_S2T_TASK]
+                                  [--batch_size BATCH_SIZE]
+                                  [--ref_channel REF_CHANNEL]
+
+Frontend inference
+
+optional arguments:
+  --config CONFIG       Give config file in yaml format (default: None)
+  --log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}
+                        The verbose level of logging (default: INFO)
+  --output_dir OUTPUT_DIR
+  --ngpu NGPU           The number of gpus. 0 indicates CPU mode (default: 0)
+  --seed SEED           Random seed (default: 0)
+  --dtype {float16,float32,float64}
+                        Data type (default: float32)
+  --fs FS               Sampling rate (default: 8000)
+  --num_workers NUM_WORKERS
+                        The number of workers used for DataLoader (default: 1)
+
+Input data related:
+  --data_path_and_name_and_type DATA_PATH_AND_NAME_AND_TYPE
+  --key_file KEY_FILE
+  --allow_variable_data_keys ALLOW_VARIABLE_DATA_KEYS
+
+The model configuration related:
+  --train_config TRAIN_CONFIG
+                        Training configuration file (default: None)
+  --model_file MODEL_FILE
+                        Model parameter file (default: None)
+  --model_tag MODEL_TAG
+                        Pretrained model tag. If specify this option,
+                        train_config and model_file will be overwritten
+                        (default: None)
+  --inference_config INFERENCE_CONFIG
+                        Optional configuration file for overwriting enh model
+                        attributes during inference (default: None)
+  --enh_s2t_task ENH_S2T_TASK
+                        enhancement and asr joint model (default: False)
+
+Data loading related:
+  --batch_size BATCH_SIZE
+                        The batch size for inference (default: 1)
+
+SeparateSpeech related:
   --ref_channel REF_CHANNEL
                         If not None, this will overwrite the ref_channel
                         defined in the separator module (for multi-channel
@@ -2299,7 +2387,7 @@ SeparateSpeech related:
                         [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
-                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
                         [--token_list TOKEN_LIST]
                         [--src_token_list SRC_TOKEN_LIST]
@@ -2596,6 +2684,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -2712,7 +2807,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -2735,11 +2830,11 @@ Optimizer related:
   --diar_input_size DIAR_INPUT_SIZE
                         The number of input dimension of the feature (default: None)
   --enh_model_conf ENH_MODEL_CONF
-                        The keyword arguments for enh submodel class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None})
+                        The keyword arguments for enh submodel class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None, &#39;extract_feats_in_collect_stats&#39;: False})
   --asr_model_conf ASR_MODEL_CONF
-                        The keyword arguments for asr submodel class. (default: {&#39;aux_ctc&#39;: None, &#39;ctc_weight&#39;: 0.5, &#39;interctc_weight&#39;: 0.0, &#39;ignore_id&#39;: -1, &#39;lsm_weight&#39;: 0.0, &#39;length_normalized_loss&#39;: False, &#39;report_cer&#39;: True, &#39;report_wer&#39;: True, &#39;sym_space&#39;: &#39;&lt;space&gt;&#39;, &#39;sym_blank&#39;: &#39;&lt;blank&gt;&#39;, &#39;sym_sos&#39;: &#39;&lt;sos/eos&gt;&#39;, &#39;sym_eos&#39;: &#39;&lt;sos/eos&gt;&#39;, &#39;extract_feats_in_collect_stats&#39;: True, &#39;lang_token_id&#39;: -1})
+                        The keyword arguments for asr submodel class. (default: {&#39;aux_ctc&#39;: None, &#39;ctc_weight&#39;: 0.5, &#39;interctc_weight&#39;: 0.0, &#39;ignore_id&#39;: -1, &#39;lsm_weight&#39;: 0.0, &#39;length_normalized_loss&#39;: False, &#39;report_cer&#39;: True, &#39;report_wer&#39;: True, &#39;sym_space&#39;: &#39;&lt;space&gt;&#39;, &#39;sym_blank&#39;: &#39;&lt;blank&gt;&#39;, &#39;transducer_multi_blank_durations&#39;: [], &#39;transducer_multi_blank_sigma&#39;: 0.05, &#39;sym_sos&#39;: &#39;&lt;sos/eos&gt;&#39;, &#39;sym_eos&#39;: &#39;&lt;sos/eos&gt;&#39;, &#39;extract_feats_in_collect_stats&#39;: True, &#39;lang_token_id&#39;: -1})
   --st_model_conf ST_MODEL_CONF
-                        The keyword arguments for st submodel class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None})
+                        The keyword arguments for st submodel class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None, &#39;extract_feats_in_collect_stats&#39;: False})
   --diar_model_conf DIAR_MODEL_CONF
                         The keyword arguments for diar submodel class. (default: {&#39;diar_weight&#39;: 1.0, &#39;attractor_weight&#39;: 1.0})
   --subtask_series {enh,asr,st,diar} [{enh,asr,st,diar} ...]
@@ -2862,6 +2957,8 @@ Optimizer related:
                         The diar_attractor type (default: None)
   --diar_attractor_conf DIAR_ATTRACTOR_CONF
                         The keyword arguments for diar_attractor (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -2874,6 +2971,11 @@ Optimizer related:
                       --inf_scp INF_SCP [--key_file KEY_FILE]
                       [--ref_channel REF_CHANNEL]
                       [--flexible_numspk FLEXIBLE_NUMSPK]
+                      [--use_dnsmos USE_DNSMOS] [--dnsmos_mode {local,web}]
+                      [--dnsmos_auth_key DNSMOS_AUTH_KEY]
+                      [--dnsmos_primary_model DNSMOS_PRIMARY_MODEL]
+                      [--dnsmos_p808_model DNSMOS_P808_MODEL]
+                      [--use_pesq USE_PESQ]
 
 Frontend inference
 
@@ -2891,6 +2993,27 @@ Input data related:
   --key_file KEY_FILE
   --ref_channel REF_CHANNEL
   --flexible_numspk FLEXIBLE_NUMSPK
+
+DNSMOS related:
+  --use_dnsmos USE_DNSMOS
+  --dnsmos_mode {local,web}
+                        Use local DNSMOS model or web API for DNSMOS
+                        calculation (default: local)
+  --dnsmos_auth_key DNSMOS_AUTH_KEY
+                        Required if dnsmsos_mode=&#39;web&#39; (default: )
+  --dnsmos_primary_model DNSMOS_PRIMARY_MODEL
+                        Path to the primary DNSMOS model. Required if
+                        dnsmsos_mode=&#39;local&#39; (default:
+                        ./DNSMOS/sig_bak_ovr.onnx)
+  --dnsmos_p808_model DNSMOS_P808_MODEL
+                        Path to the p808 model. Required if
+                        dnsmsos_mode=&#39;local&#39; (default: ./DNSMOS/model_v8.onnx)
+
+PESQ related:
+  --use_pesq USE_PESQ   Bebore setting this to True, please make sure that you
+                        or your institution have the license (check
+                        https://www.itu.int/rec/T-REC-P.862-200511-I!Amd2/en)
+                        to report PESQ (default: False)
 </pre></div>
 </div>
 </section>
@@ -2967,7 +3090,7 @@ Input data related:
                     [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                     [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                     [--optim_conf OPTIM_CONF]
-                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                     [--scheduler_conf SCHEDULER_CONF]
                     [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
                     [--model_conf MODEL_CONF] [--criterions CRITERIONS]
@@ -2981,6 +3104,8 @@ Input data related:
                     [--num_spk NUM_SPK] [--num_noise_type NUM_NOISE_TYPE]
                     [--sample_rate SAMPLE_RATE]
                     [--force_single_channel FORCE_SINGLE_CHANNEL]
+                    [--channel_reordering CHANNEL_REORDERING]
+                    [--categories CATEGORIES [CATEGORIES ...]]
                     [--dynamic_mixing DYNAMIC_MIXING] [--utt2spk UTT2SPK]
                     [--dynamic_mixing_gain_db DYNAMIC_MIXING_GAIN_DB]
                     [--encoder {stft,conv,same}] [--encoder_conf ENCODER_CONF]
@@ -3216,6 +3341,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -3332,7 +3464,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -3342,7 +3474,7 @@ Optimizer related:
   --init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}
                         The initialization method (default: None)
   --model_conf MODEL_CONF
-                        The keyword arguments for model class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None})
+                        The keyword arguments for model class. (default: {&#39;stft_consistency&#39;: False, &#39;loss_type&#39;: &#39;mask_mse&#39;, &#39;mask_type&#39;: None, &#39;extract_feats_in_collect_stats&#39;: False})
   --criterions CRITERIONS
                         The criterions binded with the loss wrappers. (default: [{&#39;name&#39;: &#39;si_snr&#39;, &#39;conf&#39;: {}, &#39;wrapper&#39;: &#39;fixed_order&#39;, &#39;wrapper_conf&#39;: {}}])
 
@@ -3371,6 +3503,10 @@ Optimizer related:
                         Sampling rate of the data (in Hz). (default: 8000)
   --force_single_channel FORCE_SINGLE_CHANNEL
                         Whether to force all data to be single-channel. (default: False)
+  --channel_reordering CHANNEL_REORDERING
+                        Whether to randomly reorder the channels of the multi-channel signals. (default: False)
+  --categories CATEGORIES [CATEGORIES ...]
+                        The set of all possible categories in the dataset. Used to add the category information to each sample (default: [])
   --dynamic_mixing DYNAMIC_MIXING
                         Apply dynamic mixing (default: False)
   --utt2spk UTT2SPK     The file path of utt2spk file. Only used in dynamic_mixing mode. (default: None)
@@ -3396,12 +3532,16 @@ Optimizer related:
                         The preprocessor type (default: None)
   --preprocessor_conf PREPROCESSOR_CONF
                         The keyword arguments for preprocessor (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="enh-tse-inference-py-1">
 <span id="enh-tse-inference-py"></span><h1>enh_tse_inference.py<a class="headerlink" href="#enh-tse-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: enh_tse_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: enh_tse_inference.py [-h] [--config CONFIG]
                             [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                             --output_dir OUTPUT_DIR [--ngpu NGPU]
                             [--seed SEED] [--dtype {float16,float32,float64}]
@@ -3558,7 +3698,7 @@ SeparateSpeech related:
                         [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
-                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
                         [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
                         [--model_conf MODEL_CONF] [--criterions CRITERIONS]
@@ -3576,6 +3716,8 @@ SeparateSpeech related:
                         [--num_spk NUM_SPK] [--num_noise_type NUM_NOISE_TYPE]
                         [--sample_rate SAMPLE_RATE]
                         [--force_single_channel FORCE_SINGLE_CHANNEL]
+                        [--channel_reordering CHANNEL_REORDERING]
+                        [--categories CATEGORIES [CATEGORIES ...]]
                         [--encoder {stft,conv,same}]
                         [--encoder_conf ENCODER_CONF]
                         [--extractor {td_speakerbeam}]
@@ -3808,6 +3950,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -3924,7 +4073,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -3934,7 +4083,7 @@ Optimizer related:
   --init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}
                         The initialization method (default: None)
   --model_conf MODEL_CONF
-                        The keyword arguments for model class. (default: {&#39;num_spk&#39;: 1, &#39;share_encoder&#39;: True})
+                        The keyword arguments for model class. (default: {&#39;num_spk&#39;: 1, &#39;share_encoder&#39;: True, &#39;extract_feats_in_collect_stats&#39;: False})
   --criterions CRITERIONS
                         The criterions binded with the loss wrappers. (default: [{&#39;name&#39;: &#39;si_snr&#39;, &#39;conf&#39;: {}, &#39;wrapper&#39;: &#39;fixed_order&#39;, &#39;wrapper_conf&#39;: {}}])
 
@@ -3972,6 +4121,10 @@ Optimizer related:
                         Sampling rate of the data (in Hz). (default: 8000)
   --force_single_channel FORCE_SINGLE_CHANNEL
                         Whether to force all data to be single-channel. (default: False)
+  --channel_reordering CHANNEL_REORDERING
+                        Whether to randomly reorder the channels of the multi-channel signals. (default: False)
+  --categories CATEGORIES [CATEGORIES ...]
+                        The set of all possible categories in the dataset. Used to add the category information to each sample (default: [])
   --encoder {stft,conv,same}
                         The encoder type (default: stft)
   --encoder_conf ENCODER_CONF
@@ -3987,6 +4140,8 @@ Optimizer related:
   --preprocessor {tse}  The preprocessor type (default: tse)
   --preprocessor_conf PREPROCESSOR_CONF
                         The keyword arguments for preprocessor (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -4066,11 +4221,11 @@ Optimizer related:
                         [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
-                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
                         [--optim2 {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim2_conf OPTIM2_CONF]
-                        [--scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler2_conf SCHEDULER2_CONF]
                         [--generator_first GENERATOR_FIRST]
                         [--token_list TOKEN_LIST] [--odim ODIM]
@@ -4093,6 +4248,8 @@ Optimizer related:
                         [--pitch_extract_conf PITCH_EXTRACT_CONF]
                         [--pitch_normalize {global_mvn,utterance_mvn,None}]
                         [--pitch_normalize_conf PITCH_NORMALIZE_CONF]
+                        [--ying_extract {ying,None}]
+                        [--ying_extract_conf YING_EXTRACT_CONF]
                         [--energy_extract {energy,None}]
                         [--energy_extract_conf ENERGY_EXTRACT_CONF]
                         [--energy_normalize {global_mvn,utterance_mvn,None}]
@@ -4331,6 +4488,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -4447,7 +4611,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -4455,7 +4619,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim2_conf OPTIM2_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler2_conf SCHEDULER2_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -4498,6 +4662,10 @@ Optimizer related:
                         The pitch_normalize type (default: None)
   --pitch_normalize_conf PITCH_NORMALIZE_CONF
                         The keyword arguments for pitch_normalize (default: {})
+  --ying_extract {ying,None}
+                        The ying_extract type (default: None)
+  --ying_extract_conf YING_EXTRACT_CONF
+                        The keyword arguments for ying_extract (default: {})
   --energy_extract {energy,None}
                         The energy_extract type (default: None)
   --energy_extract_conf ENERGY_EXTRACT_CONF
@@ -4506,6 +4674,8 @@ Optimizer related:
                         The energy_normalize type (default: None)
   --energy_normalize_conf ENERGY_NORMALIZE_CONF
                         The keyword arguments for energy_normalize (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -4585,11 +4755,11 @@ Optimizer related:
                         [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                         [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim_conf OPTIM_CONF]
-                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler_conf SCHEDULER_CONF]
                         [--optim2 {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                         [--optim2_conf OPTIM2_CONF]
-                        [--scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                        [--scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                         [--scheduler2_conf SCHEDULER2_CONF]
                         [--generator_first GENERATOR_FIRST]
                         [--token_list TOKEN_LIST] [--odim ODIM]
@@ -4846,6 +5016,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -4962,7 +5139,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -4970,7 +5147,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim2_conf OPTIM2_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler2 {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler2_conf SCHEDULER2_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -5017,6 +5194,8 @@ Optimizer related:
                         The energy_normalize type (default: None)
   --energy_normalize_conf ENERGY_NORMALIZE_CONF
                         The keyword arguments for energy_normalize (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -5095,7 +5274,7 @@ Optimizer related:
                        [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                        [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                        [--optim_conf OPTIM_CONF]
-                       [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                       [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                        [--scheduler_conf SCHEDULER_CONF]
                        [--token_list TOKEN_LIST]
                        [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
@@ -5358,6 +5537,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -5474,7 +5660,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -5540,6 +5726,8 @@ Optimizer related:
                         The model type (default: fairseq)
   --model_conf MODEL_CONF
                         The keyword arguments for model (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -5620,7 +5808,9 @@ optional arguments:
 </section>
 <section id="lm-calc-perplexity-py-1">
 <span id="lm-calc-perplexity-py"></span><h1>lm_calc_perplexity.py<a class="headerlink" href="#lm-calc-perplexity-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: lm_calc_perplexity.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: lm_calc_perplexity.py [-h] [--config CONFIG]
                              [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                              --output_dir OUTPUT_DIR [--ngpu NGPU]
                              [--seed SEED] [--dtype {float16,float32,float64}]
@@ -5733,7 +5923,7 @@ The model configuration related:
                    [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                    [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                    [--optim_conf OPTIM_CONF]
-                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                    [--scheduler_conf SCHEDULER_CONF] [--token_list TOKEN_LIST]
                    [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
                    [--model_conf MODEL_CONF]
@@ -5974,6 +6164,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -6090,7 +6287,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -6113,12 +6310,16 @@ Optimizer related:
   --lm {seq_rnn,transformer}
                         The lm type (default: seq_rnn)
   --lm_conf LM_CONF     The keyword arguments for lm (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="mt-inference-py-1">
 <span id="mt-inference-py"></span><h1>mt_inference.py<a class="headerlink" href="#mt-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: mt_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: mt_inference.py [-h] [--config CONFIG]
                        [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                        --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
                        [--dtype {float16,float32,float64}]
@@ -6134,8 +6335,8 @@ Optimizer related:
                        [--model_tag MODEL_TAG] [--batch_size BATCH_SIZE]
                        [--nbest NBEST] [--beam_size BEAM_SIZE]
                        [--penalty PENALTY] [--maxlenratio MAXLENRATIO]
-                       [--minlenratio MINLENRATIO] [--lm_weight LM_WEIGHT]
-                       [--ngram_weight NGRAM_WEIGHT]
+                       [--minlenratio MINLENRATIO] [--ctc_weight CTC_WEIGHT]
+                       [--lm_weight LM_WEIGHT] [--ngram_weight NGRAM_WEIGHT]
                        [--token_type {char,bpe,None}] [--bpemodel BPEMODEL]
 
 MT Decoding
@@ -6193,6 +6394,8 @@ Beam-search related:
   --minlenratio MINLENRATIO
                         Input length ratio to obtain min output length
                         (default: 0.0)
+  --ctc_weight CTC_WEIGHT
+                        CTC weight in joint decoding (default: 0.0)
   --lm_weight LM_WEIGHT
                         RNNLM weight (default: 1.0)
   --ngram_weight NGRAM_WEIGHT
@@ -6279,11 +6482,11 @@ Text converter related:
                    [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                    [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                    [--optim_conf OPTIM_CONF]
-                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                    [--scheduler_conf SCHEDULER_CONF] [--token_list TOKEN_LIST]
                    [--src_token_list SRC_TOKEN_LIST]
                    [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
-                   [--input_size INPUT_SIZE] [--model_conf MODEL_CONF]
+                   [--input_size INPUT_SIZE] [--ctc_conf CTC_CONF]
                    [--use_preprocessor USE_PREPROCESSOR]
                    [--token_type {bpe,char,word,phn}]
                    [--src_token_type {bpe,char,word,phn}]
@@ -6291,15 +6494,19 @@ Text converter related:
                    [--non_linguistic_symbols NON_LINGUISTIC_SYMBOLS]
                    [--cleaner {None,tacotron,jaconv,vietnamese}]
                    [--g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pyopenjtalk_prosody,pypinyin_g2p,pypinyin_g2p_phone,pypinyin_g2p_phone_without_prosody,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,espeak_ng_greek,espeak_ng_finnish,espeak_ng_hungarian,espeak_ng_dutch,espeak_ng_english_us_vits,espeak_ng_hindi,espeak_ng_italian,espeak_ng_ukrainian,espeak_ng_polish,g2pk,g2pk_no_space,g2pk_explicit_space,korean_jaso,korean_jaso_no_space,g2p_is}]
+                   [--tokenizer_encode_conf TOKENIZER_ENCODE_CONF]
+                   [--src_tokenizer_encode_conf SRC_TOKENIZER_ENCODE_CONF]
                    [--frontend {embed}] [--frontend_conf FRONTEND_CONF]
+                   [--specaug {specaug,None}] [--specaug_conf SPECAUG_CONF]
                    [--preencoder {sinc,linear,None}]
                    [--preencoder_conf PREENCODER_CONF]
-                   [--encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,branchformer}]
+                   [--encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,branchformer,e_branchformer}]
                    [--encoder_conf ENCODER_CONF]
                    [--postencoder {hugging_face_transformers,None}]
                    [--postencoder_conf POSTENCODER_CONF]
                    [--decoder {transformer,lightweight_conv,lightweight_conv2d,dynamic_conv,dynamic_conv2d,rnn}]
-                   [--decoder_conf DECODER_CONF]
+                   [--decoder_conf DECODER_CONF] [--model {mt,discrete_asr}]
+                   [--model_conf MODEL_CONF]
 
 base parser
 
@@ -6311,6 +6518,10 @@ optional arguments:
                         Apply text cleaning (default: None)
   --g2p {None,g2p_en,g2p_en_no_space,pyopenjtalk,pyopenjtalk_kana,pyopenjtalk_accent,pyopenjtalk_accent_with_pause,pyopenjtalk_prosody,pypinyin_g2p,pypinyin_g2p_phone,pypinyin_g2p_phone_without_prosody,espeak_ng_arabic,espeak_ng_german,espeak_ng_french,espeak_ng_spanish,espeak_ng_russian,espeak_ng_greek,espeak_ng_finnish,espeak_ng_hungarian,espeak_ng_dutch,espeak_ng_english_us_vits,espeak_ng_hindi,espeak_ng_italian,espeak_ng_ukrainian,espeak_ng_polish,g2pk,g2pk_no_space,g2pk_explicit_space,korean_jaso,korean_jaso_no_space,g2p_is}
                         Specify g2p method if --token_type=phn (default: None)
+  --tokenizer_encode_conf TOKENIZER_ENCODE_CONF
+                        Tokenization encoder conf, e.g. BPE dropout: enable_sampling=True, alpha=0.1, nbest_size=-1 (default: None)
+  --src_tokenizer_encode_conf SRC_TOKENIZER_ENCODE_CONF
+                        Src tokenization encoder conf, e.g. BPE dropout: enable_sampling=True, alpha=0.1, nbest_size=-1 (default: None)
 
 Common configuration:
   --print_config        Print the config file and exit (default: False)
@@ -6531,6 +6742,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -6647,7 +6865,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -6662,8 +6880,7 @@ Optimizer related:
                         The initialization method (default: None)
   --input_size INPUT_SIZE
                         The number of input dimension of the feature (default: None)
-  --model_conf MODEL_CONF
-                        The keyword arguments for model class. (default: {&#39;src_vocab_size&#39;: 0, &#39;src_token_list&#39;: [], &#39;ignore_id&#39;: -1, &#39;lsm_weight&#39;: 0.0, &#39;length_normalized_loss&#39;: False, &#39;report_bleu&#39;: True, &#39;sym_space&#39;: &#39;&lt;space&gt;&#39;, &#39;sym_blank&#39;: &#39;&lt;blank&gt;&#39;, &#39;extract_feats_in_collect_stats&#39;: True, &#39;share_decoder_input_output_embed&#39;: False, &#39;share_encoder_decoder_input_embed&#39;: False})
+  --ctc_conf CTC_CONF   The keyword arguments for CTC class. (default: {&#39;dropout_rate&#39;: 0.0, &#39;ctc_type&#39;: &#39;builtin&#39;, &#39;reduce&#39;: True, &#39;ignore_nan_grad&#39;: None, &#39;zero_infinity&#39;: True})
 
   Preprocess related
 
@@ -6679,11 +6896,15 @@ Optimizer related:
   --frontend {embed}    The frontend type (default: embed)
   --frontend_conf FRONTEND_CONF
                         The keyword arguments for frontend (default: {})
+  --specaug {specaug,None}
+                        The specaug type (default: None)
+  --specaug_conf SPECAUG_CONF
+                        The keyword arguments for specaug (default: {})
   --preencoder {sinc,linear,None}
                         The preencoder type (default: None)
   --preencoder_conf PREENCODER_CONF
                         The keyword arguments for preencoder (default: {})
-  --encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,branchformer}
+  --encoder {conformer,transformer,contextual_block_transformer,vgg_rnn,rnn,branchformer,e_branchformer}
                         The encoder type (default: rnn)
   --encoder_conf ENCODER_CONF
                         The keyword arguments for encoder (default: {})
@@ -6695,6 +6916,12 @@ Optimizer related:
                         The decoder type (default: rnn)
   --decoder_conf DECODER_CONF
                         The keyword arguments for decoder (default: {})
+  --model {mt,discrete_asr}
+                        The model type (default: mt)
+  --model_conf MODEL_CONF
+                        The keyword arguments for model (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
@@ -6736,7 +6963,9 @@ optional arguments:
 </section>
 <section id="st-inference-py-1">
 <span id="st-inference-py"></span><h1>st_inference.py<a class="headerlink" href="#st-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: st_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: st_inference.py [-h] [--config CONFIG]
                        [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                        --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
                        [--dtype {float16,float32,float64}]
@@ -6899,7 +7128,7 @@ Text converter related:
                    [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                    [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                    [--optim_conf OPTIM_CONF]
-                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                   [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                    [--scheduler_conf SCHEDULER_CONF] [--token_list TOKEN_LIST]
                    [--src_token_list SRC_TOKEN_LIST]
                    [--init {chainer,xavier_uniform,xavier_normal,kaiming_uniform,kaiming_normal,None}]
@@ -7160,6 +7389,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -7276,7 +7512,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -7361,12 +7597,16 @@ Optimizer related:
                         The extra_mt_decoder type (default: rnn)
   --extra_mt_decoder_conf EXTRA_MT_DECODER_CONF
                         The keyword arguments for extra_mt_decoder (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
 <section id="tts-inference-py-1">
 <span id="tts-inference-py"></span><h1>tts_inference.py<a class="headerlink" href="#tts-inference-py-1" title="Permalink to this headline">¶</a></h1>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>usage: tts_inference.py [-h] [--config CONFIG]
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
+usage: tts_inference.py [-h] [--config CONFIG]
                         [--log_level {CRITICAL,ERROR,WARNING,INFO,DEBUG,NOTSET}]
                         --output_dir OUTPUT_DIR [--ngpu NGPU] [--seed SEED]
                         [--dtype {float16,float32,float64}]
@@ -7536,7 +7776,7 @@ Vocoder related:
                     [--exclude_weight_decay_conf EXCLUDE_WEIGHT_DECAY_CONF]
                     [--optim {adam,adamw,sgd,adadelta,adagrad,adamax,asgd,lbfgs,rmsprop,rprop,radam,accagd,adabound,adamod,diffgrad,lamb,novograd,pid,qhm,sgdw,yogi}]
                     [--optim_conf OPTIM_CONF]
-                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
+                    [--scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}]
                     [--scheduler_conf SCHEDULER_CONF]
                     [--token_list TOKEN_LIST] [--odim ODIM]
                     [--model_conf MODEL_CONF]
@@ -7789,6 +8029,13 @@ Dataset related:
                            utterance_id_b b.wav
                            ...
 
+                        &quot;multi_columns_sound&quot;:
+                        Enable multi columns wav.scp. The following text file can be loaded as multi channels audio data
+
+                           utterance_id_a a.wav a2.wav
+                           utterance_id_b b.wav b2.wav
+                           ...
+
                         &quot;score&quot;:
                         Return text as is. The text contains tempo and note info.
                         For each note, &#39;start&#39; &#39;end&#39; &#39;syllabel&#39; &#39;midi&#39; and &#39;phones&#39; are included.
@@ -7905,7 +8152,7 @@ Optimizer related:
                         The optimizer type (default: adadelta)
   --optim_conf OPTIM_CONF
                         The keyword arguments for optimizer (default: {})
-  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmupsteplr,warmuplr,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
+  --scheduler {reducelronplateau,lambdalr,steplr,multisteplr,exponentiallr,cosineannealinglr,noamlr,warmuplr,warmupsteplr,warmupreducelronplateau,cycliclr,onecyclelr,cosineannealingwarmrestarts,None}
                         The lr scheduler type (default: None)
   --scheduler_conf SCHEDULER_CONF
                         The keyword arguments for lr scheduler (default: {})
@@ -7952,6 +8199,8 @@ Optimizer related:
                         The energy_normalize type (default: None)
   --energy_normalize_conf ENERGY_NORMALIZE_CONF
                         The keyword arguments for energy_normalize (default: {})
+/home/runner/work/espnet/espnet/tools/venv/lib/python3.8/site-packages/whisper/timing.py:57: NumbaDeprecationWarning: [1mThe &#39;nopython&#39; keyword argument was not supplied to the &#39;numba.jit&#39; decorator. The implicit default value for this argument is currently False, but it will be changed to True in Numba 0.59.0. See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-object-mode-fall-back-behaviour-when-using-jit for details.[0m
+  def backtrace(trace: np.ndarray):
 </pre></div>
 </div>
 </section>
