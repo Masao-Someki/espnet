@@ -1,12 +1,3 @@
-# The learn_kmeans.py uses code from Fairseq:
-#     https://github.com/pytorch/fairseq/blob/master/examples/hubert/simple_kmeans/dump_km_label.py
-#
-# Thanks to Abdelrahman Mohamed and Wei-Ning Hsu's help in this implementation,
-# Their origial Hubert work is in:
-#     Paper: https://arxiv.org/pdf/2106.07447.pdf
-#     Code in Fairseq: https://github.com/pytorch/fairseq/tree/master/examples/hubert
-
-
 import argparse
 import logging
 import os
@@ -117,6 +108,7 @@ class ApplyRP(object):
 
     def random_proj(self, x):
         """LSH with simple random projection.
+        reference: https://arxiv.org/pdf/1410.5518.pdf
 
         Args:
             x: (L, D)
@@ -128,7 +120,7 @@ class ApplyRP(object):
             self.init_random_array(x.shape[-1])
         
         feat_len, _ = x.shape
-        x = F.normalize(x, p=1.0, dim=1)
+        x = x / torch.linalg.norm(x, dim=-1, keepdim=True)
         inner_products = torch.einsum(
             'ld,ldr->lr', x, self.random_matrix.expand(feat_len, *self.random_matrix_shape)
         )
