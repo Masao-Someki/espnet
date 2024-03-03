@@ -94,8 +94,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
         _cmd="${cpu_cmd}"
     fi
 
-    # for dset in "${train_set}" "${dev_set}" ${other_sets}; do
-    for dset in "${dev_set}" ${other_sets}; do
+    for dset in "${train_set}" "${dev_set}" ${other_sets}; do
         log "Extract labels to ${featdir}/${feature_type}/${suffix}${dset}"
 
         _dump_dir="${featdir}/${feature_type}/${suffix}${dset}"
