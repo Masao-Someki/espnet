@@ -58,6 +58,7 @@ min_wav_duration=0.1 # Minimum duration in second.
 max_wav_duration=30  # Maximum duration in second.
 
 # Kmeans related
+use_random_proj=false
 kmeans_opts=                # The options given to scripts/feats/perform_kmeans.sh
 kmeans_feature="wavlm_large/21" # format: ssl_model_type/layer_idx (e.g. mfcc, hubert_large/21, wavlm_large/21)
 portion=0.1
@@ -65,6 +66,13 @@ nclusters=2000              # The number of clusters for discrete tokenss
 storage_save_mode=true      # Save storage on SSL feature extraction
                             # If true, feature extraction and kmeans clustering on the fly
 gpu_kmeans=true             # Whether to use gpu for kmeans.
+
+# Random projection related
+seed=2024
+n_bits=10                   # Number of hyperplanes. The number of clusters will be 2^n_bits
+w=1                         # w used to define bucket width in E2LSH. Details in https://www.mit.edu/~andoni/LSH/
+lsh_algorithm="simple"      # Algorithm for random projection based LSH.
+                    # 'simple' for simple LSH in https://arxiv.org/pdf/1410.5518.pdf and 'e2lsh' for E2LSH
 
 # Tokenization related
 oov="<unk>"         # Out of vocabulary symbol.
@@ -744,7 +752,7 @@ fi
 
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ] && ! [[ " ${skip_stages} " =~ [[:space:]]5[[:space:]] ]]; then
-    log "Stage 5a: Perform Kmeans using ${kmeans_feature_type} features"
+    log "Stage 5a: Perform clustering"
 
     if "${eval_valid_set}"; then
         _dev_set="org/${valid_set}"
@@ -752,26 +760,50 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ] && ! [[ " ${skip_stages} " =~ [
         _dev_set="${valid_set}"
     fi
 
-    scripts/feats/perform_kmeans.sh \
-        --stage 1 --stop-stage 4 \
-        --train_set "${train_set}" \
-        --dev_set "${_dev_set}" \
-        --other_sets "${test_sets} ${train_sp_sets}" \
-        --datadir "${data_audio}" \
-        --featdir "${data_extract}" \
-        --audio_format "${audio_format}" \
-        --feature_type "${kmeans_feature_type}" \
-        --layer "${layer}" \
-        --feature_conf "${kmeans_feature_conf}" \
-        --km_dir "${km_dir}" \
-        --portion "${portion}" \
-        --nclusters "${nclusters}" \
-        --storage_save_mode ${storage_save_mode} \
-        --use_gpu ${gpu_kmeans} \
-        --nj ${nj} \
-        --cpu_cmd "${train_cmd}" \
-        --cuda_cmd "${cuda_cmd}" \
-        ${kmeans_opts}
+    if "${use_random_proj}"; then
+        scripts/feats/perform_random_proj.sh \
+            --stage 1 --stop-stage 1 \
+            --train_set "${train_set}" \
+            --dev_set "${_dev_set}" \
+            --other_sets "${test_sets} ${train_sp_sets}" \
+            --datadir "${data_audio}" \
+            --featdir "${data_extract}" \
+            --audio_format "${audio_format}" \
+            --feature_type "${kmeans_feature_type}" \
+            --layer "${layer}" \
+            --feature_conf "${kmeans_feature_conf}" \
+            --n_bits ${n_bits} \
+            --seed ${seed} \
+            --w ${w} \
+            --lsh_algorithm ${lsh_algorithm} \
+            --storage_save_mode ${storage_save_mode} \
+            --use_gpu ${gpu_kmeans} \
+            --nj ${nj} \
+            --cpu_cmd "${train_cmd}" \
+            --cuda_cmd "${cuda_cmd}" \
+            ${kmeans_opts}
+    else
+        scripts/feats/perform_kmeans.sh \
+            --stage 1 --stop-stage 4 \
+            --train_set "${train_set}" \
+            --dev_set "${_dev_set}" \
+            --other_sets "${test_sets} ${train_sp_sets}" \
+            --datadir "${data_audio}" \
+            --featdir "${data_extract}" \
+            --audio_format "${audio_format}" \
+            --feature_type "${kmeans_feature_type}" \
+            --layer "${layer}" \
+            --feature_conf "${kmeans_feature_conf}" \
+            --km_dir "${km_dir}" \
+            --portion "${portion}" \
+            --nclusters "${nclusters}" \
+            --storage_save_mode ${storage_save_mode} \
+            --use_gpu ${gpu_kmeans} \
+            --nj ${nj} \
+            --cpu_cmd "${train_cmd}" \
+            --cuda_cmd "${cuda_cmd}" \
+            ${kmeans_opts}
+    fi
 
     log "Stage 5b: Prepare token_list and convert number indices to CJK tokens"
 
