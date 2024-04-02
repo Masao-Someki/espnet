@@ -298,6 +298,9 @@ class Encoder(torch.nn.Module):
                 positionwise_conv_kernel_size,
                 dropout_rate,
             )
+        elif positionwise_layer_type == "log_exp_linear":
+            positionwise_layer = PositionwiseFeedForward
+            positionwise_layer_args = (attention_dim, dropout_rate)
         else:
             raise NotImplementedError("Support only linear or conv1d.")
         return positionwise_layer, positionwise_layer_args
