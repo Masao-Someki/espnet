@@ -19,7 +19,7 @@ class ExpLogLinear(torch.nn.Module):
 
     """
 
-    def __init__(self, idim, dropout_rate, activation=torch.nn.ReLU()):
+    def __init__(self, idim, attn_dim, dropout_rate, activation=torch.nn.ReLU()):
         """Construct an PositionwiseFeedForward object."""
         super(ExpLogLinear, self).__init__()
         self.w_1 = torch.nn.Linear(idim, idim * 4)

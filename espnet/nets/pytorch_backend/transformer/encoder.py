@@ -24,6 +24,7 @@ from espnet.nets.pytorch_backend.transformer.multi_layer_conv import (
 from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import (
     PositionwiseFeedForward,
 )
+from espnet.nets.pytorch_backend.transformer.exp_log_linear import ExpLogLinear
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.pytorch_backend.transformer.subsampling import (
     Conv2dSubsampling,
@@ -299,8 +300,8 @@ class Encoder(torch.nn.Module):
                 dropout_rate,
             )
         elif positionwise_layer_type == "log_exp_linear":
-            positionwise_layer = PositionwiseFeedForward
-            positionwise_layer_args = (attention_dim, dropout_rate)
+            positionwise_layer = ExpLogLinear
+            positionwise_layer_args = (attention_dim, attention_dim, dropout_rate)
         else:
             raise NotImplementedError("Support only linear or conv1d.")
         return positionwise_layer, positionwise_layer_args
