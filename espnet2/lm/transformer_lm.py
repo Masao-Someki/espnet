@@ -22,6 +22,7 @@ class TransformerLM(AbsLM):
         dropout_rate: float = 0.1,
         positional_dropout_rate: float = 0.1,
         attention_dropout_rate: float = 0.1,
+        positionwise_layer_type="linear",
     ):
         super().__init__()
         if pos_enc == "sinusoidal":
@@ -46,6 +47,7 @@ class TransformerLM(AbsLM):
             pos_enc_class=pos_enc_class,
             positional_dropout_rate=positional_dropout_rate,
             attention_dropout_rate=attention_dropout_rate,
+            positionwise_layer_type=positionwise_layer_type
         )
         self.decoder = nn.Linear(att_unit, vocab_size)
 
