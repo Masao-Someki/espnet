@@ -23,7 +23,7 @@ class ExpLogLinear(torch.nn.Module):
         """Construct an PositionwiseFeedForward object."""
         super(ExpLogLinear, self).__init__()
         self.w_1 = torch.nn.Linear(idim, idim * 4)
-        self.w_2 = torch.nn.Linear(idim, idim)
+        self.w_2 = torch.nn.Linear(idim * 4, idim)
         self.dropout = torch.nn.Dropout(dropout_rate)
         self.activation = activation
         self.idim = idim
@@ -36,5 +36,5 @@ class ExpLogLinear(torch.nn.Module):
         intermediate[:, :, 1, :] = torch.exp(intermediate[:, :, 1, :])
         intermediate[:, :, 2, :] = torch.log(intermediate[:, :, 2, :])
         intermediate[:, :, 3, :] = torch.sin(intermediate[:, :, 3, :])
-        intermediate = intermediate.view(b, t, d)
+        intermediate = intermediate.view(b, t, d * 4)
         return self.w_2(self.dropout(self.activation(intermediate)))
