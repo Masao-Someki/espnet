@@ -7,10 +7,12 @@ import librosa
 import numpy as np
 
 from datasets import load_from_disk, concatenate_datasets
-import espnetez as ez
-from espnetez.parallel import set_parallel, get_client, get_parallel_config
-from espnetez.trainer import ESPnetEZLightningTrainer, LitESPnetModel
-from espnetez.data.lhotse_utils import cutset_from_huggingface, HuggingfaceDatasetsBackend
+import lightning as L
+import torch
+import espnet3 as ez
+from espnet3.parallel import set_parallel
+from espnet3.trainer import ESPnetEZLightningTrainer, LitESPnetModel
+from espnet3.data import cutset_from_huggingface, HuggingfaceDatasetsBackend
 from lhotse.audio.backend import set_current_audio_backend
 
 print("IMPORTED", flush=True)
