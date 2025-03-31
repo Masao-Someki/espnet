@@ -19,7 +19,6 @@ tokenizer:
 converter:
   _target_: espnet2.text.token_id_converter.TokenIDConverter
   token_list: sentencepiece_model/tokens.txt
-   
 
 dataset:
   id: /home/msomeki/workspace/librispeech_dataset
@@ -28,39 +27,10 @@ model:
   _target_: espnet2.asr.espnet_model.ESPnetASRModel
   vocab_size: ${vocab_size}
   token_list: ${load_line:sentencepiece_model/tokens.txt}
-  
-  frontend:
-    _target_: espnet2.asr.frontend.default.DefaultFrontend
-    n_fft: 512
-    win_length: 400
-    hop_length: 160
-    n_mels: 80
 
-  specaug:
-    _target_: espnet2.asr.specaug.specaug.SpecAug
-    apply_time_warp: true
-    time_warp_window: 5
-    time_warp_mode: bicubic
-    apply_freq_mask: true
-    freq_mask_width_range:
-    - 0
-    - 27
-    num_freq_mask: 2
-    apply_time_mask: true
-    time_mask_width_ratio_range:
-    - 0.
-    - 0.05
-    num_time_mask: 5
-
-  normalize:
-    _target_: espnet2.layers.utterance_mvn.UtteranceMVN
-  # normalize:
-    # _target_: espnet2.layers.global_mvn.GlobalMVN
-    # stats_file: train_feat_stats.npz
-    
-  encoder: 
-    _target_: espnet2.asr.encoder.e_branchformer_encoder.EBranchformerEncoder
-    input_size: ${model.frontend.n_mels}
+  input_size:
+  encoder: e_branchformer
+  encoder_conf:
     output_size: 256
     attention_heads: 4
     attention_layer_type: rel_selfattn
@@ -113,9 +83,27 @@ training:
     lr: 0.002
     weight_decay: 0.000001
 
-  scheduler:
-    _target_: espnet2.schedulers.warmup_lr.WarmupLR
-    warmup_steps: 15000
+  frontend: default
+  frontend_conf:
+      n_fft: 512
+      win_length: 400
+      hop_length: 160
+
+  specaug: specaug
+  specaug_conf:
+      apply_time_warp: true
+      time_warp_window: 5
+      time_warp_mode: bicubic
+      apply_freq_mask: true
+      freq_mask_width_range:
+      - 0
+      - 27
+      num_freq_mask: 2
+      apply_time_mask: true
+      time_mask_width_ratio_range:
+      - 0.
+      - 0.05
+      num_time_mask: 5
 
   dataloader:
     collate_fn:
@@ -160,14 +148,10 @@ trainer:
       save_dir: ${expdir}/tensorboard
       name: tb_logger
 
-lightning:
-  # GPU settings
-  accelerator: gpu
-  devices: 1
-  # distributed_backend: ddp
-  num_nodes: 1
-  accumulate_grad_batches: 1
-  gradient_clip_val: 1.0
-  log_every_n_steps: ${trainer.log_interval}
-  max_epochs: 10
-  use_distributed_sampler: false
+  strategy: dp
+
+  callbacks:
+    - _target_: egs3.custom_callback.MyPrintingCallback
+
+# fit:
+#   ckpt_path: exp/ls100_debug_ctc_utt/step80920.ckpt
