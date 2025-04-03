@@ -20,15 +20,9 @@ from lhotse.audio.backend import (
 from lhotse.audio.source import AudioSource, PathOrFilelike
 from lhotse.cut import Cut, CutSet, MonoCut
 from lhotse.supervision import SupervisionSegment
-from lhotse.utils import Seconds, Pathlike
-from lhotse.cut import CutSet, Cut, MonoCut
-from dask.distributed import Client, get_worker, WorkerPlugin, LocalCluster
-from dask.distributed import get_worker
-from distributed.worker import thread_state
-import datasets
+from lhotse.utils import Pathlike, Seconds
 
-from espnet3.parallel import parallel_map, get_client, get_parallel_config
-
+from espnet3.parallel import get_client, get_parallel_config, parallel_map
 
 
 class HuggingFaceAudioSource(AudioSource):
@@ -58,7 +52,7 @@ class HuggingFaceAudioSource(AudioSource):
             PathOrFilelike: String identifier (for 'huggingface') or standard audio source.
 
         """
-        if self.type == 'huggingface':
+        if self.type == "huggingface":
             return self.source
         else:
             return super()._prepare_for_reading(offset, duration)
@@ -295,9 +289,7 @@ def cut_from_huggingface(idx: int, data_info: Dict) -> Cut:
         backend = get_current_audio_backend()
         dataset = backend.dataset
 
-
-    
-    duration = len(data['audio']['array']) / data['audio']['sampling_rate']
+    duration = len(data["audio"]["array"]) / data["audio"]["sampling_rate"]
     sources = [
         HuggingFaceAudioSource(
             type="huggingface",
@@ -388,8 +380,12 @@ def cutset_from_huggingface(
         if parallel_config is not None:
             with get_client(parallel_config) as client:
                 if not isinstance(client, LocalCluster):
-                    client.register_worker_plugin(worker_plugin)  # register worker plugin for efficient data transfer.
-                cuts = parallel_map(runner, list(range(dataset_length)), client=client)  # uses global client
+                    client.register_worker_plugin(
+                        worker_plugin
+                    )  # register worker plugin for efficient data transfer.
+                cuts = parallel_map(
+                    runner, list(range(dataset_length)), client=client
+                )  # uses global client
         else:
             cuts = [runner(idx) for idx in range(dataset_length)]
     else:
