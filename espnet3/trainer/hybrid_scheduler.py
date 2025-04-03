@@ -7,6 +7,8 @@ import torch
 from espnetez.trainer.hybrid_optim import HybridOptim
 from typeguard import typechecked
 
+from espnet3.trainer.hybrid_optim import HybridOptim
+
 
 class HybridLRS(torch.optim.lr_scheduler._LRScheduler):
     """

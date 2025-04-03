@@ -7,23 +7,19 @@ from typing import Dict, Optional, Tuple, Union
 import datasets
 import numpy as np
 from dask.distributed import Client, LocalCluster, WorkerPlugin, get_worker
+from distributed.worker import thread_state
 from espnetez.parallel import get_client, get_parallel_config, parallel_map
 from lhotse.audio import Recording
 from lhotse.audio.backend import (
     AudioBackend,
     FileObject,
     LibsndfileCompatibleAudioInfo,
-    set_current_audio_backend,
     get_current_audio_backend,
+    set_current_audio_backend,
 )
 from lhotse.audio.source import AudioSource, PathOrFilelike
 from lhotse.cut import Cut, CutSet, MonoCut
 from lhotse.supervision import SupervisionSegment
-<<<<<<< HEAD
-from lhotse.utils import Pathlike, Seconds
-from omegaconf import DictConfig
-from pathos.multiprocessing import ProcessingPool as Pool
-=======
 from lhotse.utils import Seconds, Pathlike
 from lhotse.cut import CutSet, Cut, MonoCut
 from dask.distributed import Client, get_worker, WorkerPlugin, LocalCluster
@@ -33,7 +29,6 @@ import datasets
 
 from espnet3.parallel import parallel_map, get_client, get_parallel_config
 
->>>>>>> cd59be8088 (Add docstring and fixed bug for unit test)
 
 
 class HuggingFaceAudioSource(AudioSource):
@@ -52,9 +47,6 @@ class HuggingFaceAudioSource(AudioSource):
     def _prepare_for_reading(
         self, offset: Seconds, duration: Optional[Seconds]
     ) -> PathOrFilelike:
-<<<<<<< HEAD
-        if self.type == "huggingface":
-=======
         """
         Return the source path or handle for reading the audio.
 
@@ -67,7 +59,6 @@ class HuggingFaceAudioSource(AudioSource):
 
         """
         if self.type == 'huggingface':
->>>>>>> cd59be8088 (Add docstring and fixed bug for unit test)
             return self.source
         else:
             return super()._prepare_for_reading(offset, duration)
@@ -112,7 +103,7 @@ class HuggingfaceDatasetsBackend(AudioBackend):
             assert dataset_id is not None, "Dataset id is not provided"
             self.dataset = _load_from_hf_or_disk(dataset_id)
             self.dataset_id = dataset_id
-    
+
     def _running_in_dask_worker(self) -> bool:
         """
         Return True if we're running inside a Dask worker thread.
@@ -208,9 +199,9 @@ class HuggingfaceDatasetsBackend(AudioBackend):
             LibsndfileCompatibleAudioInfo: Audio metadata.
         """
         # Check dataset id and split is correct
-        dataset_id = path_or_fd.split(':')[0]
-        split = path_or_fd.split(':')[1]
-        data_idx = int(path_or_fd.split(':')[2])
+        dataset_id = path_or_fd.split(":")[0]
+        split = path_or_fd.split(":")[1]
+        data_idx = int(path_or_fd.split(":")[2])
 
         assert dataset_id == self.dataset_id, "Dataset id does not match"
 
@@ -247,6 +238,7 @@ class HuggingfaceAudioLoader(WorkerPlugin):
         dataset_id (str): Identifier of the dataset.
         split (str, optional): Dataset split to load.
     """
+
     def __init__(self, dataset_id, split: str = None) -> None:
         super().__init__()
         self.dataset_id = dataset_id
@@ -282,13 +274,8 @@ def cut_from_huggingface(idx: int, data_info: Dict) -> Cut:
     Construct a MonoCut from a HuggingFace dataset example.
 
     Args:
-<<<<<<< HEAD
-        example: A single example from a HuggingFace dataset.
-        data_info: A dictionary containing the mappings from
-=======
         idx (int): Index of the example in the dataset.
         data_info (Dict): Mapping from supervision field -> function(example) -> value.
->>>>>>> cd59be8088 (Add docstring and fixed bug for unit test)
 
     Returns:
         Cut: A MonoCut with attached supervision.
@@ -298,10 +285,6 @@ def cut_from_huggingface(idx: int, data_info: Dict) -> Cut:
     """
     # create a recording.
     data_id = str(idx)
-<<<<<<< HEAD
-    data = ds[idx]
-    duration = len(data["audio"]["array"]) / data["audio"]["sampling_rate"]
-=======
     try:
         worker = get_worker()
         ds = worker.dataset[worker.split]
@@ -315,7 +298,6 @@ def cut_from_huggingface(idx: int, data_info: Dict) -> Cut:
 
     
     duration = len(data['audio']['array']) / data['audio']['sampling_rate']
->>>>>>> cd59be8088 (Add docstring and fixed bug for unit test)
     sources = [
         HuggingFaceAudioSource(
             type="huggingface",
@@ -406,23 +388,10 @@ def cutset_from_huggingface(
         if parallel_config is not None:
             with get_client(parallel_config) as client:
                 if not isinstance(client, LocalCluster):
-<<<<<<< HEAD
-                    client.register_worker_plugin(
-                        worker_plugin
-                    )  # register worker plugin for efficient data transfer.
-                cuts = parallel_map(
-                    runner, list(range(dataset_length)), client=client
-                )  # uses global client
-        except RuntimeError:
-            raise RuntimeError(
-                "No Dask client available. Please call parallel.set(config) or pass a config/client explicitly."
-            )
-=======
                     client.register_worker_plugin(worker_plugin)  # register worker plugin for efficient data transfer.
                 cuts = parallel_map(runner, list(range(dataset_length)), client=client)  # uses global client
         else:
             cuts = [runner(idx) for idx in range(dataset_length)]
->>>>>>> cd59be8088 (Add docstring and fixed bug for unit test)
     else:
         raise TypeError("client must be None, a Dask Client, or a DictConfig.")
 
