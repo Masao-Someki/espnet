@@ -392,3 +392,49 @@ def cutset_from_huggingface(
         raise TypeError("client must be None, a Dask Client, or a DictConfig.")
 
     return CutSet.from_cuts(cuts)
+
+
+class HFWrapper:
+    """
+    Wrapper for Hugging Face datasets compatible with DataOrganizer interface.
+
+    Attributes:
+        path (str): HuggingFace dataset ID or local path.
+        name (Optional[str]): Optional dataset config name.
+        split (str): Split to load (e.g., 'train', 'validation').
+        cache_dir (Optional[str]): Cache directory path.
+        kwargs (Dict[str, Any]): Additional keyword arguments passed to load_dataset.
+    """
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
+        # Check if there is a nested list or dict in the arguments from OmegaConf
+        for k,v in kwargs.items():
+            if isinstance(v, (ListConfig, DictConfig)):
+                kwargs[k] = OmegaConf.to_container(v, resolve=True)
+
+        self.dataset = load_dataset(
+            *args,
+            **kwargs,
+        )
+    
+    def _convert_to_numpy(self, data):
+        if isinstance(data, torch.Tensor):
+            return data.numpy()
+        elif isinstance(data, (list, tuple)):
+            return [self._convert_to_numpy(x) for x in data]
+        elif isinstance(data, dict):
+            return {k: self._convert_to_numpy(v) for k, v in data.items()}
+        else:
+            return data
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        return (str(idx), self.dataset[idx])
+
+    def __len__(self) -> int:
+        return len(self.dataset)
+
+    def __call__(self, idx: int) -> Dict[str, Any]:
+        return self.__getitem__(idx)
