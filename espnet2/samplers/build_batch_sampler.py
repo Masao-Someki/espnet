@@ -1,5 +1,6 @@
 from typing import List, Optional, Sequence, Tuple, Union
 
+from omegaconf import ListConfig
 from typeguard import typechecked
 
 from espnet2.samplers.abs_sampler import AbsSampler

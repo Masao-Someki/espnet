@@ -2,13 +2,13 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import partial
-from typing import Dict, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import datasets
 import numpy as np
 from dask.distributed import Client, LocalCluster, WorkerPlugin, get_worker
+from datasets import load_dataset  # HuggingFace Datasets
 from distributed.worker import thread_state
-from espnetez.parallel import get_client, get_parallel_config, parallel_map
 from lhotse.audio import Recording
 from lhotse.audio.backend import (
     AudioBackend,
@@ -21,6 +21,7 @@ from lhotse.audio.source import AudioSource, PathOrFilelike
 from lhotse.cut import Cut, CutSet, MonoCut
 from lhotse.supervision import SupervisionSegment
 from lhotse.utils import Pathlike, Seconds
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 from espnet3.parallel import get_client, get_parallel_config, parallel_map
 
@@ -405,13 +406,14 @@ class HFWrapper:
         cache_dir (Optional[str]): Cache directory path.
         kwargs (Dict[str, Any]): Additional keyword arguments passed to load_dataset.
     """
+
     def __init__(
         self,
         *args,
         **kwargs,
     ):
         # Check if there is a nested list or dict in the arguments from OmegaConf
-        for k,v in kwargs.items():
+        for k, v in kwargs.items():
             if isinstance(v, (ListConfig, DictConfig)):
                 kwargs[k] = OmegaConf.to_container(v, resolve=True)
 
@@ -419,7 +421,7 @@ class HFWrapper:
             *args,
             **kwargs,
         )
-    
+
     def _convert_to_numpy(self, data):
         if isinstance(data, torch.Tensor):
             return data.numpy()

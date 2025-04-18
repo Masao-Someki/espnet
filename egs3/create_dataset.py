@@ -30,15 +30,13 @@ def gather_examples(data_dir):
                     if not os.path.exists(flac_path):
                         continue
                     examples["id"].append(utt_id)
-                    examples["audio"].append(
-                        {"path": flac_path, "bytes": open(flac_path, "rb").read()}
-                    )
+                    examples["audio"].append({"path": flac_path})
                     examples["text"].append(text)
     return examples
 
 
-# データセットのルートパス（例：LibriSpeech/train-clean-100）
-BASE_PATH = "/home/msomeki/workspace/librispeech/LibriSpeech"
+# root path to the dataset（eg：LibriSpeech/train-clean-100）
+BASE_PATH = os.environ["LIBRISPEECH_PATH"]
 
 dataset_dict = DatasetDict(
     {
@@ -59,6 +57,6 @@ for split in dataset_dict:
         "audio", datasets.Audio(decode=True)
     )
 
-dataset_dir = "/home/msomeki/workspace/librispeech_dataset"
+dataset_dir = os.environ["LIBRISPEECH"]
 print("Saved dataset to", dataset_dir)
 dataset_dict.save_to_disk(dataset_dir)
