@@ -1,13 +1,12 @@
+import argparse
 import time
 from pathlib import Path
 
-import numpy as np
 import torch.nn as nn
-from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from espnet2.bin.asr_inference_ctc import Speech2Text
-from espnet3.data import DataOrganizer
+# from espnet2.bin.asr_inference_ctc import Speech2Text
+from espnet2.bin.asr_inference import Speech2Text
 from espnet3.inference_runner import InferenceRunner
 
 
@@ -34,7 +33,6 @@ class ASRInferenceWrapper(nn.Module):
             "rtf": {"type": "text", "value": str(round(rtf, 4))},
         }
 
-        # Add reference text if available
         if "text" in sample:
             text = self.model.tokenizer.tokens2text(
                 self.model.converter.ids2tokens(sample["text"])
@@ -74,13 +72,12 @@ def main():
         else Path(train_config.expdir) / "decode"
     )
 
-    # run inference
     runner = InferenceRunner(
         config=train_config,
-        model_config=model_config,
-        decode_dir=Path(train_config.expdir) / "decode_parallel",
+        model_config=inference_config,
+        decode_dir=decode_dir,
         parallel=train_config.parallel,
-        resume=True,
+        resume=not args.no_resume,
     )
 
     runner.run()
