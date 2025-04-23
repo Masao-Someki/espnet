@@ -44,6 +44,12 @@ requirements = {
         "dask",
         "dask_jobqueue",
     ],
+    "espnet3": [
+        "setuptools",
+        "editdistance",
+        "numpy",
+        "packaging"
+    ],
     "asr": [
         "sentencepiece==0.2.0",
         "ctc-segmentation>=1.6.6",
