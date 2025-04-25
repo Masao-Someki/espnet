@@ -48,7 +48,31 @@ requirements = {
         "setuptools",
         "editdistance",
         "numpy",
-        "packaging"
+        "packaging",
+        "configargparse>=1.2.1",
+        "typeguard",
+        "humanfriendly",
+        "scipy>=1.4.1",
+        "filelock",
+        "hydra-core",
+        "omegaconf",
+        "dask",
+        "dask_jobqueue",
+        "protobuf",
+        "hydra-core",
+        "opt-einsum",
+        "lightning",
+        # SPK
+        "asteroid_filterbanks==0.4.0",
+        "librosa",
+        "jamo==0.4.1",  # For kss
+        "PyYAML>=5.1.2",
+        "soundfile>=0.10.2",
+        "h5py>=2.10.0",
+        "kaldiio>=2.18.0",
+        "torch>=1.11.0",
+        "torch_complex",
+        "nltk>=3.4.5",
     ],
     "asr": [
         "sentencepiece==0.2.0",
@@ -134,6 +158,9 @@ requirements = {
 }
 requirements["all"].extend(requirements["train"] + requirements["recipe"])
 requirements["test"].extend(requirements["train"])
+requirements["espnet3"].extend(
+    requirements["asr"] + requirements["tts"] + requirements["enh"]
+)
 
 install_requires = requirements["install"]
 setup_requires = requirements["setup"]
