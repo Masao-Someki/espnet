@@ -37,6 +37,8 @@ requirements = {
         "dask_jobqueue",
     ],
     "espnet3": [
+        "datasets",
+        "lhotse",
         "librosa",
         "setuptools",
         "numpy",

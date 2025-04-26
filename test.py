@@ -2,7 +2,7 @@
 import os
 
 from datasets import load_dataset
-from espnetez.data.lhotse_utils import (
+from espnet3.data.lhotse_utils import (
     HuggingFaceAudioSource,
     HuggingfaceDatasetsBackend,
     cutset_from_huggingface,
@@ -15,7 +15,7 @@ from lhotse.cut import MonoCut
 from lhotse.supervision import SupervisionSegment
 
 # parallel
-from espnetez.parallel import (
+from espnet3.parallel import (
     get_client,
     get_parallel_config,
     parallel_map,
