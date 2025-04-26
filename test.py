@@ -6,12 +6,26 @@ from espnetez.data.lhotse_utils import (
     HuggingFaceAudioSource,
     HuggingfaceDatasetsBackend,
     cutset_from_huggingface,
+    HuggingfaceAudioLoader,
 )
 from lhotse import CutSet, Fbank, Mfcc
 from lhotse.audio import Recording
 from lhotse.audio.backend import set_current_audio_backend
 from lhotse.cut import MonoCut
 from lhotse.supervision import SupervisionSegment
+
+# parallel
+from espnetez.parallel import (
+    get_client,
+    get_parallel_config,
+    parallel_map,
+    set_parallel,
+)
+from omegaconf import OmegaConf
+
+from lhotse.dataset.sampling import SimpleCutSampler
+from lhotse.dataset.speech_recognition import K2SpeechRecognitionDataset
+
 
 ds = load_dataset("saeedq/librispeech_100h")
 
@@ -26,18 +40,8 @@ data_info = {
 }
 
 
-from espnetez.data.lhotse_utils import HuggingfaceAudioLoader
-
-## parallel
-from espnetez.parallel import (
-    get_client,
-    get_parallel_config,
-    parallel_map,
-    set_parallel,
-)
-from omegaconf import OmegaConf
-
 conf = OmegaConf.load("test.yaml")
+
 
 set_parallel(conf.parallel)
 
@@ -57,9 +61,6 @@ os.environ["LHOTSE_AUDIO_BACKEND"] = "HuggingfaceDatasetsBackend"
 
 
 # cuts_train = cutset.compute_and_store_features(Fbank(), "./tmp_1")
-
-from lhotse.dataset.sampling import SimpleCutSampler
-from lhotse.dataset.speech_recognition import K2SpeechRecognitionDataset
 
 dataset = K2SpeechRecognitionDataset()
 

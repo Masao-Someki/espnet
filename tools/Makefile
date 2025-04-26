@@ -28,6 +28,7 @@ WITH_OMP=ON
 
 all: showenv conda_packages.done python ffmpeg.done sctk check_install
 
+python_espnet3: activate_python.sh setuptools.done packaging.done pytorch.done espnet3.done fairscale.done torch_optimizer.done flash_attn.done lightning.done
 python: activate_python.sh setuptools.done packaging.done espnet.done pytorch.done chainer.done fairscale.done torch_optimizer.done flash_attn.done lightning.done
 extra: warp-transducer.done nkf.done moses.done mwerSegmenter.done pesq kenlm.done pyopenjtalk.done py3mmseg.done beamformit.done fairseq.done s3prl.done k2.done transformers.done phonemizer.done longformer.done muskits.done whisper.done rvad_fast.done sounfile_test parallel-wavegan.done lora.done sph2pipe torcheval.done
 
@@ -127,10 +128,15 @@ lightning.done: pytorch.done
 # NOTE(kamo): conda_packages is not necessary for installation of espnet, but add it the dependencies just in case.
 espnet.done: pytorch.done conda_packages.done lightning.done
 	@echo NUMPY_VERSION=$(shell . ./activate_python.sh && python3 -c "import numpy; print(numpy.__version__)")
-	. ./activate_python.sh && python3 -m pip install -e "..[train, recipe]"  # Install editable mode by default
+	. ./activate_python.sh && python3 -m pip install -e "..[legacy, train, recipe]"  # Install editable mode by default
 	@echo NUMPY_VERSION=$(shell . ./activate_python.sh && python3 -c "import numpy; print(numpy.__version__)")
 	. ./activate_python.sh && python -m nltk.downloader averaged_perceptron_tagger_eng
 	touch espnet.done
+
+espnet3.done: pytorch.done conda_packages.done lightning.done
+	. ./activate_python.sh && python3 -m pip install -e "..[espnet3, train]"
+	. ./activate_python.sh && python -m nltk.downloader averaged_perceptron_tagger_eng
+	touch espnet3.done
 
 sounfile_test: espnet.done
 	. ./activate_python.sh && python3 ./test_soundfile.py
@@ -170,7 +176,7 @@ else
 	echo "Warning: ./installers/install_phonemizer.sh requires WITH_OMP=ON"
 endif
 
-speechbrain.done: espnet.done conda_packages.done
+speechbrain.done: pytorch.done conda_packages.done
 	. ./activate_python.sh && ./installers/install_speechbrain.sh
 	touch speechbrain.done
 
@@ -206,27 +212,27 @@ beamformit.done:
 	./installers/install_beamformit.sh
 	touch beamformit.done
 
-torch_optimizer.done: espnet.done
+torch_optimizer.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_torch_optimizer.sh
 	touch torch_optimizer.done
 
-fairscale.done: espnet.done
+fairscale.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_fairscale.sh
 	touch fairscale.done
 
-fairseq.done: espnet.done
+fairseq.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_fairseq.sh
 	touch fairseq.done
 
-s3prl.done: espnet.done
+s3prl.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_s3prl.sh
 	touch s3prl.done
 
-whisper.done: espnet.done
+whisper.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_whisper.sh
 	touch whisper.done
 
-lora.done: espnet.done
+lora.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_lora.sh
 	touch lora.done
 
@@ -238,7 +244,7 @@ gtn.done: espnet.done
 	. ./activate_python.sh && ./installers/install_gtn.sh
 	touch gtn.done
 
-transformers.done: espnet.done
+transformers.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_transformers.sh
 	touch transformers.done
 
@@ -254,7 +260,7 @@ longformer.done: espnet.done
 	. ./activate_python.sh && ./installers/install_longformer.sh
 	touch longformer.done
 
-flash_attn.done: espnet.done
+flash_attn.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_flash_attn.sh
 	touch flash_attn.done
 
@@ -274,7 +280,7 @@ discrete_speech_metrics.done: espnet.done
 	. ./activate_python.sh && ./installers/install_discrete_speech_metrics.sh
 	touch discrete_speech_metrics.done
 
-versa.done: espnet.done
+versa.done: pytorch.done
 	. ./activate_python.sh && ./installers/install_versa.sh
 	touch versa.done
 
