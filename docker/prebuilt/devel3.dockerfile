@@ -24,6 +24,7 @@ RUN apt-get update && \
         git \
         gnupg2 \
         libffi-dev \
+        libjpeg-dev \
         libtool \
         libncurses5-dev \
         nodejs \
