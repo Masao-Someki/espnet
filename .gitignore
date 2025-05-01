@@ -41,6 +41,7 @@ out/config.yaml
 hub/
 
 .devcontainer/*/*.env
+.devcontainer/*.env
 
 doc/vuepress/src/.vuepress/.temp
 doc/vuepress/src/.vuepress/.cache
