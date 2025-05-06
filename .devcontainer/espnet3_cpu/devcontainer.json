@@ -20,9 +20,9 @@
 			]
 		}
 	},
-	"mounts": [
-		"source=${localEnv:EXPORT_DATA},target=/exported,type=bind"
-	],
+	// "mounts": [
+	// 	"source=${localEnv:EXPORT_DATA},target=/exported,type=bind"
+	// ],
 	"runArgs": [
 		"--rm",
 		"--env-file",
