@@ -6,10 +6,6 @@ set -euo pipefail
 
 ${CXX:-g++} -v
 
-if [ -z "${ESPNET3+x}" ]; then
-    ESPNET3=false
-fi
-
 (
     set -euo pipefail
     cd tools
@@ -25,11 +21,7 @@ fi
 
     . ./activate_python.sh
     # FIXME(kamo): Failed to compile pesq
-    if ${ESPNET3}; then
-        make TH_VERSION="${TH_VERSION}" WITH_OMP="${WITH_OMP-ON}" python_espnet3 s3prl.done transformers.done fairseq.done whisper.done lora.done sph2pipe versa.done torcheval.done
-    else
-        make TH_VERSION="${TH_VERSION}" WITH_OMP="${WITH_OMP-ON}" all warp-transducer.done nkf.done moses.done mwerSegmenter.done pyopenjtalk.done py3mmseg.done s3prl.done transformers.done phonemizer.done fairseq.done k2.done longformer.done whisper.done parallel-wavegan.done muskits.done lora.done sph2pipe versa.done torcheval.done
-    fi
+    make TH_VERSION="${TH_VERSION}" WITH_OMP="${WITH_OMP-ON}" all warp-transducer.done nkf.done moses.done mwerSegmenter.done pyopenjtalk.done py3mmseg.done s3prl.done transformers.done phonemizer.done fairseq.done k2.done longformer.done whisper.done parallel-wavegan.done muskits.done lora.done sph2pipe versa.done torcheval.done
     rm -rf kaldi
 )
 . tools/activate_python.sh

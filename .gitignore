@@ -70,6 +70,7 @@ egs2/**/**/checkpoint
 egs2/**/**/flagged_data_points
 egs2/**/**/hub
 
+pyproject.toml.tmp
 # tools related
 tools/chainer
 tools/bin

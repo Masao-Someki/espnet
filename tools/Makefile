@@ -28,7 +28,6 @@ WITH_OMP=ON
 
 all: showenv conda_packages.done python ffmpeg.done sctk check_install
 
-python_espnet3: activate_python.sh setuptools.done packaging.done pytorch.done espnet3.done fairscale.done torch_optimizer.done flash_attn.done lightning.done
 python: activate_python.sh setuptools.done packaging.done espnet.done pytorch.done chainer.done fairscale.done torch_optimizer.done flash_attn.done lightning.done
 extra: warp-transducer.done nkf.done moses.done mwerSegmenter.done pesq kenlm.done pyopenjtalk.done py3mmseg.done beamformit.done fairseq.done s3prl.done k2.done transformers.done phonemizer.done longformer.done muskits.done whisper.done rvad_fast.done sounfile_test parallel-wavegan.done lora.done sph2pipe torcheval.done
 
@@ -128,15 +127,12 @@ lightning.done: pytorch.done
 # NOTE(kamo): conda_packages is not necessary for installation of espnet, but add it the dependencies just in case.
 espnet.done: pytorch.done conda_packages.done lightning.done
 	@echo NUMPY_VERSION=$(shell . ./activate_python.sh && python3 -c "import numpy; print(numpy.__version__)")
-	. ./activate_python.sh && python3 -m pip install -e "..[legacy, train, recipe]"  # Install editable mode by default
+	cp setup.py ../ && mv ../pyproject.toml ../pyproject.toml.tmp
+	. ./activate_python.sh && python3 -m pip install -e "..[train, recipe]"  # Install editable mode by default
 	@echo NUMPY_VERSION=$(shell . ./activate_python.sh && python3 -c "import numpy; print(numpy.__version__)")
 	. ./activate_python.sh && python -m nltk.downloader averaged_perceptron_tagger_eng
+	rm ../setup.py && mv ../pyproject.toml.tmp ../pyproject.toml
 	touch espnet.done
-
-espnet3.done: pytorch.done conda_packages.done lightning.done
-	. ./activate_python.sh && python3 -m pip install -e "..[espnet3, train]"
-	. ./activate_python.sh && python -m nltk.downloader averaged_perceptron_tagger_eng
-	touch espnet3.done
 
 sounfile_test: espnet.done
 	. ./activate_python.sh && python3 ./test_soundfile.py
