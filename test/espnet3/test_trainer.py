@@ -24,6 +24,41 @@ EXPDIR = "test_utils/espnet3_dummy"
 
 
 @pytest.fixture
+def dummy_dataset_config():
+    config = {
+        "train": [
+            {
+                "name": "train_dummy",
+                "dataset": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyDataset"
+                },
+                "transform": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyTransform"
+                },
+            }
+        ],
+        "valid": [
+            {
+                "name": "valid_dummy",
+                "dataset": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyDataset"
+                },
+            }
+        ],
+        "test": [
+            {
+                "name": "test_dummy",
+                "dataset": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyDataset"
+                },
+            }
+        ],
+    }
+    config = OmegaConf.create(config)
+    return config
+
+
+@pytest.fixture
 def base_trainer_config(tmp_path):
     return OmegaConf.create(
         {
@@ -77,7 +112,11 @@ def model_config():
     ],
 )
 def test_logger_variants(
-    logger_cfg, expect_logger_type, base_trainer_config, model_config
+    logger_cfg,
+    expect_logger_type,
+    base_trainer_config,
+    model_config,
+    dummy_dataset_config,
 ):
     model_config = OmegaConf.create(model_config)
     trainer_config = OmegaConf.create(base_trainer_config)
@@ -104,7 +143,11 @@ def test_logger_variants(
     ],
 )
 def test_accelerator_variants(
-    accelerator, expect_type, base_trainer_config, model_config
+    accelerator,
+    expect_type,
+    base_trainer_config,
+    model_config,
+    dummy_dataset_config,
 ):
     model_config = OmegaConf.create(model_config)
     trainer_config = OmegaConf.create(base_trainer_config)
@@ -130,7 +173,9 @@ def test_accelerator_variants(
         ),
     ],
 )
-def test_strategy_variants(strategy, expect_type, base_trainer_config, model_config):
+def test_strategy_variants(
+    strategy, expect_type, base_trainer_config, model_config, dummy_dataset_config
+):
     model_config = OmegaConf.create(model_config)
     trainer_config = OmegaConf.create(base_trainer_config)
     if strategy is not None:
@@ -158,7 +203,9 @@ def test_strategy_variants(strategy, expect_type, base_trainer_config, model_con
         ),
     ],
 )
-def test_profiler_variants(profiler, expect_type, base_trainer_config, model_config):
+def test_profiler_variants(
+    profiler, expect_type, base_trainer_config, model_config, dummy_dataset_config
+):
     model_config = OmegaConf.create(model_config)
     trainer_config = OmegaConf.create(base_trainer_config)
     if profiler is not None:
@@ -188,7 +235,9 @@ def test_profiler_variants(profiler, expect_type, base_trainer_config, model_con
         ),
     ],
 )
-def test_plugins_variants(plugin, expect_type, base_trainer_config, model_config):
+def test_plugins_variants(
+    plugin, expect_type, base_trainer_config, model_config, dummy_dataset_config
+):
     model_config = OmegaConf.create(model_config)
     trainer_config = OmegaConf.create(base_trainer_config)
     if plugin is not None:
