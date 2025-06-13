@@ -12,7 +12,7 @@ exclude+="test_utils/bats-core,test_utils/bats-support,"
 exclude+="test_utils/bats-assert,espnet2,espnet3,egs3"
 
 # flake8
-"$(dirname $0)"/test_flake8.sh
+"$(dirname $0)"/test_flake8.sh espnet
 # pycodestyle
 pycodestyle --exclude "${exclude}" --show-source --show-pep8
 

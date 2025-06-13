@@ -411,7 +411,7 @@ class ConvolutionalPositionalEmbedding(torch.nn.Module):
         groups: int = 16,
         weight_norm: str = "new",
     ):
-        """Initialize Convolutional Positional Embedding."""
+        """Initialize Convoluational Positional Embedding."""
         super().__init__()
         self.embed_dim = embed_dim
         self.kernel_size = kernel_size
@@ -445,7 +445,7 @@ class ConvolutionalPositionalEmbedding(torch.nn.Module):
         self.num_remove: int = 1 if kernel_size % 2 == 0 else 0
 
     def __prepare_scriptable__(self):
-        """Prepare Scriptable."""
+        """Prepare Scriptable method."""
         for hook in self.conv._forward_pre_hooks.values():
             # The hook we want to remove is an instance of WeightNorm class, so
             # normally we would do `if isinstance(...)` but this class is not accessible
@@ -460,7 +460,7 @@ class ConvolutionalPositionalEmbedding(torch.nn.Module):
         return self
 
     def forward(self, x):
-        """Forward method.
+        """Forward Method.
 
         Args:
             x (Tensor): shape ``[batch, frame, feature]``.

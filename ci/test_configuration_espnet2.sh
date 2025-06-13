@@ -105,7 +105,31 @@ if python3 -c 'import torch as t; from packaging.version import parse as L; asse
                     continue
                 fi
             fi
-            execute_config espnet2.bin.asr_train "${f}" "--iterator_type none --dry_run true --output_dir out --token_list dummy_token_list"
+        fi
+        ${python} -m espnet2.bin.asr_train --config "${f}" --iterator_type none --dry_run true --output_dir out --token_list dummy_token_list
+        sudo rm -rf /root/.cache/huggingface*
+        rm -rf hf_cache hub
+    done
+
+    for f in egs2/*/asr1/conf/train_transducer*.yaml; do
+        ${python} -m espnet2.bin.asr_transducer_train --config "${f}" --iterator_type none --dry_run true --output_dir out --token_list dummy_token_list
+    done
+
+    for f in egs2/*/asr1/conf/train_lm*.yaml; do
+        ${python} -m espnet2.bin.lm_train --config "${f}" --iterator_type none --dry_run true --output_dir out --token_list dummy_token_list
+    done
+
+    for f in egs2/*/tts1/conf/train*.yaml; do
+        ${python} -m espnet2.bin.tts_train --config "${f}" --iterator_type none --normalize none --dry_run true --output_dir out --token_list dummy_token_list
+    done
+
+    for f in egs2/*/enh1/conf/train*.yaml; do
+        ${python} -m espnet2.bin.enh_train --config "${f}" --iterator_type none --dry_run true --output_dir out
+    done
+
+    if python3 -c 'import torch as t; from packaging.version import parse as L; assert L(t.__version__) >= L("1.12.0")' &> /dev/null; then
+        for f in egs2/*/ssl1/conf/train*.yaml; do
+            ${python} -m espnet2.bin.hubert_train --config "${f}" --iterator_type none --normalize none --dry_run true --output_dir out --token_list dummy_token_list --num_classes 10
         done
     fi
 

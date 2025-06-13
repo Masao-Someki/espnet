@@ -66,7 +66,7 @@ class Masking(nn.Module):
         torch.nn.init.uniform_(self.mask_embedding)
 
     def forward(self, x: Tensor, padding_mask: Optional[Tensor]) -> Tensor:
-        """Forward Method.
+        """Masking forward.
 
         Args:
             x (Tensor): The encoded representations after feature extraction module.

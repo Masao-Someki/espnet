@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 processor=$1
- 
 echo "[INFO] install PyTorch for ${processor}"
 
 if [ "${processor}" == "cpu" ]; then

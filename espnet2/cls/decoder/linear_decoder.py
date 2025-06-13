@@ -44,7 +44,7 @@ class LinearDecoder(AbsDecoder):
         hs_pad: torch.Tensor,
         hlens: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward Method.
+        """LinearDecoder Forward.
 
         Args:
             hs_pad: (B, Tmax, D)

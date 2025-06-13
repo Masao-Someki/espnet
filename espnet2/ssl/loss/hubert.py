@@ -138,7 +138,7 @@ class HuBERTDecoder(nn.Module):
     def forward(
         self, x: torch.Tensor, mask_m: torch.Tensor, mask_u: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Forward Method.
+        """HuBERTDecoder forward.
 
         Args:
             x (Tensor): The feature representation of the last transformer layer.

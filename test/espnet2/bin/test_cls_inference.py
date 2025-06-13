@@ -1,4 +1,3 @@
-# import os
 import string
 from argparse import ArgumentParser
 from pathlib import Path
@@ -7,8 +6,6 @@ import numpy as np
 import pytest
 import soundfile
 import torch
-
-# import yaml
 
 from espnet2.bin.cls_inference import Classification, get_parser, inference, main
 from espnet2.tasks.cls import CLSTask
@@ -98,7 +95,10 @@ def test_Classification_multilabel(multi_label_config_file):
 @pytest.fixture()
 def data_setup(tmp_path):
     """Creates temporary files for inference and returns their paths."""
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9c38ce04e014751bccb63ba9f442d1e33887e376
     wav_file_path = tmp_path / "utt1.wav"
     scp_file_path = tmp_path / "data.scp"
 
