@@ -1,26 +1,19 @@
-from argparse import Namespace
-from typing import Any, Dict,  List, Tuple, Union
 import warnings
+from argparse import Namespace
+from typing import Any, Dict, Union
 
 import lightning as L
 import torch
 import torch.nn as nn
 from hydra.utils import instantiate
-from lightning.pytorch.loggers import CSVLogger
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig
 from typeguard import typechecked
 
-from espnet3.trainer.callbacks import get_default_callbacks
+from espnet2.torch_utils.initialize import initialize
+
+# Temporaliry disabled for the code review.
+# from espnet3.trainer.callbacks import get_default_callbacks
 from espnet3.trainer.model import LitESPnetModel
-
-
-def init_weights(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform(m.weight)
-        m.bias.data.fill_(0.01)
-    if isinstance(m, nn.Conv1d):
-        torch.nn.init.kaiming_uniform_(m.weight)
-        m.bias.data.fill_(0.01)
 
 
 def get_or_initialize(config, item_name: str = None, default=None) -> Any:
@@ -37,7 +30,21 @@ def get_or_initialize(config, item_name: str = None, default=None) -> Any:
         return item
 
 
-class ESPnetEZLightningTrainer:
+class ESPnet3LightningTrainer:
+    """
+    A wrapper around Lightning's Trainer to provide ESPnet3-specific integration.
+
+    This trainer ensures compatibility with ESPnet's dataloader, callbacks,
+    and configuration system. It initializes the model, handles weight
+    initialization, sets up the training strategy, logger, plugins, and
+    integrates with ESPnet-specific callbacks and samplers.
+
+    Attributes:
+        config (Union[DictConfig, Namespace, Dict[str, Any]]): Training configuration.
+        model (LitESPnetModel): ESPnet3 Lightning model instance.
+        trainer (lightning.Trainer): Underlying PyTorch Lightning trainer object.
+    """
+
     @typechecked
     def __init__(
         self,
@@ -46,9 +53,6 @@ class ESPnetEZLightningTrainer:
         config: Union[DictConfig, Namespace, Dict[str, Any]] = None,
         best_model_criterion=None,
     ):
-        assert model is not None, "model must be provided."
-        assert expdir is not None, "expdir must be provided."
-        assert config is not None, "config must be provided."
         if best_model_criterion is None:
             best_model_criterion = ListConfig([("valid/loss", 3, "min")])
 
@@ -57,7 +61,8 @@ class ESPnetEZLightningTrainer:
 
         # Instantiate the Lightning Model
         self.model = model
-        init_weights(self.model)
+        if getattr(self.config, "init", None) is not None:
+            initialize(self.model, self.config.init)
 
         # Accelerator
         accelerator = get_or_initialize(self.config, "accelerator", "auto")
@@ -85,38 +90,47 @@ class ESPnetEZLightningTrainer:
             self.config.pop("plugins")
 
         # Callbacks
-        callbacks = get_default_callbacks(
-            expdir,
-            self.config.log_every_n_steps,
-            OmegaConf.to_container(best_model_criterion),
-        )
-        if getattr(self.config, "callbacks", None):
-            assert isinstance(
-                self.config.callbacks, ListConfig
-            ), "callbacks should be a list"
-            for callback in self.config.callbacks:
-                callbacks.append(instantiate(callback))
-            self.config.pop("callbacks")
-        
+        # Temporaliry disabled for the code review.
+        # callbacks = get_default_callbacks(
+        #     expdir,
+        #     self.config.log_every_n_steps,
+        #     OmegaConf.to_container(best_model_criterion),
+        # )
+        # if getattr(self.config, "callbacks", None):
+        #     assert isinstance(
+        #         self.config.callbacks, ListConfig
+        #     ), "callbacks should be a list"
+        #     for callback in self.config.callbacks:
+        #         callbacks.append(instantiate(callback))
+        #     self.config.pop("callbacks")
+
         # Since espnet's sampler requires to set the following configs:
         # Reload dataloaders every epoch to reuse ESPnet's dataloader
         # reload_dataloaders_every_n_epochs=1
         # ESPnet's dataloader already shards the dataset based on distributed setups
         # use_distributed_sampler=False
         if hasattr(self.model.config.dataloader.train, "iter_factory"):
-            if hasattr(self.config, "reload_dataloaders_every_n_epochs") \
-                and self.config.reload_dataloaders_every_n_epochs != 1:
-                warnings.warn("ESPnet's dataloader requires to set"
-                              "reload_dataloaders_every_n_epochs = 1. "
-                              "Override the config to 1.")
-            if hasattr(self.model.config, "use_distributed_sampler") \
-                and not self.config.use_distributed_sampler:
-                warnings.warn("ESPnet's dataloader requires to set"
-                              "use_distributed_sampler to False. "
-                              "Override the config to False.")
+            if (
+                hasattr(self.config, "reload_dataloaders_every_n_epochs")
+                and self.config.reload_dataloaders_every_n_epochs != 1
+            ):
+                warnings.warn(
+                    "ESPnet's dataloader requires to set"
+                    "reload_dataloaders_every_n_epochs = 1. "
+                    "Override the config to 1."
+                )
+            if (
+                hasattr(self.model.config, "use_distributed_sampler")
+                and not self.config.use_distributed_sampler
+            ):
+                warnings.warn(
+                    "ESPnet's dataloader requires to set"
+                    "use_distributed_sampler to False. "
+                    "Override the config to False."
+                )
 
             self.config.reload_dataloaders_every_n_epochs = 1
-        
+
         # Check training dataloader and if it is using the espnet's sampler
         # then we had to set the distributed_sampler to False.
         if self.model.is_espnet_sampler:
@@ -125,7 +139,8 @@ class ESPnetEZLightningTrainer:
         # Set up the trainer
         self.trainer = L.Trainer(
             accelerator=accelerator,
-            callbacks=callbacks,
+            # Temporaliry disabled for the code review.
+            # callbacks=callbacks,
             strategy=strategy,
             logger=logger,
             profiler=profiler,
@@ -134,6 +149,16 @@ class ESPnetEZLightningTrainer:
         )
 
     def fit(self, *args, **kwargs):
+        """
+        Start the training loop using Lightning's fit method.
+
+        Args:
+            *args: Positional arguments passed to `trainer.fit()`.
+            **kwargs: Keyword arguments passed to `trainer.fit()`.
+
+        Note:
+            Always uses the internally stored model (`self.model`) when calling `fit`.
+        """
         self.trainer.fit(
             *args,
             model=self.model,
@@ -141,11 +166,30 @@ class ESPnetEZLightningTrainer:
         )
 
     def validate(self, *args, **kwargs):
+        """
+        Run validation using Lightning's validate method.
+
+        Args:
+            *args: Positional arguments passed to `trainer.validate()`.
+            **kwargs: Keyword arguments passed to `trainer.validate()`.
+
+        Returns:
+            List[Dict[str, Any]]: Validation results.
+        """
         return self.trainer.validate(
             *args,
             model=self.model,
             **kwargs,
         )
 
-    def collect_stats(self, *args, **kwargs):
-        return self.model.collect_stats(*args, **kwargs)
+    # Temporaliry disabled for the code review.
+    # def collect_stats(self, *args, **kwargs):
+    #     """
+    #     Collect dataset statistics with the espnet-3's parallel package.
+
+    #     Args:
+    #         *args: Positional arguments passed to `model.collect_stats()`.
+    #         **kwargs: Keyword arguments passed to `model.collect_stats()`.
+
+    #     """
+    #     return self.model.collect_stats(*args, **kwargs)
