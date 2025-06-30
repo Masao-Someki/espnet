@@ -26,7 +26,16 @@ gen_dummy_coverage(){
 #### Make sure chainer-independent ####
 python3 -m pip uninstall -y chainer
 
+# First uninstall all espnet-related dependencies including all extras.
+# I use toml and load the pyproject.toml
+python3 -m pip install toml
+python3 test_utils/uninstall_extra.py
+
 # [ESPnet2] test asr recipe
+# Install ASR dependency
+python3 -m pip install -e '.[task-asr]'
+
+# Run tests
 cd ./egs2/mini_an4/asr1
 ./run.sh --stage 1 --stop-stage 1
 
@@ -161,7 +170,14 @@ if [ "${task}" == "asr" ] || [ "${task}" == "all" ]; then
 fi
 cd "${cwd}"
 
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
+
 # [ESPnet2] test tts recipe
+# Install TTS dependency
+python3 -m pip install -e '.[task-tts]'
+
+# Run tests
 cd ./egs2/mini_an4/tts1
 
 if [ "${task}" == "tts" ] || [ "${task}" == "all" ]; then
@@ -183,8 +199,31 @@ if [ "${task}" == "tts" ] || [ "${task}" == "all" ]; then
     fi
 fi
 cd "${cwd}"
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
+
+
+# [ESPnet2] test asr2 recipe
+# Install ASR2 dependency
+python3 -m pip install -e '.[task-asr2]'
+cd ./egs2/mini_an4/asr2
+gen_dummy_coverage
+echo "==== [ESPnet2] ASR2 ==="
+./run.sh --ngpu 0 --stage 1 --stop-stage 15 --skip-packing false --use-lm false --python "${python}" --asr-args "--num_workers 0"
+# Remove generated files in order to reduce the disk usage
+rm -rf exp dump data
+cd "${cwd}"
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
+
 
 # [ESPnet2] test enh recipe
+# Install ENH dependency
+# ENH + Speech2Text requires s2t dependency
+python3 -m pip install -e '.[task-enh]'
+python3 -m pip install -e '.[task-st]'
+
+# Run tests
 if python -c 'import torch as t; from packaging.version import parse as L; assert L(t.__version__) >= L("1.2.0")' &> /dev/null; then
     cd ./egs2/mini_an4/enh1
     if [ "${task}" == "enh" ] || [ "${task}" == "all" ]; then
@@ -240,6 +279,20 @@ if python -c 'import torch as t; from packaging.version import parse as L; asser
     cd "${cwd}"
 fi
 
+# [ESPnet2] test enh_asr1 recipe
+python3 -m pip install -e '.[task-asr]'
+if python -c 'import torch as t; from packaging.version import parse as L; assert L(t.__version__) >= L("1.2.0")' &> /dev/null; then
+    cd ./egs2/mini_an4/enh_asr1
+    gen_dummy_coverage
+    echo "==== [ESPnet2] ENH_ASR ==="
+    ./run.sh --ngpu 0 --stage 0 --stop-stage 15 --skip-packing false --skip-upload_hf false --feats-type "raw" --spk-num 1 --enh_asr_args "--enh_separator_conf num_spk=1 --num_workers 0" --python "${python}"
+    # Remove generated files in order to reduce the disk usage
+    rm -rf exp dump data
+    cd "${cwd}"
+fi
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
+
 # [ESPnet2] test ssl1 recipe
 if python3 -c 'import torch as t; from packaging.version import parse as L; assert L(t.__version__) >= L("1.12.0")' &> /dev/null; then
     cd ./egs2/mini_an4/ssl1
@@ -267,6 +320,10 @@ if python -c 'import torch as t; from packaging.version import parse as L; asser
 fi
 
 # [ESPnet2] test st recipe
+# Install ST dependency
+python3 -m pip install -e '.[task-st]'
+
+# Run tests
 cd ./egs2/mini_an4/st1
 
 if [ "${task}" == "st" ] || [ "${task}" == "all" ]; then
@@ -314,6 +371,10 @@ fi
 cd "${cwd}"
 
 # [ESPnet2] test spk1 recipe
+# Install SPK dependency
+python3 -m pip install -e '.[task-spk]'
+
+# Run tests
 cd ./egs2/mini_an4/spk1
 if [ "${task}" == "spk" ] || [ "${task}" == "all" ]; then
     gen_dummy_coverage
@@ -331,8 +392,13 @@ if [ "${task}" == "spk" ] || [ "${task}" == "all" ]; then
     rm -rf exp dump data
 fi
 cd "${cwd}"
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
 
 # [ESPnet2] test s2t1 recipe
+# # Install s2t dependency
+python3 -m pip install -e '.[task-s2t]'
+
 cd ./egs2/mini_an4/s2t1
 if [ "${task}" == "s2t" ] || [ "${task}" == "all" ]; then
     gen_dummy_coverage
@@ -342,6 +408,12 @@ if [ "${task}" == "s2t" ] || [ "${task}" == "all" ]; then
     rm -rf exp dump data
 fi
 cd "${cwd}"
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
+
+# [ESPnet2] test s2st1 recipe
+# # Install s2st dependency
+python3 -m pip install -e '.[task-s2st]'
 
 # [ESPnet2] test s2st1 recipe
 cd ./egs2/mini_an4/s2st1
@@ -356,6 +428,8 @@ if [ "${task}" == "s2st" ] || [ "${task}" == "all" ]; then
     rm -rf exp dump data ckpt .cache
 fi
 cd "${cwd}"
+# Uninstall task-dependency
+python3 test_utils/uninstall_extra.py
 
 # [ESPnet2] test lm1 recipe
 cd ./egs2/mini_an4/lm1

@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - master
+      - espnet3
   pull_request:
     branches:
       - master
+      - espnet3
 
 jobs:
   process_labels:
@@ -244,7 +246,7 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/setup.py') }}-${{ hashFiles('**/Makefile') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/pyproject.toml') }}-${{ hashFiles('**/Makefile') }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -293,10 +295,8 @@ jobs:
       - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/setup.py') }}-${{ hashFiles('**/Makefile') }}
-
-      - name: Make environment
-        uses: ./.github/actions/prepare-environment
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/pyproject.toml') }}-${{ hashFiles('**/Makefile') }}
+      - uses: actions/setup-python@v5
         with:
           os-version: ubuntu
           python-version: ${{ matrix.python-version }}
@@ -394,6 +394,7 @@ jobs:
       run: |
         python3 -m pip install -U "Cython<3.1.0"
         python3 -m pip install -U numba
+        python3 -m pip install build
         ./tools/installers/install_torch.sh false ${TH_VERSION} CPU
         ./tools/installers/install_chainer.sh CPU
         cp ./tools/setup.py ./ && mv pyproject.toml pyproject.toml.tmp && mv espnet3 .espnet3
