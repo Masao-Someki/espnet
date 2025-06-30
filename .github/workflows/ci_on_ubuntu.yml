@@ -22,7 +22,7 @@ jobs:
       - name: Check whether PR is related to only docker
         id: step1
         run: |
-          if [ -z "$GITHUB_PR_LABEL_ESPNET1" ] && [ -z "$GITHUB_PR_LABEL_ESPNET2" ] && [ -n "$GITHUB_PR_LABEL_DOCKER" ]; then
+          if [ -z "$GITHUB_PR_LABEL_ESPNET1" ] && [ -z "$GITHUB_PR_LABEL_ESPNET2" ] && [ -z "$GITHUB_PR_LABEL_ESPNET3" ] && [ -n "$GITHUB_PR_LABEL_DOCKER" ]; then
             echo "is_docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_docker=false" >> "$GITHUB_OUTPUT"
