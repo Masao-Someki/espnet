@@ -1,33 +1,61 @@
-import os
+import warnings
 from contextlib import contextmanager
 from typing import Any, Callable, Generator, Iterable, Optional
 
-from dask.distributed import Client, LocalCluster, WorkerPlugin
-from dask_jobqueue import SLURMCluster
+import torch
+from dask.distributed import Client, LocalCluster, SSHCluster, WorkerPlugin
+from dask_jobqueue import (
+    HTCondorCluster,
+    LSFCluster,
+    MoabCluster,
+    OARCluster,
+    PBSCluster,
+    SGECluster,
+    SLURMCluster,
+)
 from omegaconf import DictConfig
 from tqdm import tqdm
 from typeguard import typechecked
 
-
-import torch
-import torch.multiprocessing as mp
-import warnings
-
-
 parallel_config: Optional[DictConfig] = None
+
+CLUSTER_MAP = {
+    "htcondor": HTCondorCluster,
+    "lsf": LSFCluster,
+    "moab": MoabCluster,
+    "oar": OARCluster,
+    "pbs": PBSCluster,
+    "sge": SGECluster,
+    "slurm": SLURMCluster,
+    "ssh": SSHCluster,
+}
 
 
 def make_local_gpu_cluster(n_workers: int, options: dict) -> Client:
+    """
+    Create a Dask LocalCUDACluster using available GPUs.
+
+    This requires `dask_cuda` package.
+
+    Args:
+        n_workers (int): Number of Dask workers (must not exceed number of GPUs).
+        options (dict): Additional options for the LocalCUDACluster.
+
+    Returns:
+        Client: Dask client connected to the GPU cluster.
+    """
     try:
         from dask_cuda import LocalCUDACluster
     except:
-        raise RuntimeError("Please install dask_cuda to activate this option.")
-    
+        raise RuntimeError("Please install dask_cuda.")
+
     num_gpus = torch.cuda.device_count()
     if n_workers > num_gpus:
         raise ValueError(f"n_workers={n_workers} > num_gpus={num_gpus}")
     if n_workers < num_gpus:
-        warnings.warn(f"n_workers={n_workers} < num_gpus={num_gpus}, some GPUs may be idle.")
+        warnings.warn(
+            f"n_workers={n_workers} < num_gpus={num_gpus}, some GPUs may be idle."
+        )
 
     cluster = LocalCUDACluster(n_workers=n_workers, **options)
     return Client(cluster)
@@ -61,11 +89,20 @@ def _make_client(config: DictConfig = None) -> Client:
     if config.env == "local":
         return Client(LocalCluster(config.n_workers, **config.options))
 
-    if config.env == "local_gpu":
+    elif config.env == "local_gpu":
         return make_local_gpu_cluster(config.n_workers, config.options)
-    
-    elif config.env == "slurm":
-        cluster = SLURMCluster(**config.options)
+
+    elif config.env == "kube":
+        try:
+            from dask_kubernetes import KubeCluster
+        except ImportError:
+            raise RuntimeError("Please install dask_kubernetes.")
+        cluster = KubeCluster(**config.options)
+        cluster.scale(config.n_workers)
+        return Client(cluster)
+
+    elif config.env in CLUSTER_MAP:
+        cluster = CLUSTER_MAP[config.env](**config.options)
         cluster.scale(config.n_workers)
         return Client(cluster)
 
@@ -74,7 +111,15 @@ def _make_client(config: DictConfig = None) -> Client:
 
 
 def make_client(config: DictConfig = None) -> Client:
-    """Create a Dask client tied to the global singleton cluster."""
+    """
+    Create or retrieve a Dask client using the provided or global configuration.
+
+    Args:
+        config (DictConfig, optional): Cluster config. If None, uses global one.
+
+    Returns:
+        Client: Dask client instance.
+    """
     if config is not None:
         return _make_client(config)
 
@@ -91,6 +136,10 @@ def get_client(
     config: DictConfig = None, plugin: WorkerPlugin = None
 ) -> Generator[Client, None, None]:
     """Context manager to yield a Dask client from the global singleton cluster.
+
+    Args:
+        config (DictConfig, optional): Cluster config.
+        plugin (WorkerPlugin, optional): Plugin to register with workers.
 
     Yields:
         Client: A Dask client instance tied to the global cluster.
