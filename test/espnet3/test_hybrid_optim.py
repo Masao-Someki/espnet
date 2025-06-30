@@ -6,6 +6,23 @@ from torch import nn
 
 from espnet3.trainer import HybridOptim
 
+# ===============================================================
+# Test Case Summary for HybridOptim
+# ===============================================================
+#
+# Basic Functionality Tests
+# | Test Name                          | Description                                                              | # noqa: E501
+# |-----------------------------------|--------------------------------------------------------------------------| # noqa: E501
+# | test_zero_grad_called             | Ensures zero_grad() is called with correct arguments on all optimizers  | # noqa: E501
+# | test_step_called_and_loss_returned| Confirms step() calls each optimizer's step and returns closure loss     | # noqa: E501
+# | test_state_dict_and_load_state_dict_roundtrip | Tests saving and restoring of optimizer state dicts            | # noqa: E501
+# | test_repr_contains_optimizer_info | Checks that __repr__ includes optimizer names (SGD, Adam, etc.)         | # noqa: E501
+#
+# Combined Properties Tests
+# | Test Name                          | Description                                                              | # noqa: E501
+# |-----------------------------------|--------------------------------------------------------------------------| # noqa: E501
+# | test_combined_properties          | Validates param_groups, state, defaults are aggregated correctly         | # noqa: E501
+
 
 def create_simple_model_and_optim():
     model1 = nn.Linear(10, 10)
@@ -16,10 +33,6 @@ def create_simple_model_and_optim():
 
 
 def test_zero_grad_called():
-    """Test zero grad.
-
-    H001: Check that zero_grad is called on all optimizers
-    """
     opt1 = MagicMock()
     opt2 = MagicMock()
     hybrid = HybridOptim([opt1, opt2])
@@ -29,10 +42,6 @@ def test_zero_grad_called():
 
 
 def test_step_called_and_loss_returned():
-    """Test step called.
-
-    H002: Check that step is called and closure returns loss
-    """
     opt1 = MagicMock()
     opt2 = MagicMock()
     hybrid = HybridOptim([opt1, opt2])
@@ -48,10 +57,6 @@ def test_step_called_and_loss_returned():
 
 
 def test_state_dict_and_load_state_dict_roundtrip():
-    """Test state_dict roundtrip.
-
-    H003: Save state_dict and restore it correctly
-    """
     optimizers = create_simple_model_and_optim()
     hybrid = HybridOptim(optimizers)
 
@@ -65,10 +70,6 @@ def test_state_dict_and_load_state_dict_roundtrip():
 
 
 def test_repr_contains_optimizer_info():
-    """Test Repr Optimizer.
-
-    H004: __repr__ contains optimizer types
-    """
     optimizers = create_simple_model_and_optim()
     hybrid = HybridOptim(optimizers)
     rep = repr(hybrid)
@@ -77,10 +78,6 @@ def test_repr_contains_optimizer_info():
 
 
 def test_combined_properties():
-    """Test Combined Properties.
-
-    H005: param_groups, state, defaults are combined from all optimizers
-    """
     optimizers = create_simple_model_and_optim()
     hybrid = HybridOptim(optimizers)
 

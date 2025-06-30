@@ -78,7 +78,7 @@ class HybridOptim(torch.optim.Optimizer):
         ``self.optimizers``."""
         repr_str = (
             f"``{self.__class__.__name__}`` "
-            + "containing {len(self.optimizers)} optimizers:\n"
+            + f"containing {len(self.optimizers)} optimizers:\n"
         )
 
         for optimizer in self.optimizers:

@@ -2,9 +2,20 @@
 # import torch
 from torch import nn
 from torch.optim import SGD, Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau, StepLR
+from torch.optim.lr_scheduler import StepLR, LinearLR
 
 from espnet3.trainer import HybridLRS, HybridOptim
+
+# ===============================================================
+# Test Case Summary for HybridLRS
+# ===============================================================
+#
+# Basic Wrapper Tests
+# | Test Name                          | Description                                                              | # noqa: E501
+# |-----------------------------------|--------------------------------------------------------------------------| # noqa: E501
+# | test_hybrid_lrs_basic_attributes  | Validates optimizer, scheduler, and index assignment                    | # noqa: E501
+# | test_getattr_forwarding           | Checks that method calls are correctly forwarded to lr_scheduler        | # noqa: E501
+#
 
 
 def create_optimizers_and_schedulers():
@@ -16,7 +27,7 @@ def create_optimizers_and_schedulers():
     hybrid = HybridOptim([opt1, opt2])
 
     sched1 = StepLR(opt1, step_size=5, gamma=0.1)
-    sched2 = ReduceLROnPlateau(opt2, patience=2)
+    sched2 = LinearLR(opt2)
 
     return hybrid, [sched1, sched2]
 
