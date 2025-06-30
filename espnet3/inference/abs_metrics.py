@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any, Dict, List
 
 
 class AbsMetrics(ABC):
@@ -24,4 +24,3 @@ class AbsMetrics(ABC):
             Any: Computed metric result (e.g., float, dict).
         """
         raise NotImplementedError
-
