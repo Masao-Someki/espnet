@@ -1,45 +1,42 @@
+
 ---
 title: 📘 Parallel Processing in ESPnet3 (`espnet3.parallel`)
 author:
   name: "Masao Someki"
-date: 202-07-01
+date: 2025-07-17
 ---
 
-This module provides a unified abstraction for parallel and distributed processing across various environments using [Dask](https://docs.dask.org). It is used internally in ESPnet3 for inference, statistics collection, and other batch computations, but can also be used standalone in external applications.
+This module provides a unified abstraction for parallel and distributed processing across multiple compute environments using [Dask](https://dask.org). It powers scalable inference, statistics collection, and batch operations in ESPnet3, and can be used independently.
 
 ---
 
 ## 🚀 Key Features
 
-- Supports multiple execution environments:
-  - Local (CPU or GPU)
-  - SLURM / PBS / LSF / HTCondor / SSH clusters
+- ✅ Support for:
+  - Local (CPU / GPU)
+  - HPC clusters (SLURM, PBS, LSF, HTCondor, SSH)
   - Kubernetes
-- Easy to switch between environments by config
-- Minimal boilerplate using context-managed Dask clients
-- Utilities for:
-  - `parallel_map()`: parallel map across iterable
-  - `parallel_submit()`: submit single function calls
-  - `parallel_scatter()`: distribute shared data
-- Plugin interface to initialize per-worker state (e.g., model loading)
+- ✅ Minimal boilerplate with `get_client()` context manager
+- ✅ Per-worker environment via `setup_fn`
+- ✅ Streaming-like task consumption with `parallel_for()`
+- ✅ Utility wrappers: `parallel_map()`, `parallel_submit()`
 
 ---
 
-## 📦 API Overview
+## 📦 API Summary
 
-| Function | Description |
-|----------|-------------|
-| `set_parallel(config)` | Set the global Dask config for parallel execution |
-| `get_client(config, plugin)` | Context manager for client with optional `WorkerPlugin` |
-| `parallel_map(func, data)` | Apply a function to an iterable in parallel |
-| `parallel_submit(func, *args, **kwargs)` | Submit a single task for asynchronous execution |
-| `parallel_scatter(data)` | Distribute data to workers for shared access |
+| Function                        | Description                                         |
+|--------------------------------|-----------------------------------------------------|
+| `set_parallel(config)`         | Set global Dask config                              |
+| `get_client(config, setup_fn)` | Context-managed Dask client                         |
+| `parallel_map(func, data)`     | Parallel map over an iterable                       |
+| `parallel_for(func, args)`     | Stream-like parallel execution                      |
 
 ---
 
 ## 🧩 Usage Examples
 
-### 1. Basic Parallel Map
+### 1. Basic Parallel Map (CPU)
 
 ```python
 from omegaconf import OmegaConf
@@ -52,126 +49,108 @@ config = OmegaConf.create({
 })
 set_parallel(config)
 
-def square(x):
-    return x * x
+def square(x): return x * x
 
 results = parallel_map(square, range(10))
 print(results)
-````
+```
 
 ---
 
-### 2. Using a WorkerPlugin (for model initialization)
+### 2. Injecting Per-Worker Environment with `setup_fn`
 
 ```python
-from dask.distributed import WorkerPlugin, get_worker
+from espnet3.parallel import get_client, wrap_func_with_worker_env
 
-class MyPlugin(WorkerPlugin):
-    def setup(self, worker):
-        worker.model = load_model()  # custom logic
+def setup_fn():
+    model = load_model()
+    dataset = load_dataset()
+    return {"model": model, "dataset": dataset}
 
-def infer(x):
-    worker = get_worker()
-    return worker.model.predict(x)
+def infer(idx, model, dataset):
+    sample = dataset[idx]
+    return model.predict(sample)
 
-with get_client(plugin=MyPlugin()) as client:
-    results = client.map(infer, data)
+with get_client(setup_fn=setup_fn) as client:
+    results = client.map(inference_fn, inputs)
+
 ```
 
 ---
 
-### 3. Scattering Shared Data
+### 3. Using `parallel_for` for Streaming
 
 ```python
-with get_client() as client:
-    shared_data = client.scatter(large_dict)
-    results = client.map(lambda x: process(x, shared_data), inputs)
+from espnet3.parallel import parallel_for
+
+def compute(x):
+    return x * 2
+
+for result in parallel_for(compute, range(100)):
+    print("Got result:", result)
+
+# You can also run with setup function
+with get_client(setup_fn=setup_fn) as client:
+    for result in parallel_for(compute, range(100)):
+        print("Got result:", result)
+
 ```
 
-> ❗️Note: `scatter()` does not replace `WorkerPlugin`. Use `scatter` for data; use `WorkerPlugin` for one-time per-worker setup.
-
----
-
-## 🧠 In ESPnet3 Recipes
-
-This module is widely used in ESPnet3 recipes:
-
-* **Inference (`InferenceRunner`)**
-
-  * Uses `parallel_map()` and `WorkerPlugin` to run inference across datasets
-* **Statistics Collection (`collect_stats.py`)**
-
-  * Uses `parallel_map()` and `scatter()` to compute feature statistics in parallel
-* **Evaluate Scripts**
-
-  * Load `parallel` settings from YAML like below:
-
-```yaml
-parallel:
-  env: slurm
-  n_workers: 16
-  options:
-    queue: cpu
-    memory: 8GB
-    cores: 1
-    job_extra_directives:
-      - "--cpus-per-task=4"
-      - "--output=parallel_log/%j.log"
-```
+> ⚠ `parallel_for()` yields results as they complete. Good for large, slow tasks.
 
 ---
 
 ## ⚙ Supported Environments
 
-| `env` value                 | Backend                                |
-| --------------------------- | -------------------------------------- |
-| `local`                     | CPU using `LocalCluster`               |
-| `local_gpu`                 | GPU using `dask_cuda.LocalCUDACluster` |
-| `slurm`, `pbs`, `lsf`, etc. | HPC via `dask_jobqueue`                |
-| `ssh`                       | Multi-node SSH-based cluster           |
-| `kube`                      | Kubernetes with `dask_kubernetes`      |
+| `env` value          | Backend                            |
+| -------------------- | ---------------------------------- |
+| `local`              | CPU (Dask `LocalCluster`)          |
+| `local_gpu`          | GPU (`dask_cuda.LocalCUDACluster`) |
+| `slurm`, `pbs`, etc. | HPC via `dask_jobqueue`            |
+| `ssh`                | SSH multi-node cluster             |
+| `kube`               | Kubernetes (`dask_kubernetes`)     |
 
-> ⚠️ You must install the corresponding package (e.g., `dask_cuda`, `dask_jobqueue`) depending on the environment.
-
----
-
-## 🛠 Tips and Best Practices
-
-* Use `WorkerPlugin` if you need to load models or configure GPUs per worker.
-* Use `scatter()` for broadcasting large shared objects (e.g., tokenizers, config).
-* Avoid mixing `client.submit()` and `client.map()` unless you know the implications on task scheduling.
-* Use `with get_client() as client` to ensure clean cluster shutdown.
+> 🔧 You must install the relevant backend packages (e.g., `dask_cuda`, `dask_kubernetes`, `dask_jobqueue`) as needed.
 
 ---
 
-## 🧪 Advanced Use Case: Custom Dask Setup
+## 🛠 Best Practices
 
-You can instantiate and manage Dask clients directly with your own configuration:
+* ✅ Use `setup_fn()` to load large models or configs once per worker.
+  * It is not recommended to send data as argument.
+* 🧹 Use `with get_client():` to ensure clean client shutdown.
+
+---
+
+## 🔬 Advanced: Manual Setup
 
 ```python
-from espnet3.parallel import make_client
+from espnet3.parallel import set_parallel
+from omegaconf import OmegaConf
 
 config = OmegaConf.create({
-    "env": "ssh",
+    "env": "slurm",
     "n_workers": 4,
     "options": {
-        "hosts": ["worker1", "worker2"],
-        "connect_options": {"username": "user"},
-        ...
+        "queue": "gpu",
+        "cores": 1,
+        "processes": 1,
+        "memory": 16GB,
+        "walltime": "30:00", # Wait time to run setup_fn
+        "job_extra_directives": {
+          "--gres=gpu:1",
+          "--ntasks-per-node=1",
+          "--cpus-per-task=4",
+          "--output=logs/%j-%x.log",
+        }
     }
 })
 
-client = make_client(config)
+set_parallel(config)
 ```
 
 ---
 
-## 🧾 License & Attribution
+## 🧾 License
 
-This module wraps [Dask Distributed](https://distributed.dask.org), and is integrated into ESPnet3 under the same Apache 2.0 license.
-
----
-
-## 🔚 Summary
-
-The `espnet3.parallel` module provides a lightweight, highly flexible abstraction layer over Dask, enabling scalable parallelism in research and production code. It’s designed to work both inside ESPnet and as a general-purpose parallel utility.
+ESPnet3 uses [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0). This module builds on [Dask Distributed](https://distributed.dask.org) and [Dask Jobqueue](https://jobqueue.dask.org/).
