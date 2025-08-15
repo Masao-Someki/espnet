@@ -155,6 +155,7 @@ doc = [
 ]
 
 all = [
+  "espnet[espnet-3]",
   "espnet[task-asr]",
   "espnet[task-tts]",
   "espnet[task-enh]",
