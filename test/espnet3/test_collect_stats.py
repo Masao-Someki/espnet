@@ -232,7 +232,7 @@ def _load_npz_counts(dirpath: Path, feat_key: str):
 # ------------
 # The tests
 # ------------
-@pytest.mark.execution_timeout(10)
+@pytest.mark.timeout(10)
 def test_collect_stats_local_basic(tmp_path: Path):
     # Verify that local (non-parallel) path aggregates counts/sums correctly
     # and writes expected files.
@@ -277,7 +277,7 @@ def test_collect_stats_local_basic(tmp_path: Path):
     assert (mode_dir / "stats_keys").exists(), "stats_keys not written"
 
 
-@pytest.mark.execution_timeout(30)
+@pytest.mark.timeout(30)
 @pytest.mark.parametrize("n_workers", [1, 2])
 def test_collect_stats_parallel_basic(tmp_path: Path, n_workers):
     # Verify that parallel path (setup_fn + parallel_for) works and matches
@@ -327,7 +327,7 @@ def test_collect_stats_parallel_basic(tmp_path: Path, n_workers):
     ).exists(), "mel.scp not written (parallel)"
 
 
-@pytest.mark.execution_timeout(30)
+@pytest.mark.timeout(30)
 def test_collect_stats_multiple_iterator(tmp_path: Path):
     # Verify multiple-iterator (sharded) path aggregates counts and writes shapes
     # with shard suffixes. Feature saving is disabled by spec.
@@ -393,7 +393,7 @@ def test_collect_stats_multiple_iterator(tmp_path: Path):
 # ----------------------------
 
 
-@pytest.mark.execution_timeout(30)
+@pytest.mark.timeout(30)
 @pytest.mark.parametrize("use_parallel", [False, True])
 def test_collect_stats_entrypoint_train(tmp_path: Path, use_parallel):
     # Smoke-test the public entrypoint `collect_stats` for the 'train' split,
@@ -442,7 +442,7 @@ def test_collect_stats_entrypoint_train(tmp_path: Path, use_parallel):
     assert int(cnt) == total_count, "Total frame count mismatch in entrypoint(train)"
 
 
-@pytest.mark.execution_timeout(30)
+@pytest.mark.timeout(30)
 @pytest.mark.parametrize("use_parallel", [False, True])
 def test_collect_stats_entrypoint_valid(tmp_path: Path, use_parallel):
     # Same as above but for 'valid' split, to ensure both branches work.
@@ -473,7 +473,7 @@ def test_collect_stats_entrypoint_valid(tmp_path: Path, use_parallel):
         assert (mode_dir / "collect_feats" / f"{k}.scp").exists()
 
 
-@pytest.mark.execution_timeout(30)
+@pytest.mark.timeout(30)
 def test_collect_stats_entrypoint_multiple_iterator(tmp_path: Path):
     # Entrypoint with multiple_iterator=True should dispatch to the sharded path.
     # It must save stats and shard-suffixed shapes; features are not saved by spec.
