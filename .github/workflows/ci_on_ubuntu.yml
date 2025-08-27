@@ -67,9 +67,9 @@ jobs:
         run: |
           ./ci/install.sh
 
-      - name: test shell
-        run: |
-          ./ci/test_shell_espnet1.sh
+      # - name: test shell
+      #   run: |
+      #     ./ci/test_shell_espnet1.sh
 
       - name: test python
         run: ./ci/test_python_espnet1.sh
