@@ -40,12 +40,12 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        pytorch-version: [2.3.1]
+        pytorch-version: [2.6.0]
         chainer-version: [6.0.0]
         use-conda: [false]
     steps:
       - uses: actions/checkout@master
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/pyproject.toml') }}-${{ hashFiles('**/Makefile') }}
@@ -73,7 +73,7 @@ jobs:
 
       - name: test python
         run: ./ci/test_python_espnet1.sh
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v5
         with:
           flags: test_python_espnet1
       - name: coverage erase
@@ -88,7 +88,7 @@ jobs:
 
       - name: test integration
         run: ./ci/test_integration_espnet1.sh
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v5
         with:
           flags: test_integration_espnet1
 
@@ -183,7 +183,7 @@ jobs:
         use-conda: [false]
     steps:
       - uses: actions/checkout@master
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ matrix.pytorch-version }}-${{ hashFiles('**/setup.py') }}-${{ hashFiles('**/Makefile') }}
@@ -215,7 +215,7 @@ jobs:
 
       - name: test python
         run: ./ci/test_python_espnet3.sh
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v5
         with:
           flags: test_python_espnet3
       - name: coverage erase
