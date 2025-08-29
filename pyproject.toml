@@ -66,8 +66,6 @@ include = ["espnet*"]
 [tool.setuptools.package-data]
 espnet = ["version.txt"]
 
-[tool.pytest.ini_options]
-timeout = 10
 
 [project.optional-dependencies]
 espnet-3 = [

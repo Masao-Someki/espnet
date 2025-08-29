@@ -12,7 +12,7 @@ exclude="egs2/TEMPLATE/asr1/utils,egs2/TEMPLATE/asr1/steps,egs2/TEMPLATE/tts1/si
 # pycodestyle
 # pycodestyle --exclude "${exclude}" --show-source --show-pep8
 
-pytest -q --ignore test/espnet2 --ignore test/espnetez test
+pytest -q --ignore test/espnet2 --ignore test/espnetez --execution-timeout 10.0 test
 
 echo "=== report ==="
 coverage report
