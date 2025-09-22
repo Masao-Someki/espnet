@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 from hydra.utils import instantiate
@@ -98,11 +99,6 @@ class MetricEvalSpec:
     test_name: str
 
 
-@dataclass
-class ScoreTask:
-    name: str = "score"
-
-
 class ScoreRunner(BaseRunner):
     """Evaluate metrics over decode directories."""
 
@@ -157,19 +153,19 @@ class ScoreRunner(BaseRunner):
 
         return specs
 
-    def iter_tasks(self) -> Iterable[ScoreTask]:
-        return [ScoreTask()]
+    def iter_tasks(self) -> Iterable[SimpleNamespace]:
+        return [SimpleNamespace(name="score")]
 
-    def iter_task_items(self, task: ScoreTask) -> Iterable[MetricEvalSpec]:
+    def iter_task_items(self, task: SimpleNamespace) -> Iterable[MetricEvalSpec]:
         return self._metric_specs
 
-    def task_description(self, task: ScoreTask) -> str:
+    def task_description(self, task: SimpleNamespace) -> str:
         return "scoring"
 
-    def on_task_start(self, task: ScoreTask) -> None:
+    def on_task_start(self, task: SimpleNamespace) -> None:
         self._results = {}
 
-    def process_item(self, task: ScoreTask, spec: MetricEvalSpec) -> Any:
+    def process_item(self, task: SimpleNamespace, spec: MetricEvalSpec) -> Any:
         metric = instantiate(spec.metric_cfg)
         if not isinstance(metric, AbsMetrics):
             raise TypeError(f"{type(metric)} is not a valid AbsMetrics instance")
@@ -184,11 +180,11 @@ class ScoreRunner(BaseRunner):
         metric_name = get_class_path(metric)
         return metric_name, spec.test_name, metric_result
 
-    def handle_result(self, task: ScoreTask, item: MetricEvalSpec, result: Any) -> None:
+    def handle_result(self, task: SimpleNamespace, item: MetricEvalSpec, result: Any) -> None:
         metric_name, test_name, metric_result = result
         self._results.setdefault(metric_name, {})[test_name] = metric_result
 
-    def on_task_end(self, task: ScoreTask) -> None:
+    def on_task_end(self, task: SimpleNamespace) -> None:
         out_path = self.decode_dir / "scores.json"
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(self._results, f, indent=2, ensure_ascii=False)

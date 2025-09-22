@@ -1,7 +1,7 @@
 import logging
 from abc import abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, Iterable, Iterator, Union
 
 import psutil
@@ -10,39 +10,32 @@ import torch
 from .base import BaseRunner
 
 
-@dataclass
-class InferenceTask:
-    dataset_key: str
-    output_dir: Path
-    num_items: int
-
-
 class InferenceRunner(BaseRunner):
     """Runner for test-time inference with optional parallel execution."""
 
-    def iter_tasks(self, decode_dir: Union[str, Path]) -> Iterable[InferenceTask]:
+    def iter_tasks(self, decode_dir: Union[str, Path]) -> Iterable[SimpleNamespace]:
         if self.dataset_config is None or not hasattr(self.dataset_config, "test"):
             raise RuntimeError("dataset_config with test datasets is required")
 
         decode_dir = Path(decode_dir)
         for test_conf in self.dataset_config.test:
             dataset = self._initialize_dataset(test_conf.name)
-            yield InferenceTask(
+            yield SimpleNamespace(
                 dataset_key=test_conf.name,
                 output_dir=decode_dir / test_conf.name,
                 num_items=len(dataset),
             )
 
-    def iter_task_items(self, task: InferenceTask) -> Iterable[int]:
+    def iter_task_items(self, task: SimpleNamespace) -> Iterable[int]:
         return range(task.num_items)
 
-    def task_description(self, task: InferenceTask) -> str:
+    def task_description(self, task: SimpleNamespace) -> str:
         return f"inference:{task.dataset_key}"
 
-    def on_task_start(self, task: InferenceTask) -> None:
+    def on_task_start(self, task: SimpleNamespace) -> None:
         task.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def setup_worker_env(self, task: InferenceTask) -> Dict[str, Any]:
+    def setup_worker_env(self, task: SimpleNamespace) -> Dict[str, Any]:
         device = self._resolve_device(self.device)
         model = self.initialize_model(device)
         dataset = self.initialize_dataset(task.dataset_key)
@@ -52,7 +45,7 @@ class InferenceRunner(BaseRunner):
             "proc": psutil.Process(),
         }
 
-    def setup_local_env(self, task: InferenceTask) -> Dict[str, Any]:
+    def setup_local_env(self, task: SimpleNamespace) -> Dict[str, Any]:
         model = self._initialize_model(self.device)
         dataset = self._initialize_dataset(task.dataset_key)
         return {
@@ -63,7 +56,7 @@ class InferenceRunner(BaseRunner):
 
     def process_item(
         self,
-        task: InferenceTask,
+        task: SimpleNamespace,
         index: int,
         *,
         model: Any,
@@ -84,14 +77,14 @@ class InferenceRunner(BaseRunner):
         )
         return uid, result
 
-    def handle_result(self, task: InferenceTask, item: int, result: Any) -> None:
+    def handle_result(self, task: SimpleNamespace, item: int, result: Any) -> None:
         uid, payload = result
         if isinstance(payload, dict) and "error" in payload:
             logging.error(f"[{task.dataset_key}:{uid}] Error: {payload['error']}")
         else:
             self.write(uid, payload, task.output_dir)
 
-    def handle_error(self, task: InferenceTask, item: int, exc: Exception) -> None:
+    def handle_error(self, task: SimpleNamespace, item: int, exc: Exception) -> None:
         logging.error(f"[{task.dataset_key}:{item}] Error: {exc}")
 
     # ------------------------------------------------------------------
@@ -103,7 +96,11 @@ class InferenceRunner(BaseRunner):
         if async_decode:
             self.async_mode = True
         dataset = self._initialize_dataset(dataset_key)
-        task = InferenceTask(dataset_key, Path(output_dir), len(dataset))
+        task = SimpleNamespace(
+            dataset_key=dataset_key,
+            output_dir=Path(output_dir),
+            num_items=len(dataset),
+        )
         self.run_task(task)
         self.async_mode = False
 
