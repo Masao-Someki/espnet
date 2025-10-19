@@ -15,7 +15,10 @@ exclude+="test_utils/bats-assert,espnet2,espnet,test_utils/utils3"
 # pycodestyle
 pycodestyle --exclude "${exclude}" --show-source --show-pep8
 
-pytest -q test/espnet3/
+# It will set default timeout to 10.0 seconds for each test.
+# If the test is marked with @pytest.mark.execution_timeout,
+# the value in the mark will be used as the timeout value.
+pytest -q --execution-timeout 10.0 --timeouts-order moi test/espnet3/
 
 echo "=== report ==="
 coverage report

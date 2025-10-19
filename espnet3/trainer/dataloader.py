@@ -4,7 +4,9 @@ from typing import Union
 import numpy as np
 import torch
 from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
+
+from espnet2.samplers.build_batch_sampler import build_batch_sampler
 
 
 def update_shard(config: Union[dict, list], shard_idx: int) -> Union[dict, list]:
@@ -147,7 +149,8 @@ class DataLoaderBuilder:
         if hasattr(config, "multiple_iterator") and config.multiple_iterator:
             return self._build_multiple_iterator(config)
         if config.iter_factory is not None:
-            return self._build_iter_factory(config.iter_factory)
+            factory_config = OmegaConf.to_container(config.iter_factory, resolve=True)
+            return self._build_iter_factory(factory_config)
         return self._build_standard_dataloader(config)
 
     def _build_standard_dataloader(self, dataloader_config, dataset=None):
@@ -181,7 +184,8 @@ class DataLoaderBuilder:
     def _build_iter_factory(self, factory_config, dataset=None):
         if dataset is None:
             dataset = self.dataset
-        batches = instantiate(factory_config.pop("batches"))
+
+        batches = build_batch_sampler(**factory_config["batches"])
 
         if self.num_device > 1:
             batches = list(batches)
@@ -215,11 +219,9 @@ class DataLoaderBuilder:
         shard_idx = rng.choice(num_shards) if shuffle else self.epoch % num_shards
 
         dataset = self.dataset.shard(shard_idx)
-        if factory_config.iter_factory is not None:
+
+        if factory_config["iter_factory"] is not None:
             # update shape files
-            iter_factory_config = OmegaConf.to_container(
-                factory_config.iter_factory, resolve=True
-            )
             iter_factory_config = update_shard(iter_factory_config, shard_idx)
             return self._build_iter_factory(iter_factory_config, dataset)
         else:
