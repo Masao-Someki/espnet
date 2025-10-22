@@ -3,6 +3,30 @@ num_device: 1
 seed: 2024
 task:
 
+logging:
+  level: INFO
+  path:
+  stdout: true
+  overwrite: true
+  log_all_env_vars: false
+  env_keys:
+    - CUDA_VISIBLE_DEVICES
+    - SLURM_JOB_ID
+    - SLURM_PROCID
+    - SLURM_LOCALID
+    - SLURM_NODEID
+    - WORLD_SIZE
+    - RANK
+    - LOCAL_RANK
+    - NODE_RANK
+    - MASTER_ADDR
+    - MASTER_PORT
+    - OMP_NUM_THREADS
+    - MKL_NUM_THREADS
+    - PYTHONPATH
+    - PL_GLOBAL_SEED
+    - PL_TORCH_DISTRIBUTED_BACKEND
+
 parallel:
   env: local
   n_workers: 1

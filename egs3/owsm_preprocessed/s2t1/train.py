@@ -1,10 +1,11 @@
 import argparse
+import logging
+from pathlib import Path
 
 import lightning as L
 import torch
 from hydra.utils import instantiate
 from tqdm import tqdm
-from pathlib import Path
 
 from tokenizers import Tokenizer
 from tokenizers.models import BPE
@@ -13,10 +14,19 @@ from tokenizers.trainers import BpeTrainer
 
 
 from espnet3 import get_espnet_model, save_espnet_config
-from espnet3.utils.config import load_config_with_defaults
 from espnet3.preprocess import train_sentencepiece
 from espnet3.trainer import ESPnetEZLightningTrainer, LitESPnetModel
 from espnet3.parallel import get_client, set_parallel
+from espnet3.utils.config import load_config_with_defaults
+from espnet3.utils.logging import (
+    log_configuration,
+    log_dataset_snapshot,
+    log_environment_snapshot,
+    log_experiment_directories,
+    log_model_summary,
+    log_trainer_summary,
+    setup_logging_from_config,
+)
 
 
 LANGUAGE_TOKENS = [
@@ -98,9 +108,37 @@ def main():
     # Load config
     config = load_config_with_defaults(args.config)
 
+    _, logging_options = setup_logging_from_config(getattr(config, "logging", None))
+    logger = logging.getLogger("espnet3.train")
+
+    if logging_options.get("path"):
+        logger.info("Logging to file: %s", logging_options["path"])
+    else:
+        logger.info("Logging to stdout (no log file path configured)")
+
+    logger.info("Configuration file: %s", Path(args.config).resolve())
+    logger.info("Script arguments: %s", vars(args))
+
+    log_environment_snapshot(
+        logger,
+        env_keys=logging_options.get("env_keys"),
+        log_all_env_vars=logging_options.get("log_all_env_vars", False),
+    )
+
+    log_experiment_directories(
+        logger,
+        expdir=getattr(config, "expdir", None),
+        statsdir=getattr(config, "statsdir", None),
+    )
+
+    log_configuration(logger, config)
+    if getattr(config, "parallel", None) is not None:
+        log_configuration(logger, config.parallel, header="Parallel Configuration")
+
     if args.train_tokenizer:
-        print("==> Training tokenizer...")
+        logger.info("Training tokenizer before starting model training.")
         train_tokenizer(config)
+        logger.info("Tokenizer training finished.")
 
     # Set seed
     if getattr(config, "seed", None) is not None:
@@ -111,10 +149,14 @@ def main():
     normalize = None
     normalize_conf = None
     if args.collect_stats:
+        logger.info("Collecting normalization statistics before training.")
         if "normalize" in config.model:
             normalize = config.model.pop("normalize")
+            logger.info("Temporarily removed 'normalize' module for stats collection.")
         if "normalize_conf" in config.model:
             normalize_conf = config.model.pop("normalize_conf")
+            logger.info(
+                "Temporarily removed 'normalize_conf' for stats collection.")
 
     task = getattr(config, "task", None)
     model = get_espnet_model(task, config.model) if task else instantiate(config.model)
@@ -122,6 +164,13 @@ def main():
 
     # Float32 precision
     torch.set_float32_matmul_precision("high")
+
+    log_model_summary(logger, lit_model)
+    log_dataset_snapshot(
+        logger,
+        train_dataset=lit_model.train_dataset,
+        valid_dataset=lit_model.valid_dataset,
+    )
 
     # Setup trainer
     trainer = ESPnetEZLightningTrainer(
@@ -131,19 +180,31 @@ def main():
         best_model_criterion=config.best_model_criterion,
     )
 
+    log_trainer_summary(logger, trainer)
+
     if args.collect_stats:
-        print("==> Running collect_stats...", flush=True)
+        logger.info("Running collect_stats using current trainer configuration.")
         trainer.collect_stats()
+        logger.info("collect_stats finished.")
 
         if normalize is not None:
             config.model["normalize"] = normalize
+            logger.info("Restored 'normalize' module after stats collection.")
         if normalize_conf is not None:
             config.model["normalize_conf"] = normalize_conf
+            logger.info("Restored 'normalize_conf' after stats collection.")
 
         model = (
             get_espnet_model(task, config.model) if task else instantiate(config.model)
         )
         lit_model = LitESPnetModel(model, config)
+
+        log_model_summary(logger, lit_model)
+        log_dataset_snapshot(
+            logger,
+            train_dataset=lit_model.train_dataset,
+            valid_dataset=lit_model.valid_dataset,
+        )
 
         trainer = ESPnetEZLightningTrainer(
             model=lit_model,
@@ -152,11 +213,18 @@ def main():
             best_model_criterion=config.best_model_criterion,
         )
 
+        log_trainer_summary(logger, trainer)
+
     # save espnet-like config for inference
     if task:
         save_espnet_config(task, config, config.expdir)
+        logger.info("Saved ESPnet-compatible config to %s", Path(config.expdir) / "config.yaml")
 
     fit_params = {} if not hasattr(config, "fit") else config.fit
+    if fit_params:
+        logger.info("Starting training with fit parameters: %s", dict(fit_params))
+    else:
+        logger.info("Starting training with default fit parameters.")
     trainer.fit(**fit_params)
 
 

@@ -1,19 +1,24 @@
 import argparse
+import logging
 import time
-import os
 from pathlib import Path
 
 import torch.nn as nn
-from omegaconf import OmegaConf
 from hydra.utils import instantiate
 
 # from espnet2.bin.asr_inference_ctc import Speech2Text
 from espnet2.bin.s2t_inference import Speech2Text
 from espnet3.inference.inference_runner import InferenceRunner
-from espnet3.utils.config import load_config_with_defaults
 from espnet2.text.sentencepiece_tokenizer import SentencepiecesTokenizer
 from espnet2.text.token_id_converter import TokenIDConverter
 from espnet3.inference.score_runner import ScoreRunner
+from espnet3.utils.config import load_config_with_defaults
+from espnet3.utils.logging import (
+    log_configuration,
+    log_environment_snapshot,
+    log_experiment_directories,
+    setup_logging_from_config,
+)
 
 
 
@@ -53,14 +58,13 @@ class ASRInferenceRunner(InferenceRunner, nn.Module):
         return output
 
 
-def run_single_sample_inference(config_path):
-    config = load_config_with_defaults(config_path)
-
+def run_single_sample_inference(config, logger):
     runner = ASRInferenceRunner(
         model_config=config.model,
         dataset_config=config.dataset,
     )
 
+    logger.info("Running debug inference on the first sample of each test set.")
     for test_sets in config.dataset.test:
         test_key = test_sets.name
         dataset = runner.initialize_dataset(test_key)
@@ -68,6 +72,7 @@ def run_single_sample_inference(config_path):
 
         result = runner.run_on_example(test_key, sample)
         for key, val in result.items():
+            logger.info("%s - %s: %s", test_key, key, val["value"])
             print(f"{key}: {val['value']}")
 
 
@@ -87,9 +92,45 @@ def main():
 
     args = parser.parse_args()
 
+    base_config = load_config_with_defaults(args.config)
+
+    _, logging_options = setup_logging_from_config(getattr(base_config, "logging", None))
+    logger = logging.getLogger("espnet3.evaluate")
+
+    if logging_options.get("path"):
+        logger.info("Logging to file: %s", logging_options["path"])
+    else:
+        logger.info("Logging to stdout (no log file path configured)")
+
+    logger.info("Configuration file: %s", Path(args.config).resolve())
+    logger.info("Script arguments: %s", vars(args))
+
+    log_environment_snapshot(
+        logger,
+        env_keys=logging_options.get("env_keys"),
+        log_all_env_vars=logging_options.get("log_all_env_vars", False),
+    )
+
+    log_experiment_directories(
+        logger,
+        expdir=getattr(base_config, "expdir", None),
+        decode_dir=getattr(base_config, "decode_dir", None),
+    )
+
+    log_configuration(logger, base_config)
+    if getattr(base_config, "parallel", None) is not None:
+        log_configuration(logger, base_config.parallel, header="Parallel Configuration")
+
+    if getattr(base_config, "dataset", None) and getattr(base_config.dataset, "test", None):
+        test_names = [ds_conf.name for ds_conf in base_config.dataset.test]
+        logger.info("Configured test sets: %s", test_names)
+
+    if getattr(base_config, "metrics", None):
+        logger.info("Configured metrics: %s", [m._target_ for m in base_config.metrics])
+
     if args.stage in ["decode", "all"]:
         if args.debug_sample:
-            run_single_sample_inference(args.config)
+            run_single_sample_inference(base_config, logger)
         else:
             config = load_config_with_defaults(args.config)
 
@@ -100,8 +141,12 @@ def main():
             )
             test_keys = [ds_conf.name for ds_conf in config.dataset.test]
 
+            logger.info("Starting batched decoding for test sets: %s", test_keys)
+
             for test_key in test_keys:
-                runner.run_on_dataset(test_key, output_dir=f"{config.decode_dir}/{test_key}")
+                output_dir = Path(config.decode_dir) / test_key
+                logger.info("Decoding dataset '%s' into %s", test_key, output_dir)
+                runner.run_on_dataset(test_key, output_dir=str(output_dir))
 
     if args.stage in ["score", "all"]:
         config = load_config_with_defaults(args.config)
@@ -109,13 +154,18 @@ def main():
         results = runner.run()
 
         # Print results summary
+        logger.info("===== Score Summary =====")
         print("\n===== Score Summary =====")
         for metric_name, test_results in results.items():
+            logger.info("Metric: %s", metric_name)
             print(f"Metric: {metric_name}")
             for test_name, scores in test_results.items():
+                logger.info("  [%s]", test_name)
                 print(f"  [{test_name}]")
                 for k, v in scores.items():
+                    logger.info("    %s: %s", k, v)
                     print(f"    {k}: {v}")
+        logger.info("=========================")
         print("=========================")
 
 
