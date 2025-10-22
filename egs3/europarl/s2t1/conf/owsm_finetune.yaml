@@ -10,6 +10,11 @@ defaults:
   - dataset.yaml
   - conf/default.yaml
 
+logging:
+  path: ${expdir}/logs/train.log
+  stdout: true
+  overwrite: true
+
 parallel:
   env: slurm
   n_workers: 16

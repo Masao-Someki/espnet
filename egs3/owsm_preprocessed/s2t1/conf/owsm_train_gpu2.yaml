@@ -2,6 +2,9 @@
 defaults:
   - train.yaml
 
+logging:
+  path: ${expdir}/logs/train.log
+
 num_nodes: 1
 num_device: 2
 expdir: ${recipedir}/exp/node_${num_nodes}_gpu_${num_device}

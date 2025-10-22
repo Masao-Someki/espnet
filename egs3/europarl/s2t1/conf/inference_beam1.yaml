@@ -2,6 +2,11 @@ recipedir: .
 expdir: exp/train
 decode_dir: ${expdir}/decode
 
+logging:
+  path: ${expdir}/logs/evaluate.log
+  stdout: true
+  overwrite: true
+
 model:
   _target_: espnet2.bin.asr_inference.Speech2Text
   asr_train_config: ${expdir}/config.yaml
