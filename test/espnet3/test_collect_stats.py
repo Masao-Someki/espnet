@@ -9,14 +9,22 @@ from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
 # Import the functions under test (adjust import path if your file/module path differs)
-from espnet3.collect_stats import collect_stats
-from espnet3.utils.collect_stats_local import collect_stats_local
-from espnet3.utils.collect_stats_parallel import (
+from espnet3.collect_stats import (
+    _collect_stats_common,
+    collect_stats,
     collect_stats_multiple_iterator,
-    collect_stats_parallel,
 )
+from espnet3.parallel import parallel as parallel_state
+from espnet3.parallel.parallel import set_parallel
 
 mp.set_start_method("fork", force=True)
+
+
+@pytest.fixture(autouse=True)
+def clear_parallel_config():
+    parallel_state.parallel_config = None
+    yield
+    parallel_state.parallel_config = None
 
 # ===============================================================
 # Test Case Summary for Collect Stats
@@ -138,8 +146,34 @@ class DummyModel:
         return self
 
     @torch.no_grad()
-    def collect_feats(self, *, x: torch.Tensor, lengths: torch.Tensor):
+    def collect_stats(self, *, x: torch.Tensor, lengths: torch.Tensor):
         # Return the batch as "mel", scaled to let us test aggregation
+        mel = (x * self.scale).to(self.device)
+        mel_lengths = lengths.to(self.device)
+        return {"mel": mel, "mel_lengths": mel_lengths}
+
+    @torch.no_grad()
+    def collect_feats(self, *, x: torch.Tensor, lengths: torch.Tensor):
+        # Kept for backward compatibility in tests that still reference it.
+        return self.collect_stats(x=x, lengths=lengths)
+
+
+class LegacyModel:
+    """Legacy model that only implements collect_feats."""
+
+    def __init__(self, scale: float = 1.0):
+        self.scale = scale
+        self.device = torch.device("cpu")
+
+    def to(self, device):
+        self.device = device
+        return self
+
+    def eval(self):
+        return self
+
+    @torch.no_grad()
+    def collect_feats(self, *, x: torch.Tensor, lengths: torch.Tensor):
         mel = (x * self.scale).to(self.device)
         mel_lengths = lengths.to(self.device)
         return {"mel": mel, "mel_lengths": mel_lengths}
@@ -154,6 +188,12 @@ def make_model_cfg(scale: float = 1.0):
     # Use a direct class reference to avoid import path brittleness
     return OmegaConf.create(
         {"_target_": "test.espnet3.test_collect_stats.DummyModel", "scale": scale}
+    )
+
+
+def make_legacy_model_cfg(scale: float = 1.0):
+    return OmegaConf.create(
+        {"_target_": "test.espnet3.test_collect_stats.LegacyModel", "scale": scale}
     )
 
 
@@ -244,7 +284,7 @@ def test_collect_stats_local_basic(tmp_path: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Run "train" split locally
-    sum_dict, sq_dict, count_dict = collect_stats_local(
+    sum_dict, sq_dict, count_dict = _collect_stats_common(
         model_config=model_cfg,
         dataset_config=ds_cfg,
         dataloader_config=dl_cfg,
@@ -277,6 +317,27 @@ def test_collect_stats_local_basic(tmp_path: Path):
     assert (mode_dir / "stats_keys").exists(), "stats_keys not written"
 
 
+def test_collect_stats_requires_collect_stats_method(tmp_path: Path):
+    model_cfg = make_legacy_model_cfg(scale=1.0)
+    ds_cfg = make_dataset_cfg(n_train=2, n_valid=0, base_len=2, dim=2)
+    dl_cfg = make_dataloader_cfg(use_custom_collate=True)
+
+    out_dir = tmp_path / "out_missing"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(AttributeError, match="collect_stats"):
+        _collect_stats_common(
+            model_config=model_cfg,
+            dataset_config=ds_cfg,
+            dataloader_config=dl_cfg,
+            mode="train",
+            output_dir=out_dir,
+            task=None,
+            write_collected_feats=False,
+            batch_size=2,
+        )
+
+
 @pytest.mark.execution_timeout(30)
 @pytest.mark.parametrize("n_workers", [1, 2])
 def test_collect_stats_parallel_basic(tmp_path: Path, n_workers):
@@ -291,7 +352,9 @@ def test_collect_stats_parallel_basic(tmp_path: Path, n_workers):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Run parallel on "train"
-    sum_dict, sq_dict, count_dict = collect_stats_parallel(
+    set_parallel(par_cfg)
+
+    sum_dict, sq_dict, count_dict = _collect_stats_common(
         model_config=model_cfg,
         dataset_config=ds_cfg,
         dataloader_config=dl_cfg,
@@ -300,7 +363,6 @@ def test_collect_stats_parallel_basic(tmp_path: Path, n_workers):
         task=None,
         write_collected_feats=True,
         batch_size=2,
-        parallel_config=par_cfg,
     )
 
     # Persist like collect_stats does
