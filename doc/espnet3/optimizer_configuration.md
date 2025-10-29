@@ -1,57 +1,76 @@
-## ESPnet3: Optimizer and Scheduler Configuration
+## ESPnet3: Optimiser and Scheduler Configuration
 
-This guide explains how to configure **optimizers and schedulers** in espnet3.
+ESPnet3 wraps PyTorch Lightning so that optimisers and schedulers can be defined
+purely from the Hydra configuration.  Two modes are supported by
+`espnet3.trainer.model.LitESPnetModel.configure_optimizers`:
 
-By default, PyTorch Lightning does not support multiple optimizers and schedulers directly.
-To address this, ESPnet3 adopts the code originally developed at [this thread](https://github.com/Lightning-AI/pytorch-lightning/issues/3346#issuecomment-1478556073) to enable this functionality.
+1. a single optimiser/scheduler pair (`optim` + `scheduler`)
+2. multiple optimiser/scheduler pairs (`optims` + `schedulers`)
+
+The sections below describe both.
 
 ---
 
-### 1. Single Optimizer Configuration
+### 1. Single optimiser
 
-To configure a single optimizer and scheduler, your config might look like this:
+Use `optim` and `scheduler` when the entire model shares one optimiser.  The
+entries are passed directly to `hydra.utils.instantiate`, so any optimiser or
+scheduler from PyTorch (or a custom class) is supported.
 
 ```yaml
-optimizer:
-  _target_: torch.optim.Adam
+optim:
+  _target_: torch.optim.AdamW
   lr: 0.001
+  weight_decay: 1.0e-2
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.StepLR
-  step_size: 10
-  gamma: 0.1
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: 100000
 ```
+
+No additional wiring is necessary—ESPnet3 instantiates both objects, attaches
+the scheduler to the optimiser, and returns them to Lightning.
 
 ---
 
-### 2. Multiple Optimizers and Schedulers
+### 2. Multiple optimisers
 
-To define **multiple** optimizers or schedulers, change the config keys from singular to plural (`optimizers`, `schedulers`). For example:
+When different parts of the model need their own optimiser, switch to `optims`
+and `schedulers`.  Each entry contains a nested `optim` block and a `params`
+string that selects parameters whose names contain the substring.
 
 ```yaml
-optimizers:
-  - _target_: torch.optim.Adam
-    lr: 0.0005
-    params: ["encoder"]
-
-  - _target_: torch.optim.Adam
-    lr: 0.001
-    params: ["decoder"]
+optims:
+  - optim:
+      _target_: torch.optim.Adam
+      lr: 0.0005
+    params: encoder
+  - optim:
+      _target_: torch.optim.Adam
+      lr: 0.001
+    params: decoder
 
 schedulers:
-  - _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 5
-    gamma: 0.5
-    optimizer_index: 0
-
-  - _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 10
-    gamma: 0.1
-    optimizer_index: 1
+  - scheduler:
+      _target_: torch.optim.lr_scheduler.StepLR
+      step_size: 5
+      gamma: 0.5
+  - scheduler:
+      _target_: torch.optim.lr_scheduler.StepLR
+      step_size: 10
+      gamma: 0.1
 ```
 
-Each optimizer can be assigned to a subset of model parameters using the `params` key (e.g., "encoder" or "decoder").
-Be sure to have the `params` configuration to each optimziers, otherwise we cannot detect which parameters should we assign to which optimizers.
+Important rules enforced by `configure_optimizers`:
 
-Schedulers use optimizer index to bind to the corresponding optimizer in the optimizers list;
-when multiple optimizers are configured (e.g., three), the number of schedulers must match, and each scheduler is associated with its optimizer by their respective positions in the lists - i.e., the first scheduler corresponds to the first optimizer, the second to the second, and so on.
+- Do not mix the single- and multi-optimiser modes.  Either use `optim` +
+  `scheduler` or `optims` + `schedulers`.
+- Every optimiser entry must include `params` and `optim`.
+- Each trainable parameter must match exactly one optimiser.  ESPnet3 raises an
+  error if parameters are missing or assigned twice.
+- The number of scheduler entries must equal the number of optimisers.  They are
+  matched by position, so the first scheduler controls the first optimiser, etc.
+
+Under the hood ESPnet3 wraps the instantiated optimisers with
+`MultipleOptim`/`MultipleScheduler` so that Lightning sees them as a single
+optimiser while still stepping all underlying objects together.
