@@ -1,40 +1,38 @@
 ## ESPnet3 Design Overview
 
-This document outlines the design principles and architecture of espnet3. Compared to ESPnet2, ESPnet3 emphasizes reproducibility, flexibility, and maintainability, aiming to streamline and accelerate research in speech processing.
+ESPnet3 emphasises reproducibility, flexibility, and maintainability.  Compared
+with ESPnet2 the project leans on Hydra/OmegaConf for configuration and on the
+Provider/Runner abstraction for execution.  This section summarises the main
+design pillars.
 
-### 1. Dataset Preparation and Sharing
+---
 
-#### Background
-Reproducibility becomes difficult when preprocessed datasets are not shared. In cluster environments, having every user reprocess the same data is inefficient.
+### 1. Dataset preparation and sharing
 
-#### Policy
-- Promote use of Hugging Face Datasets for standardized formats and sharing
-- Support custom formats on clusters (e.g., JSON, Kaldi scp files)
-- `ESPnetDataset` is a wrapper class designed to match the output format expected by ESPnet models. For example, it is compatible with `CommonCollateFn`. However, its usage is not mandatory—it's simply a recommended option.
+- Promote Hugging Face Datasets for a standardised, shareable format.
+- Continue supporting custom manifests (JSON, Kaldi SCP, etc.) when required.
+- `ESPnet3Dataset` remains a convenient wrapper when a recipe expects the legacy
+  collate behaviour, but using it is optional.
 
-#### Code Example (from ESPnet3/data/dataset.py)
 ```python
 from datasets import load_dataset
 from espnet3.data.dataset import ESPnet3Dataset
 
-# Load HuggingFace dataset
-hf_dataset = load_dataset("some_dataset", split="train")
-
-# Wrap for ESPnet3
-espnet_dataset = ESPnet3Dataset(hf_dataset)
+dataset = ESPnet3Dataset(load_dataset("some_dataset", split="train"))
 ```
 
-### 2. Dataloader and Batching Strategy
+The same provider/runner logic used for inference also powers data preparation,
+so large corpora can be re-generated or cleaned consistently across different
+compute environments (see [data_preparation.md](./data_preparation.md)).
 
-#### Challenge
-Speech data varies significantly in sequence length. Standard DataLoaders often introduce large padding, leading to inefficient training.
+---
 
-#### Solution
-- Use Lhotse for on-the-fly feature extraction and length-based sorting
-- Support dynamic batch sizing
-- HuggingFace Datasets are supported via custom integration
+### 2. Dataloader and batching strategy
 
-#### Code Example (from egs3/librispeech/asr1/data.py)
+Speech data varies drastically in length.  ESPnet3 keeps the ESPnet2 tooling for
+samplers and collators but exposes them through Hydra-driven configuration.
+Lhotse integration enables dynamic batching and on-the-fly feature extraction.
+
 ```python
 from lhotse.dataset import DynamicBucketingSampler
 from espnet3.data.loader import make_dataloader
@@ -42,17 +40,17 @@ from espnet3.data.loader import make_dataloader
 dataloader = make_dataloader(dataset, sampler=DynamicBucketingSampler(...))
 ```
 
-### 3. Model and Trainer Definition
+---
 
-#### Improvements
-- ESPnet2 required full parameter specification in config files, making maintenance difficult
-- ESPnet3 adopts OmegaConf for modern, flexible configuration with partial overrides
+### 3. Models and trainers
 
-#### Trainer
-- Based on PyTorch Lightning: `ESPnet3LightningTrainer`
-- Training can be launched simply by passing a model and config
+- `LitESPnetModel` wraps ESPnet models so they plug directly into PyTorch
+  Lightning.
+- `ESPnet3LightningTrainer` delegates training to Lightning while handling ESPnet
+  specifics such as checkpoint averaging and statistics collection.
+- Configuration is declarative: recipes override the necessary parts of the
+  Hydra config instead of editing Python files.
 
-#### Code Example (from ESPnet3/trainer/trainer.py)
 ```python
 from espnet3.trainer.trainer import ESPnet3LightningTrainer
 from espnet3.trainer.model import LitESPnetModel
@@ -62,23 +60,44 @@ trainer = ESPnet3LightningTrainer(model=model, config=config, expdir="exp")
 trainer.fit()
 ```
 
-### 4. Customization and Extensibility
+---
 
-#### Background
-ESPnet2 had tightly coupled models and trainers, making customization difficult.
+### 4. Provider/Runner architecture
 
-#### Solution
-- Clear separation between the model (`LitESPnetModel`) and the trainer (`ESPnet3LightningTrainer`)
-- Callbacks, loggers, and schedulers are fully configurable through YAML
-- Leverages PyTorch Lightning's extensibility and community ecosystem
+Based on the refactor described in
+[#6178](https://github.com/espnet/espnet/pull/6178#issuecomment-3393671961), the
+execution layer is split into **providers** and **runners**:
 
-#### Code Example (from ESPnet3/trainer/callbacks.py)
-```python
-from espnet3.trainer.callbacks import get_default_callbacks
+- A provider builds datasets, models, and helper objects per worker.
+- A runner implements a static `forward` method that consumes those objects.
 
-callbacks = get_default_callbacks(config)
-```
+This design has several benefits:
+
+- **Mode parity** – the same runner works locally, with multiprocessing, or on a
+  Dask/SLURM cluster.  Switching modes only requires changing the `parallel`
+  configuration.
+- **Asynchronous submissions** – runners can emit shard specifications and submit
+  detached jobs.  Example wall-clock numbers for OWSM-V4 medium (1B) decoding are
+  published in [this comment](https://github.com/espnet/espnet/pull/6178#issuecomment-3400164353).
+- **Custom job control** – advanced users can tweak the Dask JobQueue submission
+  command (e.g., the `sbatch` invocation) through the runner hook without
+  modifying ESPnet3 internals.
+
+Providers and runners therefore connect local development workflows with large
+cluster deployments seamlessly.
 
 ---
 
-In summary, ESPnet3 is designed for reproducible, efficient, and flexible research workflows. It remains compatible with ESPnet2 recipes and serves as a robust foundation for future developments in speech processing.
+### 5. Customisation and extensibility
+
+ESPnet3 keeps the PyTorch Lightning ecosystem available: callbacks, precision
+plugins, gradient accumulation strategies, and profiling integrations are all
+configured via YAML.  When a project needs functionality beyond the built-in
+runners, developers can still rely on the lower-level
+[`espnet3.parallel`](./parallel.md) utilities.
+
+---
+
+In summary, ESPnet3 delivers a reproducible, Python-native research stack that
+scales from laptops to HPC clusters while keeping recipes concise and
+maintainable.
