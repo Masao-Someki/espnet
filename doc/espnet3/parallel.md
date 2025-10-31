@@ -37,7 +37,9 @@ parallel_gpu:
 from espnet3.parallel import set_parallel
 
 set_parallel(cfg.parallel_gpu)
-results = runner(range(num_items))  # local, sync, or async depending on config
+provider = MyProvider(cfg)
+runner = MyRunner(provider)
+results = runner(range(num_items)) 
 ```
 
 The runner automatically chooses between three execution modes:
