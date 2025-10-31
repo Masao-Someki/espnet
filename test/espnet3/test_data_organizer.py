@@ -112,6 +112,18 @@ class DummyDataset:
         return self.data[idx]
 
 
+class DummyStringKeyDataset(DummyDataset):
+    def __init__(self, path=None):
+        super().__init__(path=path)
+        self.utt_ids = [f"utt{i}" for i in range(len(self.data))]
+        self.utt2idx = {utt_id: i for i, utt_id in enumerate(self.utt_ids)}
+
+    def __getitem__(self, idx):
+        if isinstance(idx, str):
+            return self.data[self.utt2idx[idx]]
+        return super().__getitem__(idx)
+
+
 class DummyShardedDataset(ShardedDataset):
     def __init__(self, path=None):
         self.data = [
@@ -181,6 +193,26 @@ def test_combined_dataset():
     assert combined[3]["text"] == "WORLD"
 
 
+def test_combined_dataset_with_string_id():
+    ds = DummyStringKeyDataset()
+    combined = CombinedDataset(
+        [ds],
+        [(do_nothing_transform, do_nothing_transform)],
+    )
+    assert combined["utt0"]["text"] == "hello"
+    assert combined["utt1"]["text"] == "world"
+
+
+def test_combined_dataset_with_missing_string_id():
+    ds = DummyDataset()
+    combined = CombinedDataset(
+        [ds],
+        [(do_nothing_transform, do_nothing_transform)],
+    )
+    with pytest.raises(ValueError, match="Utterance ID 'unknown'"):
+        combined["unknown"]
+
+
 def test_data_organizer_init(dummy_dataset_config):
     config = dummy_dataset_config
     organizer = DataOrganizer(
@@ -194,6 +226,35 @@ def test_data_organizer_init(dummy_dataset_config):
     assert len(organizer.valid) == 2
     assert organizer.valid[0]["text"] == "[dummy] hello"
     assert "test_dummy" in organizer.test
+
+
+def test_data_organizer_with_string_ids():
+    config = {
+        "train": [
+            {
+                "name": "train_dummy",
+                "dataset": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyStringKeyDataset"
+                },
+            }
+        ],
+        "valid": [
+            {
+                "name": "valid_dummy",
+                "dataset": {
+                    "_target_": "test.espnet3.test_data_organizer.DummyStringKeyDataset"
+                },
+            }
+        ],
+    }
+
+    organizer = DataOrganizer(
+        train=instantiate(config["train"]),
+        valid=instantiate(config["valid"]),
+    )
+
+    assert organizer.train["utt0"]["text"] == "hello"
+    assert organizer.valid["utt1"]["text"] == "world"
 
 
 def test_data_organizer_without_test():

@@ -122,11 +122,11 @@ class CombinedDataset:
     def __getitem__(self, idx):
         if isinstance(idx, str):
             try:
-                idx = int(idx)
+                numerical_idx = int(idx)
             except (ValueError, TypeError):
-                raise ValueError(
-                    "ESPnet-3 expects the utterance ID to be an " "integer index"
-                )
+                return self._getitem_by_utterance_id(idx)
+            else:
+                idx = numerical_idx
 
         for i, cum_len in enumerate(self.cumulative_lengths):
             if idx < cum_len:
@@ -152,6 +152,29 @@ class CombinedDataset:
                     return transformed
 
         raise IndexError("Index out of range in CombinedDataset")
+
+    def _getitem_by_utterance_id(self, uid: str):
+        last_error = None
+        for dataset, (transform, preprocessor) in zip(self.datasets, self.transforms):
+            try:
+                sample = dataset[uid]
+            except (KeyError, TypeError, ValueError, IndexError) as err:
+                last_error = err
+                continue
+
+            transformed = transform(sample)
+            if self.use_espnet_preprocessor:
+                transformed = preprocessor(uid, transformed)
+            else:
+                transformed = preprocessor(transformed)
+
+            if self.use_espnet_collator:
+                return uid, transformed
+            return transformed
+
+        raise ValueError(
+            f"Utterance ID '{uid}' is not supported by the underlying datasets."
+        ) from last_error
 
     def get_text(self, idx):
         """
