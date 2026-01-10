@@ -2,12 +2,11 @@ import multiprocessing as mp
 import sys
 import time
 import types
-import warnings
 
 import pytest
 from omegaconf import OmegaConf
 
-from espnet3.parallel import (
+from espnet3.parallel.parallel import (
     DictReturnWorkerPlugin,
     get_client,
     make_client,
@@ -115,7 +114,7 @@ def test_set_parallel_copies_options_dict(local_cfg):
     cfg = local_cfg
     set_parallel(cfg)
     got = getattr(
-        __import__("espnet3.parallel", fromlist=["get_parallel_config"]),
+        __import__("espnet3.parallel.parallel", fromlist=["get_parallel_config"]),
         "get_parallel_config",
     )()
     # mutate original options
@@ -168,7 +167,9 @@ def test_parallel_map_internal_client(local_cfg, monkeypatch):
             self.client.close()
 
     cli = make_client(local_cfg)
-    monkeypatch.setattr("espnet3.parallel.get_client", lambda *a, **k: _Ctx(cli))
+    monkeypatch.setattr(
+        "espnet3.parallel.parallel.get_client", lambda *a, **k: _Ctx(cli)
+    )
     res = parallel_map(lambda x: x * 2, [1, 2, 3])
     assert res == [2, 4, 6]
 
@@ -375,7 +376,7 @@ def test_get_client_context_auto_shutdown(local_cfg, monkeypatch):
             return self._real.close()
 
     proxy = _ClientProxy(cli)
-    monkeypatch.setattr("espnet3.parallel.make_client", lambda cfg=None: proxy)
+    monkeypatch.setattr("espnet3.parallel.parallel.make_client", lambda cfg=None: proxy)
 
     with get_client(local_cfg):
         pass

@@ -1,18 +1,18 @@
+"""DataLoader builder for ESPnet3 trainer."""
+
 import copy
 from typing import Union
 
 import numpy as np
 import torch
 from hydra.utils import instantiate
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from espnet2.samplers.build_batch_sampler import build_batch_sampler
 
 
 def update_shard(config: Union[dict, list], shard_idx: int) -> Union[dict, list]:
-    """
-    Recursively replace all string occurrences of the placeholder "{shard_idx}"
-    in a nested configuration structure with the actual shard index.
+    """Replace all "{shard_idx}" in a nested config with the actual shard index.
 
     This function is typically used when a config dictionary or list (e.g.,
     from OmegaConf.to_container) includes placeholders like "{shard_idx}"
@@ -49,8 +49,7 @@ def update_shard(config: Union[dict, list], shard_idx: int) -> Union[dict, list]
 
 
 class DataLoaderBuilder:
-    """
-    Builder class for constructing training and validation DataLoaders in ESPnet3.
+    """Builder class for constructing training and validation DataLoaders in ESPnet3.
 
     This class provides a unified interface for setting up PyTorch or ESPnet-specific
     DataLoaders based on the configuration. It supports advanced features such as:
@@ -82,6 +81,7 @@ class DataLoaderBuilder:
     """
 
     def __init__(self, dataset, config, collate_fn, num_device: int, epoch: int):
+        """Initialize DataLoaderBuilder object."""
         self.dataset = dataset
         self.config = config
         self.collate_fn = collate_fn
@@ -89,8 +89,7 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def build(self, mode: str):
-        """
-        Build and return a DataLoader for the specified mode ("train" or "valid").
+        """Build and return a DataLoader for the specified mode ("train" or "valid").
 
         This method supports two modes of operation depending on the configuration:
         (1) **ESPnet-style iterator**: Custom sampling and iteration logic.
@@ -222,7 +221,9 @@ class DataLoaderBuilder:
 
         if factory_config["iter_factory"] is not None:
             # update shape files
-            iter_factory_config = update_shard(iter_factory_config, shard_idx)
+            iter_factory_config = update_shard(
+                factory_config["iter_factory"], shard_idx
+            )
             return self._build_iter_factory(iter_factory_config, dataset)
         else:
             factory_config.pop("num_shards")
