@@ -1,4 +1,8 @@
-# system_asr.py
+"""ASR system implementation and tokenizer training helpers.
+
+This module adds ASR-specific stages on top of the base system, including
+tokenizer training and dataset creation hooks.
+"""
 
 import logging
 import os
@@ -14,6 +18,17 @@ logger = logging.getLogger(__name__)
 
 
 def load_function(path):
+    """Load a callable from a dotted module path.
+
+    Args:
+        path: Dotted module path (e.g., ``package.module:function``).
+
+    Returns:
+        Callable referenced by the path.
+
+    Raises:
+        (Exception): Propagated import or attribute lookup errors.
+    """
     module_path, func_name = path.rsplit(".", 1)
     module = import_module(module_path)
     return getattr(module, func_name)
@@ -27,6 +42,14 @@ class ASRSystem(BaseSystem):
     """
 
     def create_dataset(self, *args, **kwargs):
+        """Create datasets using the configured helper function.
+
+        The callable is resolved from ``train_config.create_dataset.func`` and
+        invoked with the remaining configuration values.
+
+        Raises:
+            RuntimeError: If the configuration does not specify a function.
+        """
         self._reject_stage_args("create_dataset", args, kwargs)
         logger.info("ASRSystem.create_dataset(): starting dataset creation process")
         start = time.perf_counter()
@@ -46,7 +69,77 @@ class ASRSystem(BaseSystem):
         )
         return result
 
+    def get_stage_log_dir(self, stage: str) -> Path:
+        """Return stage-specific log directories when configured.
+
+        The ASR system routes logs to artifact directories when available:
+          - ``create_dataset``: ``train_config.create_dataset.dataset_dir`` or
+            ``train_config.dataset_dir`` or ``train_config.data_dir``.
+          - ``train_tokenizer``: ``train_config.tokenizer.save_path``.
+          - ``collect_stats``: ``train_config.stats_dir``.
+          - ``train``/``publish``: ``train_config.exp_dir``.
+          - ``infer``: ``infer_config.decode_dir``.
+          - ``measure``: ``metric_config.decode_dir`` or ``infer_config.decode_dir``.
+
+        If none of the stage-specific paths are configured, it falls back to
+        ``BaseSystem.get_stage_log_dir`` (``train_config.exp_dir`` or
+        ``<cwd>/logs``).
+
+        Args:
+            stage (str): Stage name being executed.
+
+        Returns:
+            Path: Directory where the stage log should be placed.
+        """
+        if stage == "create_dataset":
+            cfg = getattr(self.train_config, "create_dataset", None)
+            if cfg is not None:
+                dataset_dir = getattr(cfg, "dataset_dir", None)
+                if dataset_dir:
+                    return Path(dataset_dir)
+            dataset_dir = getattr(self.train_config, "dataset_dir", None)
+            if dataset_dir:
+                return Path(dataset_dir)
+            data_dir = getattr(self.train_config, "data_dir", None)
+            if data_dir:
+                return Path(data_dir)
+        elif stage == "train_tokenizer":
+            tokenizer_cfg = getattr(self.train_config, "tokenizer", None)
+            save_path = (
+                getattr(tokenizer_cfg, "save_path", None) if tokenizer_cfg else None
+            )
+            if save_path:
+                return Path(save_path)
+        elif stage == "collect_stats":
+            stats_dir = getattr(self.train_config, "stats_dir", None)
+            if stats_dir:
+                return Path(stats_dir)
+        elif stage in {"train", "publish"}:
+            exp_dir = getattr(self.train_config, "exp_dir", None)
+            if exp_dir:
+                return Path(exp_dir)
+        elif stage == "infer":
+            decode_dir = getattr(self.infer_config, "decode_dir", None)
+            if decode_dir:
+                return Path(decode_dir)
+        elif stage == "measure":
+            decode_dir = getattr(self.metric_config, "decode_dir", None)
+            if decode_dir:
+                return Path(decode_dir)
+            decode_dir = getattr(self.infer_config, "decode_dir", None)
+            if decode_dir:
+                return Path(decode_dir)
+        return super().get_stage_log_dir(stage)
+
     def train(self, *args, **kwargs):
+        """Train the model, training the tokenizer first if needed.
+
+        This stage checks for a cached tokenizer model and runs tokenizer
+        training before delegating to the base training routine.
+
+        Raises:
+            RuntimeError: If ``train_config.dataset_dir`` is not set.
+        """
         self._reject_stage_args("train", args, kwargs)
         logger.info("ASRSystem.train(): starting training process")
 
@@ -55,11 +148,7 @@ class ASRSystem(BaseSystem):
             raise RuntimeError("train_config.dataset_dir must be set for training.")
 
         # Train tokenizer if not trained previously
-        tokenizer_path = (
-            Path(self.train_config.tokenizer.save_path)
-            / f"{self.train_config.tokenizer.model_type}.model"
-        )
-        if not tokenizer_path.exists():
+        if not self._tokenizer_exists():
             self.train_tokenizer()
 
         # Proceed with standard training
@@ -72,13 +161,28 @@ class ASRSystem(BaseSystem):
         vocab = output_path / f"{tokenizer_cfg.model_type}.vocab"
         return model.exists() and vocab.exists()
 
+    def _tokenizer_exists(self) -> bool:
+        tokenizer_cfg = self.train_config.tokenizer
+        output_path = Path(tokenizer_cfg.save_path)
+        model = output_path / f"{tokenizer_cfg.model_type}.model"
+        vocab = output_path / f"{tokenizer_cfg.model_type}.vocab"
+        return model.exists() and vocab.exists()
+
     def train_tokenizer(self, *args, **kwargs):
+        """Train a SentencePiece tokenizer based on configured text.
+
+        The text builder configured in ``train_config.tokenizer.text_builder``
+        is used to generate training text, which is then saved and consumed
+        by the SentencePiece trainer.
+
+        Raises:
+            RuntimeError: If required tokenizer config is missing or invalid.
+        """
         self._reject_stage_args("train_tokenizer", args, kwargs)
 
         if self._tokenizer_exists():
             logger.info("Tokenizer already exists. Skipping train_tokenizer().")
             return
-    
         start = time.perf_counter()
         output_path = Path(self.train_config.tokenizer.save_path)
         output_path.mkdir(parents=True, exist_ok=True)

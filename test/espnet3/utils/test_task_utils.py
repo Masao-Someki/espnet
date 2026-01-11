@@ -1,4 +1,4 @@
-# tests/test_task_wrapper.py
+# tests/test_task_utils.py
 from argparse import Namespace
 from pathlib import Path
 
@@ -14,8 +14,6 @@ from espnet3.utils.task_utils import (
     save_espnet_config,
 )
 
-# ===============================================================
-# Test Case Summary for Task Wrapper (espnet3.utils.task_utils)
 # ===============================================================
 #
 # Tests for `get_task_class(task_name)`
@@ -55,15 +53,7 @@ from espnet3.utils.task_utils import (
 )
 @pytest.mark.execution_timeout(30)
 def test_get_task_class_returns_correct_class(task_path, expected_cls_name):
-    try:
-        cls = get_task_class(task_path)
-    except RuntimeError as e:
-        # Skip when optional dependencies pull in broken binary wheels (e.g., sklearn)
-        if "numpy.dtype size changed" in str(e):
-            pytest.skip(
-                "Skipped due to incompatible optional dependencies in test env."
-            )
-        raise
+    cls = get_task_class(task_path)
     assert cls.__name__ == expected_cls_name
 
 

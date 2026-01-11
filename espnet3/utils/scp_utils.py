@@ -1,18 +1,26 @@
-# score_runner.py
+"""SCP file helpers for ESPnet3 decoding outputs."""
+
 from pathlib import Path
 from typing import Dict, List, Union
 
 
 def read_scp(scp_file):
+    """Read an SCP file into a key/value dictionary."""
     with open(scp_file, "r") as f:
         lines = [line.strip() for line in f.readlines()]
-    return {
-        line.split(maxsplit=1)[0].strip(): line.split(maxsplit=1)[1].strip()
-        for line in lines
-    }
+    parsed = {}
+    for line in lines:
+        if not line:
+            continue
+        parts = line.split(maxsplit=1)
+        key = parts[0].strip()
+        value = parts[1].strip() if len(parts) > 1 else ""
+        parsed[key] = value
+    return parsed
 
 
 def get_class_path(obj) -> str:
+    """Return the fully qualified class path for an object."""
     return f"{obj.__module__}.{obj.__class__.__name__}"
 
 
@@ -22,8 +30,7 @@ def load_scp_fields(
     inputs: Union[List[str], Dict[str, str]],
     file_suffix: str = ".scp",
 ) -> Dict[str, List[str]]:
-    """
-    Load and align SCP files into a field-wise dictionary for evaluation.
+    """Load and align SCP files into a field-wise dictionary for evaluation.
 
     This function reads all required SCP files from the given test set,
     validates their consistency, and returns a dictionary with:
