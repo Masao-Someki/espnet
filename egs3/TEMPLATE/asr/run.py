@@ -70,14 +70,11 @@ def build_parser(
         action="store_true",
         help="Print what would be executed without actually running stages.",
     )
-<<<<<<< HEAD
-=======
     parser.add_argument(
         "--write_requirements",
         action="store_true",
         help="Write requirements.txt alongside each stage log.",
     )
->>>>>>> e88e05170c0133e4d594e24a484d800e70b90bfb
 
     # Stage-specific arguments can be added here if needed
     parser.add_argument(
@@ -132,35 +129,7 @@ def main(
         else load_config_with_defaults(args.measure_config)
     )
 
-<<<<<<< HEAD
-    log_dir = getattr(train_config, "exp_dir", None)
-    logger = configure_logging(log_dir=Path(log_dir) if log_dir else None)
-    log_run_metadata(
-        logger,
-        argv=sys.argv,
-        configs={
-            "train": Path(args.train_config) if args.train_config else None,
-            "infer": Path(args.infer_config) if args.infer_config else None,
-            "measure": Path(args.measure_config) if args.measure_config else None,
-        },
-    )
-    log_env_metadata(logger)
-    if train_config is not None:
-        logger.info(
-            "Train config content:\n%s", OmegaConf.to_yaml(train_config, resolve=True)
-        )
-    if infer_config is not None:
-        logger.info(
-            "Infer config content:\n%s", OmegaConf.to_yaml(infer_config, resolve=True)
-        )
-    if measure_config is not None:
-        logger.info(
-            "Measure config content:\n%s",
-            OmegaConf.to_yaml(measure_config, resolve=True),
-        )
-=======
     logger = configure_logging()
->>>>>>> e88e05170c0133e4d594e24a484d800e70b90bfb
 
     # -----------------------------------------
     # Instantiate system
