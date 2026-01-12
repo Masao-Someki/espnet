@@ -4,11 +4,11 @@
 # Path scaffold relative to the recipe root; keep aligned with infer.yaml.
 recipe_dir: .
 data_dir: ${recipe_dir}/data
-exp_tag: librispeech100_asr_eval
+exp_tag: ${load_yaml:conf/train.yaml,exp_tag}
 exp_dir: ${recipe_dir}/exp/${exp_tag}
 stats_dir: ${recipe_dir}/exp/stats
 decode_dir: ${exp_dir}/decode
-dataset_dir: /path/to/LibriSpeech
+dataset_dir: ${load_yaml:conf/train.yaml,dataset_dir}
 
 # Dataset definition for test splits only (used to enumerate test names).
 dataset:

@@ -9,12 +9,25 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from shutil import which
 from typing import Iterable, Mapping
 
-LOG_FORMAT = (
-    "%(asctime)s | %(levelname)s | %(name)s | %(pathname)s:%(lineno)d | %(message)s"
-)
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _next_rotated_log_path(target: Path) -> Path:
+    """Return the next available rotated log path (e.g., run1.log)."""
+    suffixes = target.suffixes
+    suffix = "".join(suffixes)
+    base = target.name[: -len(suffix)] if suffix else target.name
+
+    index = 1
+    while True:
+        candidate = target.with_name(f"{base}{index}{suffix}")
+        if not candidate.exists():
+            return candidate
+        index += 1
 
 
 def configure_logging(
@@ -59,12 +72,63 @@ def configure_logging(
             for h in root.handlers
         )
         if not has_file:
+            if target.exists():
+                rotated = _next_rotated_log_path(target)
+                os.replace(target, rotated)
             file_handler = logging.FileHandler(target)
             file_handler.setFormatter(formatter)
             root.addHandler(file_handler)
 
     logging.captureWarnings(True)
     return logging.getLogger("espnet3")
+
+
+def set_stage_log_handler(
+    logger: logging.Logger,
+    log_dir: Path | None,
+    *,
+    filename: str,
+) -> Path | None:
+    """Attach a file handler for a stage log, replacing any prior stage handler.
+
+    This function adds a new file handler to the root logger and removes any
+    previously installed stage handler (identified via ``_espnet3_stage_log``).
+    If a log file already exists at the target path, it is rotated (e.g.,
+    ``train.log`` -> ``train1.log``) before creating the new handler.
+
+    Args:
+        logger (logging.Logger): Logger used to emit logs.
+            The handler is attached to the root logger so the logger hierarchy
+            continues to work as expected.
+        log_dir (Path | None): Directory that should receive the stage log.
+            If None, no handler is installed and None is returned.
+        filename (str): Log filename to create within ``log_dir``.
+
+    Returns:
+        Path | None: Resolved log file path when installed, otherwise None.
+    """
+    if log_dir is None:
+        return None
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+    target = (log_dir / filename).resolve()
+
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        if getattr(handler, "_espnet3_stage_log", False):
+            root.removeHandler(handler)
+            handler.close()
+
+    formatter = logging.Formatter(fmt=LOG_FORMAT, datefmt=DATE_FORMAT)
+    if target.exists():
+        rotated = _next_rotated_log_path(target)
+        os.replace(target, rotated)
+    file_handler = logging.FileHandler(target)
+    file_handler.setFormatter(formatter)
+    file_handler._espnet3_stage_log = True
+    root.addHandler(file_handler)
+
+    return target
 
 
 def _run_git_command(cmd: list[str], cwd: Path | None) -> str | None:
@@ -127,12 +191,73 @@ def format_command(argv: Iterable[str] | None = None) -> str:
     return " ".join(shlex.quote(str(a)) for a in argv)
 
 
+def _run_pip_freeze() -> str | None:
+    """Return `pip freeze` output, or None on failure."""
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "pip", "freeze"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return completed.stdout.strip()
+    except Exception:
+        if which("uv") is None:
+            return None
+        try:
+            completed = subprocess.run(
+                ["uv", "pip", "freeze"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return completed.stdout.strip()
+        except Exception:
+            return None
+
+
+def _get_log_dir_from_logger(logger: logging.Logger) -> Path | None:
+    """Return the log directory from any configured file handler."""
+    for handler in logger.handlers:
+        if isinstance(handler, logging.FileHandler) and getattr(
+            handler, "baseFilename", None
+        ):
+            return Path(handler.baseFilename).resolve().parent
+
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if isinstance(handler, logging.FileHandler) and getattr(
+            handler, "baseFilename", None
+        ):
+            return Path(handler.baseFilename).resolve().parent
+
+    return None
+
+
+def _write_requirements_snapshot(logger: logging.Logger) -> None:
+    """Write a requirements snapshot alongside the configured log file."""
+    log_dir = _get_log_dir_from_logger(logger)
+    if log_dir is None:
+        logger.warning("Skipping requirements export: no file logger configured.")
+        return
+
+    requirements = _run_pip_freeze()
+    if requirements is None:
+        logger.warning("Failed to export requirements via pip freeze.")
+        return
+
+    target = log_dir / "requirements.txt"
+    target.write_text(requirements + "\n", encoding="utf-8")
+    logger.info("Wrote requirements snapshot: %s", target)
+
+
 def log_run_metadata(
     logger: logging.Logger,
     *,
     argv: Iterable[str] | None = None,
     workdir: Path | None = None,
     configs: Mapping[str, Path | None] | None = None,
+    write_requirements: bool = False,
 ) -> None:
     """Log runtime metadata for the current run.
 
@@ -140,17 +265,22 @@ def log_run_metadata(
       - Start timestamp.
       - Python executable and command-line arguments.
       - Working directory.
+      - Python version.
       - Config paths (if provided).
       - Git metadata (commit/branch/dirty), when available.
+      - Optional requirements snapshot (pip freeze).
 
     Args:
         logger (logging.Logger): Logger used to emit metadata.
         argv (Iterable[str] | None): Command arguments; defaults to sys.argv.
         workdir (Path | None): Working directory to report.
         configs (Mapping[str, Path | None] | None): Named config paths to log.
+        write_requirements (bool): If True, export pip freeze output to
+            requirements.txt alongside the log file.
     """
     logger.info("=== ESPnet3 run started: %s ===", datetime.now().isoformat())
     logger.info("Command: %s %s", sys.executable, format_command(argv))
+    logger.info("Python: %s", sys.version.replace("\n", " "))
 
     cwd = workdir or Path.cwd()
     logger.info("Working directory: %s", cwd)
@@ -165,6 +295,9 @@ def log_run_metadata(
     if git_info:
         git_parts = [f"{k}={v}" for k, v in git_info.items()]
         logger.info("Git: %s", ", ".join(git_parts))
+
+    if write_requirements:
+        _write_requirements_snapshot(logger)
 
 
 def _collect_env(
