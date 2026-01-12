@@ -12,7 +12,7 @@ dataset_dir: ${load_yaml:conf/train.yaml,dataset_dir}
 
 # Dataset definition for test splits only (used to enumerate test names).
 dataset:
-  _target_: espnet3.components.data_organizer.DataOrganizer
+  _target_: espnet3.components.data.data_organizer.DataOrganizer
   test:
     - name: test-clean
       dataset:
