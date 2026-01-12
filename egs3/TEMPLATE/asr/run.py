@@ -76,14 +76,6 @@ def build_parser(
         help="Write requirements.txt alongside each stage log.",
     )
 
-    # Stage-specific arguments can be added here if needed
-    parser.add_argument(
-        "--train.dataset_dir",
-        default=None,
-        type=Path,
-        help="dataset directory for training (used in some stages).",
-    )
-
     # Let caller add custom CLI arguments
     if add_arguments is not None:
         add_arguments(parser)
