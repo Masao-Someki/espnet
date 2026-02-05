@@ -111,7 +111,7 @@ def infer(config: DictConfig):
             if not output_keys:
                 raise RuntimeError("infer_config.output_keys must not be empty.")
 
-        idx_key = getattr(config, "idx_key", "uttid")
+        idx_key = getattr(config, "idx_key", "utt_id")
 
         batch_size = getattr(config, "batch_size", None)
         provider_config = getattr(config, "provider", None)
@@ -165,7 +165,7 @@ def infer(config: DictConfig):
             if not output_keys:
                 raise RuntimeError("No output keys found in inference results.")
 
-        # Convert output dicts into per-key SCP lines (uttid + value).
+        # Convert output dicts into per-key SCP lines (utt_id + value).
         scp_lines = _collect_scp_lines(
             results,
             idx_key=runner.idx_key,
