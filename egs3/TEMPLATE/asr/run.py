@@ -29,9 +29,16 @@ DEFAULT_STAGES: List[str] = [
     "train",
     "infer",
     "measure",
+    "pack_model",
+    "upload_model",
 ]
 
-logger = logging.getLogger(__name__)
+DEMO_STAGES: List[str] = [
+    "pack_demo",
+    "upload_demo",
+]
+
+ALL_STAGES: List[str] = DEFAULT_STAGES + DEMO_STAGES
 
 
 def build_parser(
@@ -44,7 +51,7 @@ def build_parser(
         "--stages",
         choices=list(stages) + ["all"],
         nargs="+",
-        default=["all"],
+        default=list(stages),
         help="Which stages to run. Multiple values allowed.",
     )
     parser.add_argument(
@@ -67,6 +74,18 @@ def build_parser(
         default=None,
         type=Path,
         help="Hydra config for measure stage.",
+    )
+    parser.add_argument(
+        "--publish_config",
+        default=None,
+        type=Path,
+        help="Hydra config for pack/upload stages.",
+    )
+    parser.add_argument(
+        "--demo_config",
+        default=None,
+        type=Path,
+        help="Hydra config for demo pack/upload stages.",
     )
     parser.add_argument(
         "--dry_run",
@@ -112,7 +131,16 @@ def main(
         default_package=__package__,
         resolve=False,
     )
-
+    publish_config = load_and_merge_config(
+        args.publish_config,
+        config_name="publish.yaml",
+        default_package=__package__,
+    )
+    demo_config = load_and_merge_config(
+        args.demo_config,
+        config_name="demo.yaml",
+        default_package=__package__,
+    )
     logger = configure_logging()
     apply_training_experiment_context(
         training_config=training_config,
@@ -135,6 +163,8 @@ def main(
         training_config=training_config,
         inference_config=inference_config,
         metrics_config=metrics_config,
+        publish_config=publish_config,
+        demo_config=demo_config,
     )
 
     # -----------------------------------------
@@ -154,6 +184,14 @@ def main(
     required_configs = {}
     required_configs.update({stage: training_config for stage in pretrain_stages})
     required_configs.update({"infer": inference_config, "measure": metrics_config})
+    required_configs.update(
+        {
+            "pack_model": training_config,
+            "upload_model": publish_config,
+            "pack_demo": demo_config,
+            "upload_demo": demo_config,
+        }
+    )
     missing = [
         s
         for s in stages_to_run
@@ -184,5 +222,5 @@ if __name__ == "__main__":
     main(
         args=args,
         system_cls=ASRSystem,
-        stages=DEFAULT_STAGES,
+        stages=ALL_STAGES,
     )
