@@ -228,6 +228,11 @@ def _load_npz_counts(dirpath: Path, feat_key: str):
     return data["count"], data["sum"], data["sum_square"]
 
 
+def _read_scp_paths(path: Path):
+    with path.open("r", encoding="utf-8") as f:
+        return [line.strip().split(maxsplit=1)[1] for line in f if line.strip()]
+
+
 # ------------
 # The tests
 # ------------
@@ -402,6 +407,8 @@ def test_collect_stats_entrypoint_train(tmp_path: Path, use_parallel):
     for k in ["mel", "mel_lengths"]:
         scp = mode_dir / "collect_feats" / f"{k}.scp"
         assert scp.exists(), f"{scp} not written by entrypoint"
+        for feat_path in _read_scp_paths(scp):
+            assert str(mode_dir / "collect_feats") in feat_path
 
     # Count check matches dataset total frames for mel
     ds = instantiate(ds_cfg).train

@@ -41,6 +41,31 @@ class DummyProvider(InferenceProvider):
         return [None] * _config.mock_dataset_length
 
 
+class PersistProvider(InferenceProvider):
+    def __init__(self, inference_config, params):
+        super().__init__(inference_config, params=params)
+
+    @staticmethod
+    def build_dataset(config):
+        return [
+            {"utt_id": f"utt{i}", "speech": float(i)}
+            for i in range(config.mock_dataset_length)
+        ]
+
+    @staticmethod
+    def build_model(_config):
+        return lambda speech: {"score": speech}
+
+
+def persisted_output_fn(*, data, model_output, idx):
+    if isinstance(data, list):
+        return [
+            {"utt_id": sample["utt_id"], "hyp": f"h{sample['utt_id']}"}
+            for sample in data
+        ]
+    return {"utt_id": data["utt_id"], "hyp": f"h{data['utt_id']}"}
+
+
 class DummyRunner(InferenceRunner):
     results = None
 
@@ -123,6 +148,30 @@ def test_inference_writes_scp_outputs(tmp_path, monkeypatch):
         base = tmp_path / "infer" / test_name
         assert _read_scp(base / "hyp.scp") == ["0 h0", "1 h1"]
         assert _read_scp(base / "ref.scp") == ["0 r0", "1 r1"]
+
+
+def test_inference_runner_persists_outputs_via_shards(tmp_path):
+    cfg = OmegaConf.create(
+        {
+            "parallel": {"env": "local", "n_workers": 2},
+            "inference_dir": str(tmp_path / "infer"),
+            "dataset": {"test": [{"name": "test_a"}]},
+            "input_key": "speech",
+            "output_fn": f"{__name__}.persisted_output_fn",
+            "mock_dataset_length": 3,
+            "batch_size": 2,
+            "provider": {"_target_": f"{__name__}.PersistProvider"},
+            "runner": {"_target_": "espnet3.systems.base.inference_runner.InferenceRunner"},
+        }
+    )
+
+    inference_mod.infer(cfg)
+
+    assert _read_scp(tmp_path / "infer" / "test_a" / "hyp.scp") == [
+        "utt0 hutt0",
+        "utt1 hutt1",
+        "utt2 hutt2",
+    ]
 
 
 def test_inference_rejects_test_entry_without_name(tmp_path, monkeypatch):

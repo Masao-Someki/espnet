@@ -205,17 +205,26 @@ def infer(config: DictConfig):
         if output_fn_path:
             provider_params["output_fn_path"] = output_fn_path
 
+        hyp_keys = output_keys if output_keys is not None else []
+        runner_config = getattr(config, "runner", None)
+        if runner_config is None:
+            raise RuntimeError("inference_config.runner must be set.")
+        output_dir = Path(config.inference_dir) / test_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+        artifact_configs = getattr(config, "output_artifacts", {}) or {}
+        if OmegaConf.is_config(artifact_configs):
+            artifact_configs = OmegaConf.to_container(artifact_configs, resolve=True)
+        provider_params["idx_key"] = idx_key
+        provider_params["output_keys"] = output_keys
+        provider_params["output_artifacts"] = artifact_configs
+        provider_params["output_dir"] = str(output_dir)
+        provider_params["task_batch_size"] = batch_size
         provider = instantiate(
             provider_config,
             inference_config=config,
             params=provider_params,
             _recursive_=False,
         )
-
-        hyp_keys = output_keys if output_keys is not None else []
-        runner_config = getattr(config, "runner", None)
-        if runner_config is None:
-            raise RuntimeError("inference_config.runner must be set.")
 
         runner_kwargs = {
             "provider": provider,
@@ -224,8 +233,11 @@ def infer(config: DictConfig):
             "hyp_key": hyp_keys,
             "ref_key": [],
             "batch_size": batch_size,
+            "output_dir": output_dir,
+            "output_artifacts": artifact_configs,
+            "persist_outputs": True,
         }
-        runner = instantiate(runner_config, **runner_kwargs)
+        runner = instantiate(runner_config, _recursive_=False, **runner_kwargs)
         if not hasattr(runner, "idx_key"):
             raise TypeError(
                 f"{type(runner).__name__} must provide inference runner attributes"
@@ -241,6 +253,15 @@ def infer(config: DictConfig):
         out = runner(list(range(dataset_length)))
         if out is None:
             raise RuntimeError("Async inference is not supported in this entrypoint.")
+        if isinstance(out, dict) and out.get("persisted"):
+            if int(out.get("num_results", 0)) <= 0:
+                raise RuntimeError("No inference results available.")
+            logger.info(
+                "Finished test set %s | outputs=%s",
+                test_name,
+                output_dir,
+            )
+            continue
         # Runner can return nested lists. normalize to flat list.
         results = _flatten_results(out)
         if not results:
@@ -251,12 +272,6 @@ def infer(config: DictConfig):
             output_keys = [key for key in first.keys() if key != resolved_idx_key]
             if not output_keys:
                 raise RuntimeError("No output keys found in inference results.")
-
-        output_dir = Path(config.inference_dir) / test_name
-        output_dir.mkdir(parents=True, exist_ok=True)
-        artifact_configs = getattr(config, "output_artifacts", {}) or {}
-        if OmegaConf.is_config(artifact_configs):
-            artifact_configs = OmegaConf.to_container(artifact_configs, resolve=True)
 
         for result in results:
             idx_value = result[resolved_idx_key]

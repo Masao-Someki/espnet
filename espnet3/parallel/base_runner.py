@@ -36,7 +36,7 @@ class AsyncJobSpec:
         provider_cls (str): Import path to the concrete ``EnvironmentProvider`` subclass
         config (Dict): A resolved, plain-``dict`` serialization of the Hydra config.
         params (Dict): Extra parameters forwarded to the provider/environment.
-        indices (List[int]): The subset of indices this shard should process.
+        tasks (List[Any]): The subset of tasks this shard should process.
         world_size (int): Total number of shards.
         world_rank (int): The shard rank (0..world_size-1).
         result_path (str | None): If set, results are written to this JSONL file
@@ -52,7 +52,7 @@ class AsyncJobSpec:
     provider_cls: str  # e.g., module.path.to.your.ProviderClass
     config: Dict
     params: Dict
-    indices: List[int]
+    tasks: List[Any]
     world_size: int
     world_rank: int
     result_path: str | None
@@ -202,11 +202,25 @@ class BaseRunner(ABC):
         """
         raise NotImplementedError
 
-    def _run_local(self, indices: Sequence[int]) -> List[Any]:
+    def build_tasks(
+        self, indices: Sequence[int], parallel_config: Dict | None = None
+    ) -> List[Any]:
+        """Build dispatch tasks from raw dataset indices.
+
+        Subclasses may override this to switch from simple per-index dispatch
+        to coarser shard tasks that persist outputs on workers.
+        """
+        if self.batch_size is not None:
+            if self.batch_size <= 0:
+                raise ValueError("batch_size must be a positive integer.")
+            return _chunk_indices(indices, self.batch_size)
+        return list(indices)
+
+    def _run_local(self, tasks: Sequence[Any]) -> List[Any]:
         """Run sequentially on the driver using a locally built environment.
 
         Args:
-            indices (Sequence[int]): Indices to process.
+            tasks (Sequence[Any]): Tasks to process.
 
         Returns:
             List[Any]: Results in the same order as ``indices``.
@@ -216,14 +230,15 @@ class BaseRunner(ABC):
         """
         env = self.provider.build_env_local()
         return [
-            self.__class__.forward(i, **env) for i in tqdm(indices, total=len(indices))
+            self.__class__.forward(task, **env)
+            for task in tqdm(tasks, total=len(tasks))
         ]
 
-    def _run_parallel(self, indices: Sequence[int]) -> List[Any]:
+    def _run_parallel(self, tasks: Sequence[Any]) -> List[Any]:
         """Run with synchronous Dask mapping using per-worker environments.
 
         Args:
-            indices (Sequence[int]): Indices to process.
+            tasks (Sequence[Any]): Tasks to process.
 
         Returns:
             List[Any]: Results gathered in order.
@@ -238,16 +253,16 @@ class BaseRunner(ABC):
             for res in tqdm(
                 parallel_for(
                     self.__class__.forward,
-                    indices,
+                    tasks,
                     setup_fn=setup_fn,
                     client=client,
                 ),
-                total=len(indices),
+                total=len(tasks),
             ):
                 out.append(res)
         return out
 
-    async def _run_async(self, indices: Sequence[int]) -> List[Any] | None:
+    async def _run_async(self, tasks: Sequence[Any]) -> List[Any] | None:
         """Submit shards to a Dask cluster and gather or write results.
 
         Workflow:
@@ -272,7 +287,7 @@ class BaseRunner(ABC):
         client = build_client(par_config)
         n_workers = par_config.get("n_workers", 1)
         try:
-            chunks = _default_chunk(indices, n_workers)
+            chunks = _default_chunk(tasks, n_workers)
             self.async_specs_dir.mkdir(parents=True, exist_ok=True)
             self.async_result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -293,7 +308,7 @@ class BaseRunner(ABC):
                     provider_cls=provider_cls,
                     config=config_dict,
                     params=getattr(self.provider, "params", {}) or {},
-                    indices=list(chunk),
+                    tasks=list(chunk),
                     world_size=len(chunks),
                     world_rank=rank,
                     result_path=str(result_path),
@@ -346,17 +361,14 @@ class BaseRunner(ABC):
             - Otherwise, run in parallel with environment injection.
         """
         indices = list(indices)
-        if self.batch_size is not None:
-            if self.batch_size <= 0:
-                raise ValueError("batch_size must be a positive integer.")
-            indices = _chunk_indices(indices, self.batch_size)
-        if self.async_mode:
-            return asyncio.run(self._run_async(indices))
-
         par_config = get_parallel_config()
+        tasks = self.build_tasks(indices, par_config)
+        if self.async_mode:
+            return asyncio.run(self._run_async(tasks))
+
         if par_config is None or getattr(par_config, "env", "local") == "local":
-            return self._run_local(indices)
-        return self._run_parallel(indices)
+            return self._run_local(tasks)
+        return self._run_parallel(tasks)
 
 
 def _chunk_indices(indices: Sequence[int], batch_size: int) -> List[List[int]]:
@@ -373,7 +385,7 @@ def _async_worker_entry_from_spec_path(spec_path: str):
     This function is executed on a Dask worker. It reads the shard spec JSON,
     imports the designated Runner/Provider classes, rebuilds the DictConfig and
     provider, constructs the per-worker environment, and applies
-    ``RunnerClass.forward`` to each index in the shard.
+    ``RunnerClass.forward`` to each task in the shard.
 
     If ``result_path`` is provided, results are streamed to a JSONL file on the
     worker and ``None`` is returned; otherwise the list of results is returned
@@ -412,8 +424,8 @@ def _async_worker_entry_from_spec_path(spec_path: str):
     env = setup_fn()
 
     results = []
-    for idx in spec["indices"]:
-        results.append(RunnerCls.forward(idx, **env))
+    for task in spec["tasks"]:
+        results.append(RunnerCls.forward(task, **env))
 
     result_path = spec.get("result_path")
     if result_path:
