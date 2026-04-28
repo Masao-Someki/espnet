@@ -312,9 +312,7 @@ def test_duplicate_learning_rate_monitor_from_config():
 
 
 def test_metric_to_float_rejects_non_scalar_tensor():
-    with pytest.raises(
-        AssertionError, match="supports only scalar metric values"
-    ):
+    with pytest.raises(AssertionError, match="supports only scalar metric values"):
         _metric_to_float(torch.tensor([1.0, 2.0]))
 
 

@@ -272,6 +272,7 @@ def test_combined_dataset():
     assert combined[0]["text"] == "HELLO"
     assert combined[3]["text"] == "WORLD"
 
+
 def test_combined_dataset_with_string_id():
     ds = DummyStringKeyDataset()
     combined = CombinedDataset(
