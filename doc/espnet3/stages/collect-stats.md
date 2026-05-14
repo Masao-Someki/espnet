@@ -1,57 +1,81 @@
 ---
 title: ESPnet3 Collect Stats Stage
 author:
-  name: "Masao Someki"
-date: 2026-04-15
+- name: "Masao Someki"
+- name: "Elias Naske"
+date: 2026-05-14
 ---
 
 # ESPnet3 Collect Stats Stage
 
 `collect_stats` computes shape files and feature statistics used by later
 training steps.
+This serves two broad purposes:
 
-The stage uses `training.yaml`, not a separate config.
+1. **Shape information for batching**: Precomputing feature lengths lets the iterator adjust batches based on sequence size, which is one of the main ways ESPnet avoids out-of-memory errors.
+2. **Statistics for normalization**: Certain forms of normalization, such as global mean and variance normalization, need dataset-level statistics to be computed. Computing these once here allows them to be reused later.
 
-## Quick usage
+This information is saved to the following files:
 
-### Run
+```text
+${stats_dir}/
+├── train/
+│   ├── feats_shape       # features shapes for batching
+│   ├── feats_stats.npz   # features statistics for normalization
+│   └── stats_keys
+└── valid/
+    ├── feats_shape
+    ├── feats_stats.npz
+    └── stats_keys
+```
+
+Note that `collect_stats` only processes the dataset's `train` and `valid` splits; `test` is ignored.
+
+## How to run
+
+When executing a recipe with `run.py`, specify `create_dataset` as an argument of the `--stages` flag.
 
 ```bash
 python run.py --stages collect_stats --training_config conf/training.yaml
 ```
 
-This runs `collect_stats` over the `train` and `valid` splits and writes
-outputs under `stats_dir/train` and `stats_dir/valid`.
+## Model Requirements
 
-### Configure (in `training.yaml`)
+The model must possess a `collect_feats()` method.
+An implementation of this method exists by default for all models built on ESPnet tasks (e.g. ASR, TTS).
 
-`collect_stats` reads the same `training.yaml` used for training. At minimum:
+Custom models should provide a compatible implementation of the method with the following interface:
 
-- `stats_dir` must be set
-- `dataset` and `dataloader` define the splits and batching
-- `model.normalize_conf.stats_file` often points to the produced stats file
+```collect_feats(self, **batch: torch.Tensor) -> Dict[str, torch.Tensor]```
+
+For features of variable length, the return dictionary should contain a matching `*_lengths` tensor containing the lengths for each sample in the feature tensor.
+
+Example:
+```python
+class MyCustomModel
+  def collect_feats(
+      self,
+      speech: torch.Tensor,
+      speech_lengths: torch.Tensor,
+      **kwargs,
+  ) -> Dict[str, torch.Tensor]:
+      feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+      return {"feats": feats, "feats_lengths": feats_lengths}
+```
+
+## Configuration
+
+The `collect_stats` stage is configured in the same `training.yaml` used for training.
+
+At minimum, the `stats_dir` key must be set to the directionary where the [output files](#outputs) will be dumped.
+Components that require shape or stats files (e.g. `model`, `dataloader`) should point to the corresponding files in `${stats_dir}/train/` or `${stats_dir}/valid/` (Note that these paths are read-only; results are always written to `stats_dir`).
 
 Example:
 
 ```yaml
 stats_dir: ${exp_dir}/stats
 
-dataset:
-  _target_: espnet3.components.data.data_organizer.DataOrganizer
-  recipe_dir: ${recipe_dir}
-  train:
-    - name: train
-      data_src: mini_an4/asr
-      data_src_args:
-        split: train
-        data_path: ${dataset_dir}
-  valid:
-    - name: valid
-      data_src: mini_an4/asr
-      data_src_args:
-        split: valid
-        data_path: ${dataset_dir}
-
+# For shape-based batching
 dataloader:
   train:
     iter_factory:
@@ -59,84 +83,35 @@ dataloader:
         shape_files:
           - ${stats_dir}/train/feats_shape
 
+# For normalization
 model:
   normalize: global_mvn
   normalize_conf:
     stats_file: ${stats_dir}/train/feats_stats.npz
 ```
 
-## What it reads
+### Advanced: GPU-based stats collection
 
-The stage consumes:
+If `parallel` is configured in `training.yaml`, `collect_stats` can reuse ESPnet3's
+parallel execution helpers for heavier feature extraction workloads.
 
-- `dataset`
-- `dataloader`
-- `model`
-- `stats_dir`
-- `parallel` when configured
+Example:
 
-Only `train` and `valid` splits are used.
-
-## Outputs
-
-Typical outputs:
-
-```text
-${stats_dir}/
-  train/
-    feats_shape
-    feats_stats.npz
-    stats_keys
-  valid/
-    feats_shape
-    feats_stats.npz
-    stats_keys
+```yaml
+parallel:
+  env: slurm
+  n_workers: 8
+  options:
+    queue: gpu
+    cores: 8
+    processes: 1
+    memory: 16GB
+    walltime: 30:00
+    job_extra_directives:
+      - "--gres=gpu:1"
 ```
-
-Notes:
-
-- `collect_stats` only processes `train` and `valid`; `test` is ignored
-- during `collect_stats`, `model.normalize_conf.stats_file` is not read as an
-  input source of truth; stats are written under `stats_dir`
-
-## Model requirement
-
-The model must support `collect_feats(...)`.
-
-ESPnet task-backed models already do this. Custom models should provide a
-compatible `collect_feats()` implementation returning feature tensors and, when
-needed, matching `*_lengths`.
-
-## Developer notes
-
-### What runs under the hood
-
-`collect_stats` builds the model and trainer, then calls the trainer-side
-stats-collection path.
-
-The important model contract is `collect_feats(...)`. Task-backed models
-already provide this. Custom models should return a dict of tensors keyed by
-feature name, plus any `*_lengths` entries needed by the batching logic.
-
-Minimal conceptual example:
-
-```python
-class MyCustomModel:
-    def collect_feats(self, speech, speech_lengths, **kwargs):
-        feats = speech
-        feats_lengths = speech_lengths
-        return {"feats": feats, "feats_lengths": feats_lengths}
-```
-
-This is an ASR-style example, but the same rule applies to any task: return the
-features whose statistics should be accumulated, plus lengths when batching
-depends on them.
-
-For more background on why these files exist and how they are reused later, see
-[Collect stats overview](./collect_stats_description.md).
 
 ## Related pages
 
-- [Collect stats overview](./collect_stats_description.md)
 - [Training config](../config/train_config.md)
 - [Dataloader](./train/dataloader.md)

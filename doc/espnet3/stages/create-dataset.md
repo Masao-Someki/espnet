@@ -3,12 +3,10 @@ title: ESPnet3 Create Dataset Stage
 author:
 - name: "Masao Someki"
 - name: "Elias Naske"
-date: 2026-05-13
+date: 2026-05-14
 ---
 
 # ESPnet3 Create Dataset Stage
-
-## What the stage does
 
 `create_dataset()` is responsible for downloading and preparing datasets.
 For each unique dataset source defined for a partition (`dataset.train`, `dataset.valid`, and `dataset.test` in `training.yaml`), it:
@@ -44,7 +42,7 @@ egs3/<recipe>/<task>/
 
 ## Configuration 
 
-`create_dataset` is configured from the `create_dataset` block in
+The `create_dataset` stage is configured from the `create_dataset` block in
 `training.yaml`.
 
 Example:
@@ -55,6 +53,22 @@ dataset_dir: ${recipe_dir}/data/mini_an4
 create_dataset:
   recipe_dir: ${recipe_dir}
   dataset_dir: ${dataset_dir}
+
+dataset:
+  _target_: espnet3.components.data.data_organizer.DataOrganizer
+  recipe_dir: ${recipe_dir}
+  train:
+    - name: train
+      data_src: mini_an4/asr
+      data_src_args:
+        split: train
+        data_path: ${dataset_dir}
+  valid:
+    - name: valid
+      data_src: mini_an4/asr
+      data_src_args:
+        split: valid
+        data_path: ${dataset_dir}
 ```
 
 The following keys are available:
@@ -75,12 +89,12 @@ The builder has two main responsibilities:
 
 To implement these, the builder class must define the following methods:
 
-| Method                         | Returns | What it does                                                                                              |
-| ------------------------------ | ------- | --------------------------------------------------------------------------------------------------------- |
+| Method                         | Returns | What it does                                                                                            |
+| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------- |
 | `is_source_prepared(**kwargs)` | `bool`  | Checks if the raw dataset source files are already available. If `True`, `prepare_source()` is skipped. |
-| `prepare_source(**kwargs)`     | `None`  | Prepares raw source files.                                                                                |
-| `is_built(**kwargs)`           | `bool`  | Checks if manifest files are already built. If `True`, `build()` is skipped.               |
-| `build(**kwargs)`              | `None`  | Builds manifest files for each partition, preprocesses audio files, etc.                                      |
+| `prepare_source(**kwargs)`     | `None`  | Prepares raw source files.                                                                              |
+| `is_built(**kwargs)`           | `bool`  | Checks if manifest files are already built. If `True`, `build()` is skipped.                            |
+| `build(**kwargs)`              | `None`  | Builds manifest files for each partition, preprocesses audio files, etc.                                |
 
 The arguments passed to the builder methods come from the `create_dataset`
 block in `training.yaml`.
