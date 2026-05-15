@@ -1,123 +1,49 @@
 ---
 title: ESPnet3 Train Stage
 author:
-  name: "Masao Someki"
-date: 2026-04-15
+- name: "Masao Someki"
+- name: "Elias Naske"
+date: 2026-05-15
 ---
 
 # ESPnet3 Train Stage
 
-The `train` stage runs model training using:
+The `train` stage runs model training using a [PyTorch Lightning trainer](../core/components/trainer.md) based on the dataset and hyperparameters defined in `training.yaml` and saves model checkpoints and logs.
 
-- `espnet3.systems.base.training.train`
-- `espnet3.components.modeling.lightning_module.ESPnetLightningModule`
-- `espnet3.components.trainers.trainer.ESPnet3LightningTrainer`
-
-## Quick usage
-
-### Run
+## Run
+When executing a recipe with `run.py`, specify `train` as an argument of the `--stages` flag.
 
 ```bash
 python run.py --stages train --training_config conf/training.yaml
 ```
 
-### Configure (in `training.yaml`)
+## Configuration
 
-Keep the core settings in `training.yaml`.
+Training is configured in `training.yaml` using the sections shown in the table below.
+For a detailed list of options, see [Training Configuration](../config/train_config.md) and the links in the table.
 
-| Section | Description |
-| --- | --- |
-| `task` | task entrypoint for ESPnet2-style models |
-| `model` | model definition and normalization settings |
-| `dataset` | train and valid splits |
-| `dataloader` | collate and iterator settings |
-| `trainer` | Lightning trainer configuration |
-| `optimizer`, `scheduler` | single-optimizer training path |
-| `optimizers`, `schedulers` | named multi-optimizer path |
-| `exp_dir` | training output directory |
-| `stats_dir` | stats output directory used by `collect_stats` |
 
-## Main config sections
+| Section                    | Description                                 | Details                                            |
+| -------------------------- | ------------------------------------------- | --------------------------------------------------- |
+| `task`                     | task entrypoint for ESPnet2-style models    |
+| `model`                    | model definition and normalization settings |
+| `dataset`                  | `train` and `valid` splits                  | [Dataset](./train/dataset.md)                       |
+| `dataloader`               | collate and iterator settings               | [Dataloader + Collate](./train/dataloader.md)       |
+| `trainer`                  | Lightning trainer configuration             | [Trainer](../core/components/trainer.md)            |
+| `optimizer`, `scheduler`   | single-optimizer training path              | [Optimizer + Scheduler](./train/optim_scheduler.md) |
+| `optimizers`, `schedulers` | named multi-optimizer path                  | [Optimizer + Scheduler](./train/optim_scheduler.md) |
+| `exp_dir`                  | training output directory                   |
 
-Training uses `training.yaml`.
-
-Typical sections are:
-
-- `task` or `model`
-- `dataset`
-- `dataloader`
-- `optimizer` / `scheduler` or `optimizers` / `schedulers`
-- `trainer`
-- `exp_dir`
-- `stats_dir`
 
 ## Outputs
 
-Training writes under `exp_dir`, including:
+<!-- TODO: file tree for exp_dir -->
 
-- checkpoints
-- logs
-- TensorBoard output if configured
+Training outputs are written under `exp_dir`, including:
 
-`collect_stats` writes under `stats_dir`.
-
-Typical outputs are written under:
-
-- `exp_dir`: checkpoints, logs, TensorBoard files, saved configs
-- `stats_dir`: feature shapes and normalization stats from `collect_stats`
-
-## Key ideas
-
-### Dataset
-
-Current dataset definitions are based on `DataOrganizer` plus dataset reference
-entries using `data_src` and `data_src_args`.
-
-Example:
-
-```yaml
-dataset:
-  _target_: espnet3.components.data.data_organizer.DataOrganizer
-  recipe_dir: ${recipe_dir}
-  train:
-    - name: train
-      data_src: mini_an4/asr
-      data_src_args:
-        split: train
-        data_path: ${dataset_dir}
-  valid:
-    - name: valid
-      data_src: mini_an4/asr
-      data_src_args:
-        split: valid
-        data_path: ${dataset_dir}
-```
-
-Details:
-
-- [Training dataset config](./train/dataset.md)
-- [Dataset references and builders](../core/components/datasets.md)
-
-### Dataloader
-
-| Topic | Summary | Details |
-| --- | --- | --- |
-| `dataloader` | supports ESPnet iterator mode and plain PyTorch `DataLoader` mode | [Dataloader + Collate](./train/dataloader.md) |
-| `trainer` | uses the ESPnet3 Lightning trainer wrapper, not raw Lightning directly | [Trainer](../core/components/trainer.md) |
-| `optimizer`, `scheduler`, `optimizers`, `schedulers` | supports both single-optimizer and named multi-optimizer training | [Optimizer + Scheduler](./train/optim_scheduler.md), [Multiple optimizers and schedulers](../core/components/multiple_optimizers_schedulers.md) |
-| `model` | supports both task-backed ESPnet2 model construction and direct Hydra instantiation | [Model](../core/components/model.md) |
-| `callbacks` | handles logging, checkpointing, and metric reporting such as `MetricsLogger` | [Callbacks](../core/components/callbacks.md) |
-
-### Details by topic
-
-- [Dataset](./train/dataset.md)
-- [Dataloader + Collate](./train/dataloader.md)
-- [Trainer](../core/components/trainer.md)
-- [Optimizer + Scheduler](./train/optim_scheduler.md)
-- [Callbacks](../core/components/callbacks.md)
-
-The train stage is intentionally thin: most customization happens in one of
-those component configs rather than in a stage-specific CLI path.
+- Checkpoints
+- Logs
+- (If configured) TensorBoard output
 
 ## Related pages
 

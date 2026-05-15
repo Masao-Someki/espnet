@@ -33,7 +33,7 @@ Note that `collect_stats` only processes the dataset's `train` and `valid` split
 
 ## How to run
 
-When executing a recipe with `run.py`, specify `create_dataset` as an argument of the `--stages` flag.
+When executing a recipe with `run.py`, specify `collect_stats` as an argument of the `--stages` flag.
 
 ```bash
 python run.py --stages collect_stats --training_config conf/training.yaml
