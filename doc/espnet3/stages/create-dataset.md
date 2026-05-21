@@ -18,7 +18,7 @@ For each unique dataset source defined for a partition (`dataset.train`, `datase
 
 The same dataset source is only prepared once per stage run.
 
-## How to run
+## Run
 
 When executing a recipe with `run.py`, specify `create_dataset` as an argument of the `--stages` flag.
 

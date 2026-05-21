@@ -31,7 +31,7 @@ ${stats_dir}/
 
 Note that `collect_stats` only processes the dataset's `train` and `valid` splits; `test` is ignored.
 
-## How to run
+## Run
 
 When executing a recipe with `run.py`, specify `collect_stats` as an argument of the `--stages` flag.
 

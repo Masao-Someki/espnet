@@ -57,11 +57,7 @@ Optional:
 
 ## Naming behavior
 
-If `training_config` is also loaded in the same `run.py` invocation,
-inference inherits these two values from training:
-
-- `exp_tag`
-- `exp_dir`
+If `training_config` is provided alongside `inference.yaml`, inference will inherit the values for `exp_tag` and `exp_dir` from training. If these keys are also defined in `inference.yaml`, they will be overwritten.
 
 If inference runs standalone, `inference.yaml` must carry its own experiment
 identity, typically through:
@@ -152,6 +148,15 @@ See [Inference stage](../stages/inference.md) for:
 - custom writer example
 - artifact directory structure
 
+## Dataset naming
+
+`dataset.test[*].name` becomes:
+
+- the selected test-set key
+- the subdirectory name under `inference_dir`
+
+This same test-set name is later reused by `measure()`.
+
 ## Batched execution
 
 If `batch_size` is set, `InferenceRunner.forward()` receives a list of indices
@@ -163,7 +168,25 @@ In that case:
 - `idx` becomes a list of indices
 - `output_fn` must return a list of output dicts
 
-If you do not want batched inference, leave `batch_size` unset.
+If your model or `output_fn` does not support batched list inputs, leave
+`batch_size` unset or `null`.
+
+Minimal batched example:
+
+```python
+def build_output(*, data, model_output, idx):
+    return [
+        {
+            "utt_id": item["uttid"],
+            "hyp": hyp,
+            "ref": item.get("text", ""),
+        }
+        for item, hyp in zip(data, model_output["text"])
+    ]
+```
+
+This is why the document examples keep `output_fn` small: most recipe-specific
+formatting problems are easier to solve there than by replacing the whole stage.
 
 ## Parallel execution
 

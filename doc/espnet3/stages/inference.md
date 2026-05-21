@@ -1,94 +1,83 @@
 ---
-title: 📘 ESPnet3 Inference Stage
+title: ESPnet3 Inference Stage
 author:
-  name: "Masao Someki"
-date: 2026-04-15
+  - name: "Masao Someki"
+  - name: "Elias Naske"
+date: 2026-05-21
 ---
 
 # ESPnet3 Inference Stage
 
-The current inference entrypoint is:
+The `infer` stage runs model inference on the provided test set(s) and writes the outputs to disk.
+This file is used to measure model performance in the [`measure`](./measure.md) stage.
 
-- `espnet3.systems.base.inference.infer`
-
-The default runner stack is:
-
-- `espnet3.systems.base.inference_provider.InferenceProvider`
-- `espnet3.systems.base.inference_runner.InferenceRunner`
-
-## Quick usage
-
-### Run
+## Run
+When executing a recipe with `run.py`, specify `infer` as an argument of the `--stages` flag.
 
 ```bash
 python run.py --stages infer --inference_config conf/inference.yaml
 ```
 
-### Configure (in `inference.yaml`)
+## Configuration
 
 Keep the core settings in `inference.yaml`. For the full list, see
 [Inference configuration](../config/infer_config.md).
 
-| Config section | Description |
-| --- | --- |
-| `model` | Hydra target for the inference model |
-| `dataset` | test-set definitions selected by the stage |
-| `parallel` | local or distributed runner settings |
-| `inference_dir` | root output location for SCP files |
-| `input_key` | dataset field or fields passed into the model |
-| `output_fn` | import path to the formatting function |
+| Config section  | Required | Description                                   |
+| --------------- | -------- | --------------------------------------------- |
+| `model`         | ✅        | model to run inference with                   |
+| `dataset`       | ✅        | definition of the test set                    |
+| `inference_dir` | ✅        | root output location                          |
+| `input_key`     |          | dataset field or fields passed into the model |
+| `output_fn`     |          | function used to format the output files      |
+| `parallel`      |          | local or distributed runner settings          |
 
-## Main outputs
+## Outputs
 
 Inference writes one directory per test set:
 
 ```text
 <inference_dir>/
-  <test_name>/
-    hyp.scp
-    ...
+└── <test_name>/
+    ├── hyp.scp
+    └── ...
 ```
 
-Each SCP line is:
+The filenames are determined by:
+
+- `output_keys` when it is set
+- otherwise the keys returned by `output_fn` for the first sample, excluding
+  `idx_key`
+
+### SCP Files
+
+In the `.scp` format, each line represents an utterance and takes the following form:
 
 ```text
-utt_id value
+{utt_id} {value}
 ```
 
-If an output field is non-scalar, ESPnet3 writes an artifact under the test-set
-directory and stores the artifact path in the SCP file.
-
-### Artifact outputs
-
-`output_fn` can return:
-
-- scalar values such as `str`, `int`, `float`, `bool`
-- non-scalar values handled through `output_artifacts`
+The value is determined by `output_fn` and can be either:
+- a scalar value (`str`, `int`, `float`, `bool`)
+- a non-scalar value (e.g. `dict`, `numpy.ndarray`, `torch.tensor`)
 
 Scalar values are written directly into SCP files.
-
-Non-scalar values are written as artifacts under:
-
+Non-scalar values are written as artifacts to a file, and the SCP stores a path to said file.
+Artifacts are written under:
 ```text
 <inference_dir>/<test_name>/<field_name>/
 ```
+The file type depends on the return type of `output_fn`:
 
-and the SCP file stores the written path.
+| Value type          | Default artifact type | Saved as |
+| ------------------- | --------------------- | -------- |
+| `dict`              | `json`                | `.json`  |
+| `numpy.ndarray`     | `npy`                 | `.npy`   |
+| CPU `torch.Tensor`  | `npy`                 | `.npy`   |
+| other Python object | `pickle`              | `.pkl`   |
 
-Built-in artifact behavior:
-
-| Value type | Default artifact type | Saved as |
-| --- | --- | --- |
-| `dict` | `json` | `.json` |
-| `numpy.ndarray` | `npy` | `.npy` |
-| CPU `torch.Tensor` | `npy` | `.npy` |
-| other Python object | `pickle` | `.pkl` |
-
-Config can also force a type such as `wav`.
-
-### WAV example
-
-If `output_fn` returns:
+The config can also be set to force other types, such as `wav`.
+E.g., if `output_fn` returns:
 
 ```python
 {
@@ -110,16 +99,17 @@ then inference writes:
 
 ```text
 <inference_dir>/
-  <test_name>/
-    audio.scp
-    audio/
-      utt1.wav
-      utt2.wav
+└── <test_name>/
+    ├── audio.scp
+    └── audio/
+        ├── utt1.wav
+        └── utt2.wav
 ```
 
 and `audio.scp` stores the generated `.wav` paths.
 
-### Custom artifact writer
+
+### Custom artifact writers
 
 If you want to save a custom type such as PNG, add a writer function and point
 to it from config.
@@ -148,29 +138,11 @@ def write_png_artifact(*, value, output_path):
 
 The writer must return the written path. That path is stored in the SCP file.
 
-### Output directory layout
 
-For each test-set name in `dataset.test`, inference writes:
+## Implementation Details
+### Inference Providers and Runners
 
-```text
-<inference_dir>/<test_name>/
-```
-
-The filenames are determined by:
-
-- `output_keys` when it is set
-- otherwise the keys returned by `output_fn` for the first sample, excluding
-  `idx_key`
-
-### Conceptual provider and runner flow
-
-Inference is a Provider/Runner loop. Conceptually:
-
-```python
-provider = InferenceProvider(config)
-runner = InferenceRunner(provider=provider, async_mode=False)
-results = runner(range(len(provider.build_dataset(config))))
-```
+Inference is implemented as a Provider/Runner loop.
 
 The provider is responsible for:
 
@@ -185,81 +157,16 @@ The runner is responsible for:
 - normalizing the result through `output_fn`
 - returning values that can be written into SCP files
 
-## Experiment naming and `exp_tag`
-
-If `training_config` is loaded in the same `run.py` call, inference inherits:
-
-- `exp_tag`
-- `exp_dir`
-
-If inference runs alone, it uses its own `inference.yaml` values.
-
-### Example: inherited from training
-
-`training.yaml`:
-
-```yaml
-exp_tag: training_branchformer
-exp_dir: ${recipe_dir}/exp/${exp_tag}
+Conceptually:
+```python
+provider = InferenceProvider(config)
+runner = InferenceRunner(provider=provider, async_mode=False)
+results = runner(range(len(provider.build_dataset(config))))
 ```
 
-`inference.yaml`:
-
-```yaml
-exp_tag: inference_beam5
-exp_dir: ${recipe_dir}/exp/${exp_tag}
-inference_dir: ${exp_dir}/${self_name:}
-```
-
-Run:
-
-```bash
-python run.py \
-  --stages train infer \
-  --training_config conf/training.yaml \
-  --inference_config conf/inference.yaml
-```
-
-Final values:
-
-- `exp_tag = training_branchformer`
-- `exp_dir = ${recipe_dir}/exp/training_branchformer`
-- `inference_dir = ${recipe_dir}/exp/training_branchformer/inference`
-
-### Example: not inherited
-
-`inference.yaml`:
-
-```yaml
-exp_tag: inference_beam5
-exp_dir: ${recipe_dir}/exp/${exp_tag}
-inference_dir: ${exp_dir}/${self_name:}
-```
-
-Run:
-
-```bash
-python run.py \
-  --stages infer \
-  --inference_config conf/inference.yaml
-```
-
-Final values:
-
-- `exp_tag = inference_beam5`
-- `exp_dir = ${recipe_dir}/exp/inference_beam5`
-- `inference_dir = ${recipe_dir}/exp/inference_beam5/inference`
-
-## `output_fn`
+### `output_fn`
 
 `output_fn` is called right after the model returns.
-
-The order is:
-
-1. load one sample or one batch from the dataset
-2. call the model with `input_key`
-3. call `output_fn`
-4. write scalar values to SCP files or write artifacts to disk
 
 If provided, `output_fn` is called as:
 
@@ -296,48 +203,17 @@ def build_output(*, data, model_output, idx):
     }
 ```
 
-## Batched inference
-
-If `batch_size` is set, `InferenceRunner.forward()` receives a list of indices
-and passes list-valued inputs to the model.
-
-If your model or `output_fn` does not support batched list inputs, leave
-`batch_size` unset or `null`.
-
-Minimal batched example:
-
-```python
-def build_output(*, data, model_output, idx):
-    return [
-        {
-            "utt_id": item["uttid"],
-            "hyp": hyp,
-            "ref": item.get("text", ""),
-        }
-        for item, hyp in zip(data, model_output["text"])
-    ]
-```
-
-This is why the document examples keep `output_fn` small: most recipe-specific
-formatting problems are easier to solve there than by replacing the whole stage.
-
-## Dataset naming
-
-`dataset.test[*].name` becomes:
-
-- the selected test-set key
-- the subdirectory name under `inference_dir`
-
-This same test-set name is later reused by `measure()`.
 
 ## Using a custom model
 
-Two common paths:
+There a two common paths when using a custom models:
 
 1. keep `InferenceRunner` and replace only `model` and `output_fn`
 2. replace `InferenceRunner` when the normal flow is not enough
 
-### Example: custom decoding algorithm
+It is generally recommended to keep `InferenceRunner` and only replace it for special use cases. 
+
+### Example: Custom Decoding Algorithm
 
 This is the common case:
 

@@ -1,14 +1,16 @@
 ---
-title: 📘 ESPnet3 Measure Stage
+title: ESPnet3 Measure Stage
 author:
-  name: "Masao Someki"
-date: 2026-04-15
+- name: "Masao Someki"
+- name: "Elias Naske"
+date: 2026-04-21
 ---
 
 # ESPnet3 Measure Stage
 
 This page describes the current measurement flow in ESPnet3.
 
+<!--
 The stage entrypoint is:
 
 - `espnet3.systems.base.metric.measure`
@@ -23,12 +25,15 @@ one or more metrics, and writes a single summary file:
 ```text
 <inference_dir>/metrics.json
 ```
+-->
 
-## Quick usage
+## Run
 
 ```bash
 python run.py --stages measure --metrics_config conf/metrics.yaml
 ```
+
+## Configuration
 
 The template config is:
 
