@@ -21,7 +21,7 @@ This page describes the current `training.yaml` used to configure the following 
 | `recipe_dir`, `data_dir`, `exp_dir`, ...           | ✅              | path scaffold for outputs and cached assets                     |
 | `num_device`, `num_nodes`                          |                | resource counts for training                                    |
 | `task`                                             | ✅ (or `model`) | ESPnet task entrypoint used to build an ESPnet2-style model     |
-| `model`                                            | ✅ (or `task`)  | TODO                                                            |
+| `model`                                            | ✅ (or `task`)  | Custom model definition                                                            |
 | `create_dataset`                                   |                | dataset builder kwargs used by `create_dataset`                 |
 | `dataset`                                          | ✅              | train and valid dataset definitions resolved by `DataOrganizer` |
 | `tokenizer`                                        |                | tokenizer or text-builder settings                              |
@@ -209,13 +209,6 @@ Only `data_src_args` is passed to `Dataset(...)`.
 See [Dataset references and builders](../core/components/datasets.md) for
 `data_src` details.
 
-### Settings
-
-| Key | Description |
-| --- | ----------- |
-
-TODO
-
 ### Example
 ```yaml
 dataset:
@@ -240,13 +233,6 @@ Two common modes:
 
 See [Dataloader and Collate](../stages/train/dataloader.md) for `iter_factory`
 details, supported iterator factories, and full config examples.
-
-### Settings
-
-| Key | Description |
-| --- | --- |
-
-TODO
 
 ### Examples
 Sequence Iterator:
@@ -460,8 +446,6 @@ fit:
 | ---------------------- | ------------------------------------------ |
 | `init`                 | Weight initialization strategy             |
 | `best_model_criterion` | Criteria used to compare model performance |
-
-TODO
 
 ### Example
 ```yaml
