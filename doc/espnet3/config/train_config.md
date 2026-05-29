@@ -19,7 +19,7 @@ This page describes the current `training.yaml` used to configure the following 
 | Section                                            | Required       | Description                                                     |
 | -------------------------------------------------- | -------------- | --------------------------------------------------------------- |
 | `recipe_dir`, `data_dir`, `exp_dir`, ...           | ✅              | path scaffold for outputs and cached assets                     |
-| `num_device`, `num_nodes`                          | ?              | resource counts for training                                    |
+| `num_device`, `num_nodes`                          |                | resource counts for training                                    |
 | `task`                                             | ✅ (or `model`) | ESPnet task entrypoint used to build an ESPnet2-style model     |
 | `model`                                            | ✅ (or `task`)  | TODO                                                            |
 | `create_dataset`                                   |                | dataset builder kwargs used by `create_dataset`                 |

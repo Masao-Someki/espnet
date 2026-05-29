@@ -9,7 +9,8 @@ date: 2026-05-14
 # ESPnet3 Create Dataset Stage
 
 `create_dataset()` is responsible for downloading and preparing datasets.
-For each unique dataset source defined for a partition (`dataset.train`, `dataset.valid`, and `dataset.test` in `training.yaml`), it:
+
+For each unique dataset source defined for a partition (`dataset.train`, `dataset.valid`, and `dataset.test` in `training.yaml`), it does the following:
 
 1. resolves the dataset module
 2. instantiates a [builder](#builder) object.
@@ -18,15 +19,13 @@ For each unique dataset source defined for a partition (`dataset.train`, `datase
 
 The same dataset source is only prepared once per stage run.
 
-## Run
-
-When executing a recipe with `run.py`, specify `create_dataset` as an argument of the `--stages` flag.
+## 1. Run
 
 ```bash
 python run.py --stages create_dataset --training_config conf/training.yaml
 ```
 
-## Where the code lives
+### Where the code lives
 
 Within a typical recipe structure, the necessary files are organized like so:
 
@@ -40,12 +39,21 @@ egs3/<recipe>/<task>/
     └── dataset.py      # defines the Dataset class used for training and inference.
 ```
 
-## Configuration 
+## 2. Configuration 
 
 The `create_dataset` stage is configured from the `create_dataset` block in
 `training.yaml`.
 
-Example:
+The following keys are available:
+
+| Key           | Description       | Example                           |
+| ------------- | ----------------- | --------------------------------- |
+| `recipe_dir`  | Recipe directory  | `egs3/mini_an4/asr`               |
+| `dataset_dir` | Dataset directory | `egs3/mini_an4/asr/data/mini_an4` |
+
+For more information, see [Training Configuration](../config/train_config.md)
+
+### Example
 
 ```yaml
 dataset_dir: ${recipe_dir}/data/mini_an4
@@ -71,15 +79,9 @@ dataset:
         data_path: ${dataset_dir}
 ```
 
-The following keys are available:
-
-| Key           | Description       | Example                           |
-| ------------- | ----------------- | --------------------------------- |
-| `recipe_dir`  | Recipe directory  | `egs3/mini_an4/asr`               |
-| `dataset_dir` | Dataset directory | `egs3/mini_an4/asr/data/mini_an4` |
 
 
-## Builder
+## 3. Builder
 
 The code for preparding the dataset is defined in a builder class in `builder.py`, which inherits from [`espnet3.components.data.DatasetBuilder`](../../../espnet3/components/data/dataset_builder.py).
 
@@ -115,9 +117,9 @@ if not builder.is_built(recipe_dir=..., source_dir=...):
   builder.build(recipe_dir=..., source_dir=...)
 ```
 
-## `dataset/__init__.py`
+## 4. `dataset/__init__.py`
 
-To ensure that the dataset and builder classes are accessible to other modules, they should be exported in `dataset/__init__.py` as `Dataset` and `DatasetBuilder` respectively.
+To ensure that the dataset and builder classes are accessible to other modules, they should be exported in `dataset/__init__.py` as `Dataset` and `DatasetBuilder`, respectively.
 
 Minimal example:
 
@@ -128,7 +130,7 @@ from egs3.my_recipe.asr.dataset.dataset import MyDataset as Dataset
 __all__ = ["Dataset", "DatasetBuilder"]
 ```
 
-## How dataset modules are resolved
+## 5. How dataset modules are resolved
 
 Dataset resolution is shared with the normal dataset loading path:
 
@@ -138,9 +140,11 @@ Dataset resolution is shared with the normal dataset loading path:
 
 Details are in:
 
-- [Dataset references and builders](../core/components/datasets.md)
+- [Dataset references and builders](train/dataset.md)
 
-## Example: `mini_an4`
+## 6. Examples
+
+### Example 1: `mini_an4`
 
 `egs3/mini_an4/asr/dataset/builder.py` is a full build example.
 
@@ -172,7 +176,7 @@ from egs3.mini_an4.asr.dataset.dataset import MiniAn4Dataset as Dataset
 __all__ = ["Dataset", "DatasetBuilder"]
 ```
 
-## Example: `librispeech_100`
+### Example 2: `librispeech_100`
 
 `egs3/librispeech_100/asr/dataset/builder.py` is the contrasting pattern.
 

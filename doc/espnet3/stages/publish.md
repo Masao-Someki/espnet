@@ -68,18 +68,20 @@ The appropriate strategy can be set through `pack_model.strategy`, which support
 
 Current ESPnet3 packing copies recipe assets such as:
 
-- `conf/`
-- `src/`
-- `run.py`
-- `pixi.toml`
-- `pixi.lock`
-- `.python-version`
+| Asset             | Description                |
+| ----------------- | -------------------------- |
+| `conf/`           | Configuration files        |
+| `src/`            | Source code                |
+| `run.py`          | Inference entry point      |
+| `pixi.toml`       | Pixi configuration         |
+| `pixi.lock`       | Pixi dependency resolution |
+| `.python-version` | Python version information |
 
 and usually includes the experiment directory and, when enabled, the recipe
 `data_dir`.
 
 `pack_model` writes metadata in `meta.yaml` in the bundle root.
-That metadata is later used by tools such as [running inference through `InferenceSession`](#packaged-model-inference).
+That metadata is later used by tools, such as when [running inference through `InferenceSession`](#packaged-model-inference).
 
 In practice the packed tree often looks like:
 

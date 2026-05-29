@@ -8,7 +8,8 @@ date: 2026-05-28
 
 # ESPnet3 Demo Guide
 
-This page explains how to create and configure Gradio demos.
+This page explains how to create and configure interactive Gradio demos.
+
 A key advantage is that demos **reuse your existing inference code** (providers/runners/models), so you do **not** need to write extra demo-specific Python.
 
 ## 1. Run
@@ -29,7 +30,8 @@ python app.py
 
 This starts a local Gradio server. Open the printed URL in your browser.
 
-`gradio` is required for local demo execution. It can be installed using `pip install gradio`.
+> [!IMPORTANT]
+> `gradio` is required for local demo execution. It can be installed using `pip install gradio`.
 
 
 After packing, the output directory contains the runnable app, configs, and

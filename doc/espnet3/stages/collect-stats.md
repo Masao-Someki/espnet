@@ -15,7 +15,17 @@ This serves two broad purposes:
 1. **Shape information for batching**: Precomputing feature lengths lets the iterator adjust batches based on sequence size, which is one of the main ways ESPnet avoids out-of-memory errors.
 2. **Statistics for normalization**: Certain forms of normalization, such as global mean and variance normalization, need dataset-level statistics to be computed. Computing these once here allows them to be reused later.
 
-This information is saved to the following files:
+Note that `collect_stats` only processes the dataset's `train` and `valid` splits; `test` is ignored.
+
+## 1. Run
+
+```bash
+python run.py --stages collect_stats --training_config conf/training.yaml
+```
+
+## 2. Outputs
+
+The collected information is saved to the following files:
 
 ```text
 ${stats_dir}/
@@ -29,17 +39,7 @@ ${stats_dir}/
     └── stats_keys
 ```
 
-Note that `collect_stats` only processes the dataset's `train` and `valid` splits; `test` is ignored.
-
-## Run
-
-When executing a recipe with `run.py`, specify `collect_stats` as an argument of the `--stages` flag.
-
-```bash
-python run.py --stages collect_stats --training_config conf/training.yaml
-```
-
-## Model Requirements
+## 3. Model Requirements
 
 The model must possess a `collect_feats()` method.
 An implementation of this method exists by default for all models built on ESPnet tasks (e.g. ASR, TTS).
@@ -63,12 +63,14 @@ class MyCustomModel
       return {"feats": feats, "feats_lengths": feats_lengths}
 ```
 
-## Configuration
+## 4. Configuration
 
 The `collect_stats` stage is configured in the same `training.yaml` used for training.
 
 At minimum, the `stats_dir` key must be set to the directionary where the [output files](#outputs) will be dumped.
 Components that require shape or stats files (e.g. `model`, `dataloader`) should point to the corresponding files in `${stats_dir}/train/` or `${stats_dir}/valid/` (Note that these paths are read-only; results are always written to `stats_dir`).
+
+For more information, see [Training Configuration](../config/train_config.md).
 
 Example:
 

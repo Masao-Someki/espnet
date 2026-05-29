@@ -9,30 +9,29 @@ date: 2026-05-21
 # ESPnet3 Inference Stage
 
 The `infer` stage runs model inference on the provided test set(s) and writes the outputs to disk.
-This file is used to measure model performance in the [`measure`](./measure.md) stage.
+The resulting files are used to measure model performance in the [`measure`](./measure.md) stage.
 
-## Run
-When executing a recipe with `run.py`, specify `infer` as an argument of the `--stages` flag.
+## 1. Run
 
 ```bash
 python run.py --stages infer --inference_config conf/inference.yaml
 ```
 
-## Configuration
+## 2. Configuration
 
 Keep the core settings in `inference.yaml`. For the full list, see
 [Inference configuration](../config/infer_config.md).
 
-| Config section  | Required | Description                                   |
-| --------------- | -------- | --------------------------------------------- |
-| `model`         | ✅        | model to run inference with                   |
-| `dataset`       | ✅        | definition of the test set                    |
-| `inference_dir` | ✅        | root output location                          |
-| `input_key`     |          | dataset field or fields passed into the model |
-| `output_fn`     |          | function used to format the output files      |
-| `parallel`      |          | local or distributed runner settings          |
+| Config section  | Description                                   |
+| --------------- | --------------------------------------------- |
+| `model`         | model to run inference with                   |
+| `dataset`       | definition of the test set                    |
+| `inference_dir` | root output location                          |
+| `input_key`     | dataset field or fields passed into the model |
+| `output_fn`     | function used to format the output files      |
+| `parallel`      | local or distributed runner settings          |
 
-## Outputs
+## 3. Outputs
 
 Inference writes one directory per test set:
 
@@ -51,7 +50,7 @@ The filenames are determined by:
 
 ### SCP Files
 
-In the `.scp` format, each line represents an utterance and takes the following form:
+Within a `.scp` file, each line represents an utterance and takes the following form:
 
 ```text
 {utt_id} {value}
@@ -139,7 +138,7 @@ def write_png_artifact(*, value, output_path):
 The writer must return the written path. That path is stored in the SCP file.
 
 
-## Implementation Details
+## 4. Implementation Details
 ### Inference Providers and Runners
 
 Inference is implemented as a Provider/Runner loop.
@@ -204,7 +203,7 @@ def build_output(*, data, model_output, idx):
 ```
 
 
-## Using a custom model
+## 5. Using a custom model
 
 There a two common paths when using a custom models:
 

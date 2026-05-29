@@ -10,20 +10,19 @@ date: 2026-05-15
 
 The `train` stage runs model training using a [PyTorch Lightning trainer](../core/components/trainer.md) based on the dataset and hyperparameters defined in `training.yaml` and saves model checkpoints and logs.
 
-## Run
-When executing a recipe with `run.py`, specify `train` as an argument of the `--stages` flag.
+## 1. Run
 
 ```bash
 python run.py --stages train --training_config conf/training.yaml
 ```
 
-## Configuration
+## 2. Configuration
 
 Training is configured in `training.yaml` using the sections shown in the table below.
 For a detailed list of options, see [Training Configuration](../config/train_config.md) and the links in the table.
 
 
-| Section                    | Description                                 | Details                                            |
+| Section                    | Description                                 | Details                                             |
 | -------------------------- | ------------------------------------------- | --------------------------------------------------- |
 | `task`                     | task entrypoint for ESPnet2-style models    |
 | `model`                    | model definition and normalization settings |
@@ -35,9 +34,7 @@ For a detailed list of options, see [Training Configuration](../config/train_con
 | `exp_dir`                  | training output directory                   |
 
 
-## Outputs
-
-<!-- TODO: file tree for exp_dir -->
+## 3. Outputs
 
 Training outputs are written under `exp_dir`, including:
 
