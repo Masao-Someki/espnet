@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 from typeguard import typechecked
 
 try:
@@ -56,9 +56,9 @@ class ESPnetClassificationModel(AbsESPnetModel):
         super().__init__()
         if torcheval_import_error is not None:
             raise ImportError(
-                "`torcheval` is not available. Please install it "
-                "via `pip install torcheval` in your environment."
-                "More info at: `https://pytorch.org/torcheval/stable/`"
+                "``torcheval`` is not available. Please install it "
+                "via ``pip install torcheval`` in your environment."
+                "More info at: ``https://pytorch.org/torcheval/stable/``"
                 f"Original error is: {torcheval_import_error}"
             )
         self.vocab_size = vocab_size
@@ -207,7 +207,7 @@ class ESPnetClassificationModel(AbsESPnetModel):
         Returns:
             scores: (Batch, Length, n_classes)
         """
-        with autocast(False):
+        with autocast("cuda", enabled=False):
             # 1. Extract feats
             feats, feats_lengths = self._extract_feats(speech, speech_lengths)
 

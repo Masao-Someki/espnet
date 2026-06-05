@@ -10,7 +10,11 @@ from omegaconf import OmegaConf
 
 # Import the functions under test (adjust import path if your file/module path differs)
 from espnet3.components.data.collect_stats import (
+    _build_model,
+    _chunk_indices,
+    _instantiate_dataset,
     collect_stats,
+    collect_stats_batch,
 )
 
 mp.set_start_method("fork", force=True)
@@ -26,7 +30,7 @@ mp.set_start_method("fork", force=True)
 # | test_collect_stats_local_basic       |  counts/sums correctly and       　 |
 # |                                      | writes expected feature/statistics files    |
 # | test_collect_stats_parallel_basic    | Verifies that parallel mode         |
-# |                                      | (setup_fn + parallel_for) matches local     |
+# |                                      | (runner + shard outputs) matches local      |
 # |                                      | aggregation logic and writes expected files |
 # | test_collect_stats_entry_point_basic | Verifies top-level collect_stats() function |
 # |                                      | works for different modes and produces      |
@@ -140,6 +144,14 @@ class DummyModel:
         mel = (x * self.scale).to(self.device)
         mel_lengths = lengths.to(self.device)
         return {"mel": mel, "mel_lengths": mel_lengths}
+
+
+class NoCollectModel:
+    def to(self, device):
+        return self
+
+    def eval(self):
+        return self
 
 
 # ---------------------------------------
@@ -267,6 +279,81 @@ def test_collect_stats_local_basic(
     total_count = _expected_total_count(ds)
     cnt, s, sq = _load_npz_counts(mode_dir, "mel")
     assert int(cnt) == total_count, "Total frame count mismatch for mel"
+
+
+def test_build_model_rejects_missing_collect_feats():
+    cfg = OmegaConf.create(
+        {
+            "model_config": {"_target_": f"{__name__}.NoCollectModel"},
+        }
+    )
+
+    with pytest.raises(
+        AttributeError, match="missing required callable 'collect_feats'"
+    ):
+        _build_model(cfg)
+
+
+def test_collect_stats_batch_rejects_invalid_collate_shape():
+    dataset = DummyDataset(n=2)
+    model = DummyModel()
+
+    def bad_collate(_items):
+        return {"x": torch.zeros(1)}
+
+    with pytest.raises(RuntimeError, match="return \\(uids, batch_dict\\)"):
+        collect_stats_batch(
+            [0, 1],
+            model=model,
+            dataset=dataset,
+            collate_fn=bad_collate,
+            device=torch.device("cpu"),
+        )
+
+
+def test_collect_stats_batch_rejects_non_mapping_features():
+    dataset = DummyDataset(n=2)
+    model = DummyModel()
+
+    def bad_collate(_items):
+        return ["utt0", "utt1"], ["not", "a", "mapping"]
+
+    with pytest.raises(RuntimeError, match="return a mapping for batch tensors"):
+        collect_stats_batch(
+            [0, 1],
+            model=model,
+            dataset=dataset,
+            collate_fn=bad_collate,
+            device=torch.device("cpu"),
+        )
+
+
+def test_collect_stats_batch_rejects_conflicting_kwargs():
+    dataset = DummyDataset(n=2)
+    model = DummyModel()
+    collate = DummyCollate()
+
+    with pytest.raises(ValueError, match="kwargs conflict with batch tensors"):
+        collect_stats_batch(
+            [0, 1],
+            model=model,
+            dataset=dataset,
+            collate_fn=collate,
+            device=torch.device("cpu"),
+            collect_stats_kwargs={"x": torch.zeros(1)},
+        )
+
+
+def test_chunk_indices_rejects_non_positive_batch_size():
+    with pytest.raises(ValueError, match="batch_size must be a positive integer"):
+        _chunk_indices(10, 0)
+
+
+def test_instantiate_dataset_rejects_missing_split():
+    dataset_cfg = make_dataset_cfg(n_train=1, n_valid=0)
+
+    with pytest.raises(ValueError, match="does not provide split 'test'"):
+        _instantiate_dataset(dataset_cfg, "test")
 
 
 # ----------------------------

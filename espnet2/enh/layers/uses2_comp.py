@@ -30,7 +30,7 @@ class USES2_Comp(nn.Module):
         input_size (int): dimension of the input feature.
         output_size (int): dimension of the output.
         bottleneck_size (int): dimension of the bottleneck feature.
-            Must be a multiple of `att_heads`.
+            Must be a multiple of ``att_heads``.
         num_blocks (int): number of processing blocks.
         num_spatial_blocks (int): number of processing blocks with channel modeling.
         segment_size (int): number of frames in each non-overlapping segment.
@@ -214,7 +214,7 @@ class USES2_Comp(nn.Module):
             ret.append(out)
 
         output = torch.cat(ret, dim=-1)[..., :T]
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             output = self.output(output.mean(1))  # B, output_size, F, T
         return output
 

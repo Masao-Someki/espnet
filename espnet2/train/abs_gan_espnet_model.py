@@ -14,7 +14,7 @@ from espnet2.train.abs_espnet_model import AbsESPnetModel
 class AbsGANESPnetModel(AbsESPnetModel, torch.nn.Module, ABC):
     """The common abstract class among each GAN-based task.
 
-    "ESPnetModel" is referred to a class which inherits torch.nn.Module,
+    "ESPnetModel" is referred to a class which inherits ``torch.nn.Module``,
     and makes the dnn-models "forward" as its member field, a.k.a delegate
     pattern. And "forward" must accept the argument "forward_generator" and
     Return the dict of "loss", "stats", "weight", and "optim_idx".
@@ -68,12 +68,3 @@ class AbsGANESPnetModel(AbsESPnetModel, torch.nn.Module, ABC):
     @abstractmethod
     def collect_feats(self, **batch: torch.Tensor) -> Dict[str, torch.Tensor]:
         raise NotImplementedError
-
-    def clear_cache(self) -> None:
-        """Clear cached generator outputs kept across GAN turns.
-
-        GAN tasks may reuse generator-side intermediate results between the
-        generator and discriminator turns for the same batch. Override this
-        hook when a concrete task keeps such temporary state and needs an
-        explicit cleanup point when one of the turns is skipped.
-        """

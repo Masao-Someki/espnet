@@ -184,7 +184,7 @@ class DemoRunner(BaseRunner):
         return {"hyp": hyp}
 ```
 
-### Output mapping (`output_keys`)
+### Output mapping (output_keys)
 
 When outputs are defined, `output_keys` maps UI output names to keys returned by
 your runner/model result. This lets you return a structured dict (e.g.,

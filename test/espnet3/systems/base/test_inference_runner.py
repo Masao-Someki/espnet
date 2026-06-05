@@ -1,7 +1,7 @@
 import pytest
 
 from espnet3.parallel.base_runner import BaseRunner
-from espnet3.systems.base.inference_runner import InferenceRunner
+from espnet3.systems.base.inference_runner import InferenceRunner, _load_output_fn
 
 
 class DummyProvider:
@@ -60,14 +60,15 @@ def test_validate_output_rejects_non_dict_and_idx_list():
         runner._validate_output({"utt_id": [1], "hyp": "h", "ref": "r"})
 
 
-def test_call_async_returns_raw(monkeypatch):
+def test_call_rejects_non_dict_result(monkeypatch):
     def fake_base_call(self, indices):
         return ["raw"]
 
     monkeypatch.setattr(BaseRunner, "__call__", fake_base_call)
-    runner = DummyRunner(DummyProvider(), async_mode=True)
+    runner = DummyRunner(DummyProvider())
 
-    assert runner([0]) == ["raw"]
+    with pytest.raises(TypeError, match="Expected dict output"):
+        runner([0])
 
 
 def test_call_flattens_and_validates(monkeypatch):
@@ -99,3 +100,105 @@ def test_call_propagates_validation_error(monkeypatch):
 
     with pytest.raises(ValueError, match="idx_key='utt_id'"):
         runner([0])
+
+
+def test_load_output_fn_rejects_missing_module():
+    with pytest.raises(ModuleNotFoundError):
+        _load_output_fn("no.such.module.output_fn")
+
+
+def test_validate_output_rejects_missing_hyp_ref_keys():
+    runner = DummyRunner(
+        DummyProvider(), idx_key="utt_id", hyp_key="hyp", ref_key="ref"
+    )
+    with pytest.raises(ValueError, match="missing="):
+        runner._validate_output({"utt_id": "u1"})
+
+
+def test_forward_raises_without_input_key_kwarg():
+    with pytest.raises(RuntimeError, match="input_key must be provided"):
+        InferenceRunner.forward(0, dataset=[], model=lambda: None)
+
+
+def test_forward_single_raises_key_error_for_missing_dataset_key():
+    dataset = [{"speech": 1.0}]
+    with pytest.raises(KeyError, match="Input key"):
+        InferenceRunner.forward(
+            0, dataset=dataset, model=lambda **kw: None, input_key="text"
+        )
+
+
+def test_forward_batched_raises_key_error_for_missing_dataset_key():
+    dataset = [{"speech": 1.0}, {"speech": 2.0}]
+    with pytest.raises(KeyError, match="Input key"):
+        InferenceRunner.forward(
+            [0, 1], dataset=dataset, model=lambda **kw: None, input_key="text"
+        )
+
+
+def test_forward_batched_returns_model_output_without_output_fn():
+    dataset = [{"speech": 1.0}, {"speech": 2.0}]
+
+    def model(speech):
+        return {"result": speech}
+
+    result = InferenceRunner.forward(
+        [0, 1], dataset=dataset, model=model, input_key="speech"
+    )
+    assert result == {"result": [1.0, 2.0]}
+
+
+def test_forward_single_returns_model_output_without_output_fn():
+    dataset = [{"speech": 1.0}]
+
+    def model(speech):
+        return {"result": speech}
+
+    result = InferenceRunner.forward(
+        0, dataset=dataset, model=model, input_key="speech"
+    )
+    assert result == {"result": 1.0}
+
+
+def test_forward_single_passes_model_kwargs_to_model():
+    dataset = [{"speech": 1.0}]
+
+    def model(speech, beam_size):
+        return {"result": f"{speech}:{beam_size}"}
+
+    result = InferenceRunner.forward(
+        0,
+        dataset=dataset,
+        model=model,
+        input_key="speech",
+        model_kwargs={"beam_size": 2},
+    )
+    assert result == {"result": "1.0:2"}
+
+
+def test_forward_batched_passes_model_kwargs_to_model():
+    dataset = [{"speech": 1.0}, {"speech": 2.0}]
+
+    def model(speech, beam_size):
+        return {"result": f"{speech}:{beam_size}"}
+
+    result = InferenceRunner.forward(
+        [0, 1],
+        dataset=dataset,
+        model=model,
+        input_key="speech",
+        model_kwargs={"beam_size": 4},
+    )
+    assert result == {"result": "[1.0, 2.0]:4"}
+
+
+def test_forward_batched_wraps_model_exception_in_runtime_error():
+    dataset = [{"speech": 1.0}]
+
+    def failing_model(speech):
+        raise ValueError("model broken")
+
+    with pytest.raises(RuntimeError, match="Batched inference failed"):
+        InferenceRunner.forward(
+            [0], dataset=dataset, model=failing_model, input_key="speech"
+        )

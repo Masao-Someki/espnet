@@ -28,7 +28,7 @@ class USES2_Swin(nn.Module):
         input_size (int): dimension of the input feature.
         output_size (int): dimension of the output.
         bottleneck_size (int): dimension of the bottleneck feature.
-            Must be a multiple of `att_heads`.
+            Must be a multiple of ``att_heads``.
         num_blocks (int): number of ResSwinBlock blocks.
         num_spatial_blocks (int): number of ResSwinBlock blocks with channel modeling.
         swin_block_depth (Tuple[int]): depth of each ResSwinBlock.
@@ -144,7 +144,7 @@ class USES2_Swin(nn.Module):
         for block in self.blocks:
             output = block(output, ref_channel=ref_channel)
 
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast("cuda", enabled=False):
             output = self.output(output.mean(1))  # B, output_size, F, T
         return output
 
@@ -326,7 +326,7 @@ class ChannelAttentionTAC(nn.Module):
             LayerNormalization(input_dim, dim=-1, total_dim=5, eps=eps),
         )
 
-    @torch.cuda.amp.autocast(enabled=False)
+    @torch.amp.autocast("cuda", enabled=False)
     def forward(self, x, ref_channel=None):
         """TAttC Forward.
 

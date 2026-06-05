@@ -138,10 +138,6 @@ Dataset resolution is shared with the normal dataset loading path:
 2. `data_src: egs3.mini_an4.asr.dataset`
 3. omitted `data_src`, which loads `${recipe_dir}/dataset/__init__.py`
 
-Details are in:
-
-- [Dataset references and builders](train/dataset.md)
-
 ## 6. Examples
 
 ### Example 1: `mini_an4`

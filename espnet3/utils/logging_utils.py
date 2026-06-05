@@ -215,9 +215,9 @@ def configure_logging(
 
     **Configured logging outputs.**
       - A root logger with a stream handler (console).
-      - An optional file handler at `log_dir/filename`.
-      - If `log_dir/filename` already exists, it is rotated to the next
-        available suffix (e.g., `run1.log`) and a fresh `run.log` is created.
+      - An optional file handler at ``log_dir/filename``.
+      - If ``log_dir/filename`` already exists, it is rotated to the next
+        available suffix (e.g., ``run1.log``) and a fresh ``run.log`` is created.
       - Warning capture into the logging system.
 
     **Example usage.**
@@ -245,16 +245,10 @@ def configure_logging(
         log_dir (Path | None): Directory to store the log file.
             If None, only console logging is configured.
         level (int): Logging level (e.g., logging.INFO).
-        filename (str): Log file name when `log_dir` is provided.
+        filename (str): Log file name when ``log_dir`` is provided.
 
     Returns:
         logging.Logger: Logger instance named "espnet3".
-
-    Example:
-        >>> from pathlib import Path
-        >>> logger = configure_logging(log_dir=Path("exp/logs"))
-        >>> logger.name
-        'espnet3'
     """
     root = logging.getLogger()
     root.setLevel(level)
@@ -309,17 +303,6 @@ def set_stage_log_handler(
 
     Returns:
         Path | None: Resolved log file path when installed, otherwise None.
-
-    Example:
-        >>> import logging
-        >>> from pathlib import Path
-        >>> p = set_stage_log_handler(
-        ...     logging.getLogger("espnet3"),
-        ...     Path("exp/logs"),
-        ...     filename="train.log",
-        ... )
-        >>> p is None
-        False
     """
     if log_dir is None:
         return None
@@ -368,7 +351,7 @@ def get_git_metadata(cwd: Path | None = None) -> dict[str, str]:
     """Return git metadata for the current repository.
 
     This attempts to read commit hash, short hash, branch name, and worktree
-    status from the git repository rooted at `cwd`.
+    status from the git repository rooted at ``cwd``.
 
     Args:
         cwd (Path | None): Directory within the target git repo.
@@ -379,10 +362,6 @@ def get_git_metadata(cwd: Path | None = None) -> dict[str, str]:
             - "short_commit": Abbreviated commit hash.
             - "branch": Current branch name.
             - "worktree": "clean", "dirty", or "unknown".
-
-    Example:
-        >>> meta = get_git_metadata()  # doctest: +SKIP
-        >>> meta.get("short_commit")  # doctest: +SKIP
     """
     cwd = cwd or Path.cwd()
     status = _run_git_command(["git", "status", "--short"], cwd)
@@ -521,13 +500,6 @@ def log_run_metadata(
         configs (Mapping[str, Path | None] | None): Named config paths to log.
         write_requirements (bool): If True, export pip freeze output to
             requirements.txt alongside the log file.
-
-    Returns:
-        None
-
-    Example:
-        >>> import logging
-        >>> log_run_metadata(logging.getLogger("espnet3"))  # doctest: +SKIP
     """
     logger.info("=== ESPnet3 run started: %s ===", datetime.now().isoformat())
     logger.log(
@@ -671,13 +643,6 @@ def log_env_metadata(
         cluster_prefixes (Iterable[str] | None): Prefixes for cluster variables.
         runtime_prefixes (Iterable[str] | None): Prefixes for runtime variables.
         runtime_keys (Iterable[str] | None): Explicit runtime keys to include.
-
-    Returns:
-        None
-
-    Example:
-        >>> import logging
-        >>> log_env_metadata(logging.getLogger("espnet3"))  # doctest: +SKIP
     """
     cluster_prefixes = cluster_prefixes or (
         "SLURM_",
@@ -976,9 +941,9 @@ def log_component(
               value: 7
 
     Notes:
-        - The logger uses `stacklevel=2` so log lines point at the caller.
-        - Attribute dumping uses `build_qualified_name` for readable class names.
-        - Set `max_depth` to 0 to log only the class and repr lines.
+        - The logger uses ``stacklevel=2`` so log lines point at the caller.
+        - Attribute dumping uses ``build_qualified_name`` for readable class names.
+        - Set ``max_depth`` to 0 to log only the class and repr lines.
     """
     if obj is None:
         return
@@ -1011,7 +976,7 @@ def log_instance_dict(
 
     **Description.**
         Iterates over the provided mapping and logs each value using the shared
-        `kind` label. This is useful for dumping collections of structured
+        ``kind`` label. This is useful for dumping collections of structured
         objects (e.g., environment info blocks or component registries) in a
         consistent, readable format.
 
@@ -1026,7 +991,7 @@ def log_instance_dict(
 
     Notes:
         - Empty mappings are ignored.
-        - Each entry is logged via `log_component`, which emits a class line,
+        - Each entry is logged via ``log_component``, which emits a class line,
           a repr line, and selected public attributes.
 
     Examples:

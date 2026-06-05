@@ -116,4 +116,3 @@ parallel:
 ## Related pages
 
 - [Training config](../config/train_config.md)
-- [Dataloader](./train/dataloader.md)

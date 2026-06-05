@@ -10,7 +10,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 from typeguard import typechecked
 
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
@@ -148,7 +148,7 @@ class TorchAudioHubertPretrainModel(AbsESPnetModel):
             y_pad: (Batch, Length, ...)
             y_pad_length: (Batch, )
         """
-        with autocast(False):
+        with autocast("cuda", enabled=False):
             # 1. Extract feats
             feats, feats_lengths = self._extract_feats(speech, speech_lengths)
 
@@ -219,9 +219,9 @@ class TorchAudioHubertPretrainModel(AbsESPnetModel):
 
         Args:
             logit_m (Tensor or None): The masked logit Tensor of dimension
-                `(masked_frames, final_dim)`.
+                ``(masked_frames, final_dim)``.
             logit_u (Tensor or None): The non-masked logit Tensor of dimension
-                `(unmasked_frames, final_dim)`.
+                ``(unmasked_frames, final_dim)``.
             feature_penalty (Tensor): The feature mean value for additional penalty
                 loss.
             masked_weight (float, optional): The weight for masked cross-entropy loss
@@ -385,7 +385,7 @@ class HubertPretrainModel(AbsESPnetModel):
             y_pad: (Batch, Length, ...)
             y_pad_length: (Batch, )
         """
-        with autocast(False):
+        with autocast("cuda", enabled=False):
             # 1. Extract feats
             feats, feats_lengths = self._extract_feats(speech, speech_lengths)
 

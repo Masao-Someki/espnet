@@ -150,5 +150,4 @@ For aligned SCP inputs, the normal implementation pattern is
 
 ## Related pages
 
-- [Metrics configuration](../config/measure_config.md)
 - [Custom metrics](../core/components/metrics.md)
