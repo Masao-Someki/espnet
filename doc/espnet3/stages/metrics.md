@@ -25,9 +25,7 @@ The summary file format is:
 ├── metrics.json
 └── test-clean/
     ├── ref.scp
-    ├── hyp.scp
-    ├── wer_alignment
-    └── cer_alignment
+    └── hyp.scp
 ```
 
 `metrics.json` is keyed by metric class path, then by test set name.
@@ -69,8 +67,9 @@ Here, the values for `ref_key` and `hyp_key` are the names of the SCP file creat
 ```
 where `<test_name>` is the name of the test partition (e.g., `test-clean`).
 
-> [!IMPORTANT]
-> `measure()` does not preload SCP contents into lists. It resolves file paths and passes them directly to each metric.
+::: important
+`measure()` does not preload SCP contents into lists. It resolves file paths and passes them directly to each metric.
+:::
 
 ### Inputs and SCP filenames
 
@@ -150,4 +149,11 @@ For aligned SCP inputs, the normal implementation pattern is
 
 ## Related pages
 
-- [Custom metrics](../core/components/metrics.md)
+<DocCards :cols="3">
+  <DocCard
+    title="Custom metrics"
+    desc="Learn how to implement custom evaluation metrics."
+    icon="tabler:file-code"
+    href="../core/components/metrics.html"
+  />
+</DocCards>

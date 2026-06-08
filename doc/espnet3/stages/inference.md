@@ -9,7 +9,7 @@ date: 2026-05-21
 # ESPnet3 Inference Stage
 
 The `infer` stage runs model inference on the provided test set(s) and writes the outputs to disk.
-The resulting files are used to measure model performance in the [`measure`](./measure.md) stage.
+The resulting files are used to measure model performance in the [`measure`](./metrics.md) stage.
 
 ## 1. Run
 
@@ -162,6 +162,18 @@ provider = InferenceProvider(config)
 runner = InferenceRunner(provider=provider, async_mode=False)
 results = runner(range(len(provider.build_dataset(config))))
 ```
+
+### Batch Inference
+
+Inference can be run batched by setting `runner.batch_size`.
+
+For example:
+```yaml
+runner:
+  batch_size: 4
+```
+
+This will pass a list of indices to `InferenceRunner.forward()`.
 
 ### `output_fn`
 
@@ -327,6 +339,23 @@ Use this path only when `output_fn` is not enough.
 
 ## Related pages
 
-- [Inference configuration](../config/infer_config.md)
-- [Measure stage](./measure.md)
-- [Provider / runner](../core/parallel/provider_runner.md)
+<DocCards :cols="3">
+  <DocCard
+    title="Inference configuration"
+    desc="See all options for cofiguring the inference stage."
+    icon="tabler:file-code"
+    href="../config/infer_config.html"
+  />
+  <DocCard
+    title="Measure stage"
+    desc="Information on the measure stage."
+    icon="tabler:puzzle"
+    href="./metrics.html"
+  />
+  <DocCard
+    title="Provider / Runner"
+    desc="Learn how providers and runners work together during inference."
+    icon="tabler:tool"
+    href="../core/parallel/provider_runner.html"
+  />
+</DocCards>

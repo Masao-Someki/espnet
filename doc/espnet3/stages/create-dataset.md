@@ -63,8 +63,6 @@ create_dataset:
   dataset_dir: ${dataset_dir}
 
 dataset:
-  _target_: espnet3.components.data.data_organizer.DataOrganizer
-  recipe_dir: ${recipe_dir}
   train:
     - name: train
       data_src: mini_an4/asr
@@ -198,6 +196,25 @@ manifest representation.
 
 ## Related pages
 
-- [Dataset references and builders](../core/components/datasets.md)
-- [DataOrganizer](../core/components/data-organizer.md)
 - [Training dataset config](./train/dataset.md)
+
+<DocCards :cols="3">
+  <DocCard
+    title="Dataset references and builders"
+    desc="See the dataset-side builders and references used before batching."
+    icon="tabler:database"
+    href=../core/components/datasets.html"
+  />
+  <DocCard
+    title="DataOrganizer"
+    desc="See how dataset split are organized before batching."
+    icon="tabler:folders"
+    href="../core/components/data-organizer.html"
+  />
+  <DocCard
+    title="Training dataset config"
+    desc="See how dataset options are configured in training.yaml"
+    icon="tabler:puzzle"
+    href="../train/dataset.html"
+  />
+</DocCards>

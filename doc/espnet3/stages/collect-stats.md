@@ -12,7 +12,7 @@ date: 2026-05-14
 training steps.
 This serves two broad purposes:
 
-1. **Shape information for batching**: Precomputing feature lengths lets the iterator adjust batches based on sequence size, which is one of the main ways ESPnet avoids out-of-memory errors.
+1. **Shape information for batching**: Precomputing feature lengths lets the iterator adjust batches based on sequence size, which is one of the main ways ESPnet avoids out-of-memory errors. For more information on batching, see [Dataloader](../core/components/dataloader.html).
 2. **Statistics for normalization**: Certain forms of normalization, such as global mean and variance normalization, need dataset-level statistics to be computed. Computing these once here allows them to be reused later.
 
 Note that `collect_stats` only processes the dataset's `train` and `valid` splits; `test` is ignored.
@@ -67,7 +67,7 @@ class MyCustomModel
 
 The `collect_stats` stage is configured in the same `training.yaml` used for training.
 
-At minimum, the `stats_dir` key must be set to the directionary where the [output files](#outputs) will be dumped.
+At minimum, the `stats_dir` key must be set to the directionary where the output files will be dumped.
 Components that require shape or stats files (e.g. `model`, `dataloader`) should point to the corresponding files in `${stats_dir}/train/` or `${stats_dir}/valid/` (Note that these paths are read-only; results are always written to `stats_dir`).
 
 For more information, see [Training Configuration](../config/train_config.md).
@@ -116,3 +116,12 @@ parallel:
 ## Related pages
 
 - [Training config](../config/train_config.md)
+
+<DocCards :cols="3">
+  <DocCard
+    title="Train Config"
+    desc="All available setting for training.yaml."
+    icon="tabler:file-code"
+    href="../config/train_config.html"
+  />
+</DocCards>

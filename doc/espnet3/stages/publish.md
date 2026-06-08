@@ -12,10 +12,10 @@ The publication stage is used to publish a trained model to Hugging Face.
 
 This is a two-step process:
 
-| Step           | Description                       | Implementation                                                                        |
-| -------------- | --------------------------------- | ------------------------------------------------------------------------------------- |
-| `pack_model`   | Prepares the model files.         | [`espnet3.utils.publish_utils.pack_model`](../../../espnet3/utils/publish_utils.py)   |
-| `upload_model` | Uploads the model to Hugging Face | [`espnet3.utils.publish_utils.upload_model`](../../../espnet3/utils/publish_utils.py) |
+| Step           | Description                       | Implementation                             |
+| -------------- | --------------------------------- | ------------------------------------------ |
+| `pack_model`   | Prepares the model files.         | `espnet3.utils.publish_utils.pack_model`   |
+| `upload_model` | Uploads the model to Hugging Face | `espnet3.utils.publish_utils.upload_model` |
 
 ## 1. Run
 
@@ -152,5 +152,11 @@ The packed directory must already exist before upload runs.
 
 ## Related pages
 
-- [Publication configuration](../config/publish_config.md)
-- [Inference stage](./inference.md)
+<DocCards :cols="3">
+  <DocCard
+    title="Publication configuration"
+    desc="All options for configuring the publication stage"
+    icon="tabler:file-code"
+    href="../config/publish_config.html"
+  />
+</DocCards>
