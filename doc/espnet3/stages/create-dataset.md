@@ -196,8 +196,6 @@ manifest representation.
 
 ## Related pages
 
-- [Training dataset config](./train/dataset.md)
-
 <DocCards :cols="3">
   <DocCard
     title="Dataset references and builders"

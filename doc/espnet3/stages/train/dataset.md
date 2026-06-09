@@ -159,9 +159,3 @@ same config is useful because:
 
 Each test entry should define `name`, because that becomes the test-set name
 used in `inference_dir/<test_name>/`.
-
-## Related pages
-
-- [Dataset references and builders](../../core/components/datasets.md)
-- [DataOrganizer](../../core/components/data-organizer.md)
-- [Create dataset stage](../create-dataset.md)

@@ -103,7 +103,3 @@ batch.
 - named optimizer and scheduler keys must match exactly
 - trainer-level gradient clipping is not supported in multi-optimizer mode
 
-## Related pages
-
-- [Optimizer configuration](../../core/components/optimizer_configuration.md)
-- [Multiple optimizers and `OptimizationStep`](../../core/components/multiple_optimizers_schedulers.md)
