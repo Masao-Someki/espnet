@@ -22,15 +22,15 @@ Training is configured in `training.yaml` using the sections shown in the table 
 For a detailed list of options, see [Training Configuration](../config/train_config.md) and the links in the table.
 
 
-| Section                    | Description                                 | Details                                             |
-| -------------------------- | ------------------------------------------- | --------------------------------------------------- |
+| Section                    | Description                                 | Details                                                                                    |
+| -------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `task`                     | task entrypoint for ESPnet2-style models    |
 | `model`                    | model definition and normalization settings |
-| `dataset`                  | `train` and `valid` splits                  | [Dataset](./train/dataset.md)                       |
-| `dataloader`               | collate and iterator settings               | [Dataloader + Collate](./train/dataloader.md)       |
-| `trainer`                  | Lightning trainer configuration             | [Trainer](../core/components/trainer.md)            |
-| `optimizer`, `scheduler`   | single-optimizer training path              | [Optimizer + Scheduler](./train/optim_scheduler.md) |
-| `optimizers`, `schedulers` | named multi-optimizer path                  | [Optimizer + Scheduler](./train/optim_scheduler.md) |
+| `dataset`                  | `train` and `valid` splits                  | [Data Organizer](../core/components/data-organizer.md)                                     |
+| `dataloader`               | collate and iterator settings               | [Dataloader + Collate](../core/components/dataloader.md)                                   |
+| `trainer`                  | Lightning trainer configuration             | [Trainer](../core/components/trainer.md)                                                   |
+| `optimizer`, `scheduler`   | single-optimizer training path              | [Optimizer + Scheduler](../core/components/optimizer_configuration.md)                     |
+| `optimizers`, `schedulers` | named multi-optimizer path                  | [Multiple Optimizers and Schedulers](../core/components/multiple_optimizers_schedulers.md) |
 | `exp_dir`                  | training output directory                   |
 
 
@@ -43,9 +43,23 @@ Training outputs are written under `exp_dir`, including:
 - (If configured) TensorBoard output
 
 ## Related pages
-
-- [Training config](../config/train_config.md)
-- [Training dataset config](./train/dataset.md)
-- [Dataloader](./train/dataloader.md)
-- [Optimizer and scheduler](./train/optim_scheduler.md)
-- [Trainer](../core/components/trainer.md)
+<DocCards :cols="3">
+  <DocCard
+    title="Training configuration"
+    desc="See all options for cofiguring the train stage."
+    icon="tabler:file-code"
+    href="../config/train_config.html"
+  />
+  <DocCard
+    title="Inference stage"
+    desc="Information on the inference stage."
+    icon="tabler:puzzle"
+    href="./inference.html"
+  />
+  <DocCard
+    title="Trainer"
+    desc="Information about the trainer component"
+    icon="tabler:tool"
+    href="../core/components/trainer.html"
+  />
+</DocCards>
