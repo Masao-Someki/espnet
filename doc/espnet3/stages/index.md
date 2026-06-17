@@ -33,7 +33,7 @@ ESPnet3 recipes run named stages.
     title="measure"
     desc="Compute metrics (WER, MOS, SI-SDR, …) from inference outputs."
     icon="tabler:ruler-measure"
-    href="./metrics.html"
+    href="./measure.html"
   />
   <DocCard
     title="pack_model / upload_model"

@@ -1,26 +1,24 @@
 ---
 title: ESPnet3 Demo Guide
 author:
-  name: "Masao Someki"
-date: 2025-11-26
+- name: "Masao Someki"
+- name: "Elias Naske"
+date: 2026-05-28
 ---
 
 # ESPnet3 Demo Guide
 
-This page explains how demo configs map to runtime behavior and how to
-customize demos. A key advantage is that demos **reuse your existing inference
-code** (providers/runners/models), so you do **not** need to write extra demo-
-specific Python.
+This page explains how to create and configure interactive Gradio demos.
 
-## Quick usage
+A key advantage is that demos **reuse your existing inference code** (providers/runners/models), so you do **not** need to write extra demo-specific Python.
 
-### Run
+## 1. Run
 
 ```bash
 python run.py --stages pack_demo upload_demo --demo_config conf/demo.yaml
 ```
 
-### Run locally after packing
+## 2. Outputs
 
 After `pack_demo`, ESPnet3 writes a runnable Gradio app into the output
 directory (default is `demo/` if you set `pack.out_dir: demo`).
@@ -32,11 +30,9 @@ python app.py
 
 This starts a local Gradio server. Open the printed URL in your browser.
 
-### Notes
+> [!IMPORTANT]
+> `gradio` is required for local demo execution. It can be installed using `pip install gradio`.
 
-- `gradio` is required for local demo execution: `pip install gradio`.
-
-### Outputs
 
 After packing, the output directory contains the runnable app, configs, and
 links to your recipe assets. Example:
@@ -53,51 +49,46 @@ demo/
 └── requirements.txt
 ```
 
-### Configure (in demo.yaml)
+## 3. Configuration
 
 Keep the core settings in `demo.yaml`. For the full list, see
-[Demo configuration](../config/demo.html).
+[Demo configuration](../config/demo_config.md).
 
-| Config section | Description |
-| -------------- | ----------- |
+| Config section | Description                                            |
+| -------------- | ------------------------------------------------------ |
 | `infer_config` | Path to the inference config used by the demo runtime. |
-| `ui` | UI layout and component definitions. |
-| `inputs` | Input field definitions and preprocessing mappings. |
-| `outputs` | Output field definitions and postprocessing mappings. |
+| `ui`           | UI layout and component definitions.                   |
+| `inputs`       | Input field definitions and preprocessing mappings.    |
+| `outputs`      | Output field definitions and postprocessing mappings.  |
 
 ### UI configuration (Gradio)
 
 UI is configured under `ui` in `demo.yaml`. The demo app is generated from this
 config and wires inputs/outputs directly to your inference runner.
 
-#### Resolution order
+The settings in the `ui` sections can be used to override the system defaults (defined in `espnet3.systems.<system>.demo`), if available.
+If there are no default settings defined for the target system, `ui` must be manually configured in `demo.yaml`.
 
-1. If `demo.yaml` includes `ui`, it is merged with system defaults from
-   `build_ui_default()` (when available).
-2. If `ui` is missing, ESPnet3 calls `build_ui(demo_cfg)` from
-   `espnet3.systems.<system>.demo`.
-3. If neither is available, `ui` is required in `demo.yaml`.
+The UI section contains the following fields:
 
-#### UI fields
-
-| Field | Description |
-| --- | --- |
-| `title` | App title shown at the top of the demo page. |
-| `description` | Markdown text shown under the title. |
-| `article` | Optional Markdown section shown at the bottom. |
+| Field          | Description                                                                   |
+| -------------- | ----------------------------------------------------------------------------- |
+| `title`        | App title shown at the top of the demo page.                                  |
+| `description`  | Markdown text shown under the title.                                          |
+| `article`      | Optional Markdown section shown at the bottom.                                |
 | `article_path` | Path to a Markdown file to load as `article`. If set, it overrides `article`. |
-| `button.label` | Label for the Run button. |
-| `inputs` | List of input component configs (`name`, `type`, and type-specific fields). |
-| `outputs` | List of output component configs (`name`, `type`, and type-specific fields). |
+| `button.label` | Label for the Run button.                                                     |
+| `inputs`       | List of input component configs (`name`, `type`, and type-specific fields).   |
+| `outputs`      | List of output component configs (`name`, `type`, and type-specific fields).  |
 
-### Notes
+### Demo README 
 
 After `pack_demo`, the packed demo directory contains a `README.md` and the demo
 UI renders it as the page article by default. To change what is shown in the
 demo screen, edit `demo/README.md` in the packed directory (or set
 `ui.article_path` to a different Markdown file).
 
-Sample UI config:
+### Sample UI Config
 
 ```yaml
 ui:
@@ -118,27 +109,32 @@ ui:
       lines: 2
 ```
 
+
+<!-- TODO (?)
 Topics to cover:
 
 - How `demo.yaml` fields are used by the runtime and pack flow
 - Overriding UI, provider, and runner classes
 - Advanced customization patterns
+-->
 
-## Developer Notes
+## 4.  Developer Notes
 
 ### Supported component types
 
-Each entry in `inputs`/`outputs` requires `name` and `type`. Supported `type`
-values and key fields:
+Each entry in `inputs`/`outputs` requires `name` and `type`. The following `type`
+values and key fields are supported:
 
-- `audio`: `sources` (mic/upload), `audio_type` (`numpy` by default)
-- `textbox`: `lines`, `placeholder`
-- `dropdown`: `choices`, `value`
-- `number`: `value`
-- `slider`: `min`, `max`, `step`, `value`
-- `checkbox`: `value`
-- `image`
-- `file`
+| Type       | Key Fields                                                |
+| ---------- | --------------------------------------------------------- |
+| `audio`    | `sources` (mic/upload), `audio_type` (`numpy` by default) |
+| `textbox`  | `lines`, `placeholder`                                    |
+| `dropdown` | `choices`, `value`                                        |
+| `number`   | `value`                                                   |
+| `slider`   | `min`, `max`, `step`, `value`                             |
+| `checkbox` | `value`                                                   |
+| `image`    |
+| `file`     |
 
 The component `name` becomes the key used by the demo runtime, so it must match
 the expected inference input/output mapping.

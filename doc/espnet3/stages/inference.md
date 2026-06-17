@@ -1,285 +1,361 @@
 ---
-title: 📘 ESPnet3 Inference Stage
+title: ESPnet3 Inference Stage
 author:
-  name: "Masao Someki"
-date: 2025-11-26
+  - name: "Masao Someki"
+  - name: "Elias Naske"
+date: 2026-05-21
 ---
 
 # ESPnet3 Inference Stage
 
-This document explains the **inference stage** in ESPnet3, implemented in:
+The `infer` stage runs model inference on the provided test set(s) and writes the outputs to disk.
+The resulting files are used to measure model performance in the [`measure`](./metrics.md) stage.
 
-* `espnet3.systems.base.inference.inference`
-* `espnet3.systems.base.inference_provider.InferenceProvider`
-* `espnet3.systems.base.inference_runner.InferenceRunner`
-
-Inference writes one or more `.scp` files (e.g., `hyp.scp`) that the
-metrics stage later consumes. See `metrics.md` for metric computation.
-
-## Quick usage
-
-### Run
+## 1. Run
 
 ```bash
-python run.py --stages infer --infer_config conf/infer.yaml
+python run.py --stages infer --inference_config conf/inference.yaml
 ```
 
-### Configure (in infer.yaml)
+## 2. Configuration
 
-Keep the core settings in `infer.yaml`. For the full list, see
-[Inference configuration](../core/config/inference.html).
+Keep the core settings in `inference.yaml`. For the full list, see
+[Inference configuration](../config/infer_config.md).
 
-| Config section | Description |
-| -------------- | ----------- |
-| `model` | Hydra target for the inference model (espnet2 or custom). Instantiated with a `device` argument. |
-| `dataset` | Dataset organizer and test splits. The stage selects the test set named by `test_set`. |
-| `parallel` | Parallel execution settings (e.g., local vs Dask, worker count). |
-| `inference_dir` | Output location for `.scp` files under `inference_dir/<test_name>/`. |
-| `input_key` | Which dataset field(s) to pass into the model. |
-| `output_fn` | Import path to a function that formats runner outputs. |
+| Config section  | Description                                   |
+| --------------- | --------------------------------------------- |
+| `model`         | model to run inference with                   |
+| `dataset`       | definition of the test set                    |
+| `inference_dir` | root output location                          |
+| `input_key`     | dataset field or fields passed into the model |
+| `output_fn`     | function used to format the output files      |
+| `parallel`      | local or distributed runner settings          |
 
-See also:
+## 3. Outputs
 
-- [Provider / Runner](../core/parallel/provider_runner.html)
-- [Inference provider](../core/parallel/inference_provider.html)
-- [Parallel execution](../core/parallel/)
-
-### Outputs
-
-For each test set name in `dataset.test`, inference writes `.scp` files under:
-
-```text
-<inference_dir>/<test_name>/
-```
-
-The filenames are determined by:
-
-- `output_keys` (if set), or
-- the keys returned by `output_fn` for the first sample (excluding `idx_key`).
-
-Each `.scp` file contains lines like:
-
-```text
-utt_id VALUE...
-```
-
-If `output_fn` returns a list for a given key (e.g., multiple hypotheses), each
-entry is written to its own file: `<key>0.scp`, `<key>1.scp`, ...
-
-## Developer Notes
-
-### 🏃‍♂️ Inference with InferenceRunner
-
-ESPnet3 inference is a Provider/Runner loop. `infer.yaml` provides two key
-pieces:
-
-- `input_key`: which field(s) to read from each dataset item and pass to the model
-- `output_fn`: how to turn `model_output` into named outputs written as `.scp`
-
-Conceptually, `espnet3.systems.base.inference.inference()` does something like:
-
-```python
-from espnet3.systems.base.inference_provider import InferenceProvider
-from espnet3.systems.base.inference_runner import InferenceRunner
-
-provider = InferenceProvider(
-    config,
-    params={
-        "input_key": config.input_key,
-        "output_fn_path": config.output_fn,
-    },
-)
-
-runner = InferenceRunner(
-    provider=provider,
-    idx_key=config.get("idx_key", "uttid"),
-    hyp_key=config.get("output_keys", []),  # optional
-)
-
-results = runner(range(len(provider.build_dataset(config))))
-```
-
-A minimal `infer_config` for inference looks like:
-
-```yaml
-inference_dir: exp/asr_example/infer
-
-model:
-  _target_: espnet2.bin.asr_inference.Speech2Text
-  asr_train_config: exp/asr_example/config.yaml
-  asr_model_file: exp/asr_example/last.ckpt
-
-dataset:
-  _target_: espnet3.components.data.data_organizer.DataOrganizer
-  test:
-    - name: test-clean
-      dataset:
-        _target_: ...
-    - name: test-other
-      dataset:
-        _target_: ...
-
-parallel:
-  env: local
-  n_workers: 1
-
-input_key: speech
-output_fn: src.infer.output_fn
-```
-
-For each test set name in `dataset.test`, `inference()` writes one `.scp` file
-per output key under `inference_dir/<test_name>/` (e.g., `hyp.scp`, `wav.scp`, ...).
-
-### output_fn: formatting model outputs into SCP fields
-
-`output_fn` is required and is called from `InferenceRunner` as:
-
-```python
-output_fn(data=data, model_output=model_output, idx=idx)
-```
-
-It must return a dict that includes:
-
-- `idx_key` (default: `uttid`) as a scalar identifier used for `.scp` lines
-- output fields (strings, or list of strings for multi-output)
-
-The default `InferenceRunner` also validates that required keys exist. In the
-base entrypoint, `ref` is treated as a required key by default, so most recipes
-return both `hyp` and `ref` from `output_fn`.
-
-Minimal example (ASR-style):
-
-```python
-def output_fn(*, data, model_output, idx):
-    # data is a dataset item dict (must contain your utt id field)
-    # model_output is whatever your model returns for that item
-    return {
-        "uttid": data["uttid"],
-        "hyp": model_output[0][0],  # e.g., Speech2Text output
-    }
-```
-
-How it is used inside `InferenceRunner` (simplified dummy code):
-
-```python
-def forward(idx, *, dataset=None, model=None, input_key=None, output_fn_path=None, **_):
-    data = dataset[idx]
-    output_fn = load_output_fn(output_fn_path)
-    model_output = model(data[input_key])
-    return output_fn(data=data, model_output=model_output, idx=idx)
-```
-
-Notes:
-
-- `InferenceRunner.forward` accepts either a single index or a list of indices.
-- There is no `batch_forward` hook; batching is handled by passing lists into
-  `forward` when `batch_size` is set.
-- If `batch_size` is unset, `forward` receives a single dataset item and `idx`
-  is a scalar. If `batch_size` is set (>= 1), `forward` receives a list of
-  dataset items and `idx` is a list.
-
-### Batched inference (batch_size)
-
-If you set `batch_size` in `infer.yaml`, `InferenceRunner` chunks indices and
-passes a list of indices into `forward`. The model is called once per batch
-with list-valued inputs (one list per `input_key`), and `output_fn` receives
-batched data and indices.
-
-Conceptually:
-
-```python
-indices = [0, 1, 2, 3]
-data_batch = [dataset[i] for i in indices]
-inputs_dict = {"speech": [d["speech"] for d in data_batch]}
-
-model_output = model(**inputs_dict)
-out = output_fn(data=data_batch, model_output=model_output, idx=indices)
-```
-
-Minimal batched `__call__` example:
-
-```python
-class MyModel:
-    def __call__(self, speech):
-        # speech: list[...] with length == batch size
-        return {"text": ["dummy" for _ in speech]}
-```
-
-`output_fn` that supports both single-item and batched calls:
-
-```python
-def output_fn(*, data, model_output, idx):
-    # single-item
-    if isinstance(data, dict):
-        return {
-            "uttid": data["uttid"],
-            "hyp": model_output["text"],
-            "ref": data.get("ref_text", ""),
-        }
-
-    # batched: data is a list[dict], idx is a list[int]
-    hyps = model_output["text"]
-    return [
-        {
-            "uttid": item["uttid"],
-            "hyp": hyp,
-            "ref": item.get("ref_text", ""),
-        }
-        for item, hyp in zip(data, hyps)
-    ]
-```
-
-If your system produces audio hypotheses (e.g., TTS), write the audio files under
-`<inference_dir>/<test_name>/` (or a subdirectory), and put the file paths in the
-corresponding `hyp.scp` entries. Ensure the output directory exists before
-writing SCPs so `metric()` can load them reliably.
-
-Example: audio hypotheses written as file paths
-
-If you generate audio files, `hyp.scp` typically stores the generated file path
-per utterance:
-
-```text
-utt001 <inference_dir>/<test_name>/audio/utt001.wav
-utt002 <inference_dir>/<test_name>/audio/utt002.wav
-```
-
-Example directory tree:
+Inference writes one directory per test set:
 
 ```text
 <inference_dir>/
 └── <test_name>/
     ├── hyp.scp
-    └── audio/
-        ├── utt001.wav
-        └── utt002.wav
+    └── ...
 ```
 
-## 🧪 Using a custom model
+The filenames are determined by:
 
-The snippet above assumes the espnet2 `Speech2Text` interface. When you write
-your **own** model or inference wrapper, you can either adapt your model to the
-default runner or provide a custom runner.
+- `output_keys` when it is set
+- otherwise the keys returned by `output_fn` for the first sample, excluding
+  `idx_key`
 
-#### Write your own InferenceRunner
+### SCP Files
 
-If your model has a different interface (e.g., already returns `(hyp, ref)`), you
-can subclass `BaseRunner` and change only the `forward` method:
+Within a `.scp` file, each line represents an utterance and takes the following form:
+
+```text
+{utt_id} {value}
+```
+
+The value is determined by `output_fn` and can be either:
+- a scalar value (`str`, `int`, `float`, `bool`)
+- a non-scalar value (e.g. `dict`, `numpy.ndarray`, `torch.tensor`)
+
+Scalar values are written directly into SCP files.
+Non-scalar values are written as artifacts to a file, and the SCP stores a path to said file.
+Artifacts are written under:
+```text
+<inference_dir>/<test_name>/<field_name>/
+```
+The file type depends on the return type of `output_fn`:
+
+| Value type          | Default artifact type | Saved as |
+| ------------------- | --------------------- | -------- |
+| `dict`              | `json`                | `.json`  |
+| `numpy.ndarray`     | `npy`                 | `.npy`   |
+| CPU `torch.Tensor`  | `npy`                 | `.npy`   |
+| other Python object | `pickle`              | `.pkl`   |
+
+The config can also be set to force other types, such as `wav`.
+E.g., if `output_fn` returns:
 
 ```python
-from espnet3.parallel.base_runner import BaseRunner
+{
+    "utt_id": "utt1",
+    "audio": wav_numpy,
+}
+```
+
+and `inference.yaml` contains:
+
+```yaml
+output_artifacts:
+  audio:
+    type: wav
+    sample_rate: 16000
+```
+
+then inference writes:
+
+```text
+<inference_dir>/
+└── <test_name>/
+    ├── audio.scp
+    └── audio/
+        ├── utt1.wav
+        └── utt2.wav
+```
+
+and `audio.scp` stores the generated `.wav` paths.
 
 
-class MyInferenceRunner(BaseRunner):
+### Custom artifact writers
+
+If you want to save a custom type such as PNG, add a writer function and point
+to it from config.
+
+Example config:
+
+```yaml
+output_artifacts:
+  image:
+    writer:
+      _target_: src.inference.write_png_artifact
+```
+
+Example function:
+
+```python
+from pathlib import Path
+
+
+def write_png_artifact(*, value, output_path):
+    path = Path(output_path).with_suffix(".png")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    value.save(path)
+    return path
+```
+
+The writer must return the written path. That path is stored in the SCP file.
+
+
+## 4. Implementation Details
+### Inference Providers and Runners
+
+Inference is implemented as a Provider/Runner loop.
+
+The provider is responsible for:
+
+- building the dataset for the active test set
+- instantiating the model
+- exposing config-derived runtime parameters
+
+The runner is responsible for:
+
+- pulling one sample or one batch from the dataset
+- calling the model with the configured `input_key`
+- normalizing the result through `output_fn`
+- returning values that can be written into SCP files
+
+Conceptually:
+```python
+provider = InferenceProvider(config)
+runner = InferenceRunner(provider=provider, async_mode=False)
+results = runner(range(len(provider.build_dataset(config))))
+```
+
+### Batch Inference
+
+Inference can be run batched by setting `runner.batch_size`.
+
+For example:
+```yaml
+runner:
+  batch_size: 4
+```
+
+This will pass a list of indices to `InferenceRunner.forward()`.
+
+### `output_fn`
+
+`output_fn` is called right after the model returns.
+
+If provided, `output_fn` is called as:
+
+```python
+output_fn(data=data, model_output=model_output, idx=idx)
+```
+
+It should return a dict for a single sample, or a list of dicts for batched
+inference.
+
+Typical output:
+
+```python
+{
+    "utt_id": "utt1",
+    "hyp": "hello world",
+}
+```
+
+The base runner accepts either a single index or a list of indices. That is why
+`output_fn` must be able to handle:
+
+- a single sample plus scalar `idx`
+- or batched input where `data` is a list and `idx` is a list
+
+Minimal single-sample example:
+
+```python
+def build_output(*, data, model_output, idx):
+    return {
+        "utt_id": data["uttid"],
+        "hyp": model_output["text"],
+        "ref": data.get("text", ""),
+    }
+```
+
+
+## 5. Using a custom model
+
+There a two common paths when using a custom models:
+
+1. keep `InferenceRunner` and replace only `model` and `output_fn`
+2. replace `InferenceRunner` when the normal flow is not enough
+
+It is generally recommended to keep `InferenceRunner` and only replace it for special use cases. 
+
+### Example: Custom Decoding Algorithm
+
+This is the common case:
+
+- you want to keep the same dataset
+- you want to keep the same SCP writing path
+- but you want your own decoding algorithm
+
+In that case, keep the default runner and replace only `model` and `output_fn`.
+
+Example `inference.yaml`:
+
+```yaml
+dataset:
+  test:
+    - name: test
+      data_src: mini_an4/asr
+      data_src_args:
+        split: test
+
+model:
+  _target_: src.inference.MyGreedyDecoder
+  checkpoint_path: ${exp_dir}/last.ckpt
+  beam_size: 1
+
+input_key: speech
+output_fn: src.inference.build_output
+
+provider:
+  _target_: espnet3.systems.base.inference_provider.InferenceProvider
+runner:
+  _target_: espnet3.systems.base.inference_runner.InferenceRunner
+```
+
+Example `src/inference.py`:
+
+```python
+from pathlib import Path
+
+import torch
+
+
+class MyGreedyDecoder:
+    def __init__(self, checkpoint_path, beam_size=1):
+        self.checkpoint_path = Path(checkpoint_path)
+        self.beam_size = beam_size
+        self.model = self._load_model()
+
+    def _load_model(self):
+        checkpoint = torch.load(self.checkpoint_path, map_location="cpu")
+        model = checkpoint["model"]
+        model.eval()
+        return model
+
+    def __call__(self, speech):
+        tokens = self.model.decode(speech, beam_size=self.beam_size)
+        text = self.model.tokenizer.decode(tokens)
+        return {"text": text, "tokens": tokens}
+
+
+def build_output(*, data, model_output, idx):
+    return {
+        "utt_id": data.get("uttid", str(idx)),
+        "hyp": model_output["text"],
+        "token_ids": " ".join(str(v) for v in model_output["tokens"]),
+        "ref": data.get("text", ""),
+    }
+```
+
+The runtime order is:
+
+1. `InferenceRunner` loads one sample from the dataset
+2. it calls `model(**inputs)`
+3. it calls `build_output(...)`
+4. it writes `hyp.scp`, `token_ids.scp`, and `ref.scp`
+
+### When to replace `InferenceRunner`
+
+Replace the runner only when `model -> output_fn -> SCP` is not enough.
+
+Examples:
+
+- streaming decode with internal state
+- multi-step search with custom batching
+- non-standard output validation
+
+Minimal custom runner example:
+
+```python
+from espnet3.systems.base.inference_runner import InferenceRunner
+
+
+class MyInferenceRunner(InferenceRunner):
     @staticmethod
     def forward(idx, dataset=None, model=None, **kwargs):
         data = dataset[idx]
-        hyp, ref = model(data)  # your own API
-        return {"idx": idx, "hyp": hyp, "ref": ref}
+        model_output = model.decode_stream(data["speech"])
+        return {
+            "utt_id": data.get("uttid", str(idx)),
+            "hyp": model_output["text"],
+            "ref": data.get("text", ""),
+        }
 ```
 
-Then, in a custom `inference()` function or system subclass, construct this
-runner instead of the default `InferenceRunner`. The rest of the pipeline
-(`metric()`, metrics, etc.) can stay the same as long as you produce the `.scp`
-keys that your `metric.yaml` expects (via `metrics[*].inputs`), such as
-`hyp.scp` (and `ref.scp` if you choose to write references).
+Config:
+
+```yaml
+runner:
+  _target_: src.inference.MyInferenceRunner
+```
+
+Use this path only when `output_fn` is not enough.
+
+## Related pages
+
+<DocCards :cols="3">
+  <DocCard
+    title="Inference configuration"
+    desc="See all options for cofiguring the inference stage."
+    icon="tabler:file-code"
+    href="../config/infer_config.html"
+  />
+  <DocCard
+    title="Measure stage"
+    desc="Information on the measure stage."
+    icon="tabler:puzzle"
+    href="./metrics.html"
+  />
+  <DocCard
+    title="Provider / Runner"
+    desc="Learn how providers and runners work together during inference."
+    icon="tabler:tool"
+    href="../core/parallel/provider_runner.html"
+  />
+</DocCards>
