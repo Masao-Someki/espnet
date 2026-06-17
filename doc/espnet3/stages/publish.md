@@ -1,80 +1,162 @@
 ---
-title: ESPnet3 Publish-related Stages
+title: ESPnet3 Publication Stages
 author:
-  name: "Masao Someki"
-date: 2025-11-26
+- name: "Masao Someki"
+- name: "Elias Naske"
+date: 2026-05-26
 ---
 
-# ESPnet3 Publish-related Stages
+# ESPnet3 Publication Stages
 
-ESPnet3 provides publish-related stages to package model artifacts and
-optionally upload them:
+The publication stage is used to publish a trained model to Hugging Face.
 
-- `pack_model`: build a model package directory (README/meta + artifacts)
-- `upload_model`: upload the packed directory (e.g., to Hugging Face Hub)
+This is a two-step process:
 
-## Quick usage
+| Step           | Description                       | Implementation                             |
+| -------------- | --------------------------------- | ------------------------------------------ |
+| `pack_model`   | Prepares the model files.         | `espnet3.utils.publish_utils.pack_model`   |
+| `upload_model` | Uploads the model to Hugging Face | `espnet3.utils.publish_utils.upload_model` |
 
-### Run
+## 1. Run
 
 ```bash
 python run.py \
   --stages pack_model upload_model \
-  --train_config conf/train.yaml \
-  --publish_config conf/publish.yaml
+  --training_config conf/training.yaml \
+  --publication_config conf/publication.yaml
 ```
 
-### Configure (in publish.yaml)
+## 2. Configuration
 
-Keep the core settings in `publish.yaml`. For the full list, see
-[Publish configuration](../core/config/publication.html).
+The stage is configured in `conf/publication.yaml`.
+The config contains the following sections:
 
-| Config section | Description |
-| -------------- | ----------- |
-| `pack_model` | Packaging strategy, output directory, and files to include. |
-| `upload_model` | Hugging Face repo settings for uploading the package. |
+| Section                                        | Description                                      |
+| ---------------------------------------------- | ------------------------------------------------ |
+| `pack_model.strategy`                          | choose `auto`, `espnet2`, or `espnet3` packing   |
+| `pack_model.out_dir`                           | output bundle directory                          |
+| `pack_model.decode_dir`                        | directory searched for `scores.json`             |
+| `pack_model.readme_template`, `readme_context` | README template and extra template values        |
+| `pack_model.include`, `extra`, `exclude`       | extra copy and exclusion control                 |
+| `pack_model.include_data_dir`                  | include `training_config.data_dir` in the bundle |
+| `pack_model.files`, `yaml_files`               | explicit metadata entries copied into the bundle |
+| `pack_model.espnet2`                           | espnet2-specific packing spec                    |
+| `upload_model`                                 | Hugging Face upload settings                     |
 
-### Outputs
+For a full list of options, see [Publication Configuration](../config/publish_config.md).
 
-Typical output is a package directory (default: `<exp_dir>/model_pack`) containing a `README.md`, `meta.yaml`, and copied artifacts.
+## 3. `pack_model`
 
-## Developer Notes
-
-### pack_model details
-
-`pack_model` gathers files from the experiment directory and builds a package
-directory (default: `<exp_dir>/model_pack`). It also generates metadata and an
-optional README.
-
-Key behaviors:
-
-| Key | Meaning |
-| --- | --- |
-| `strategy` | `auto` selects `espnet2` when `train_config.task` is set, otherwise `espnet3`. |
-| `out_dir` | Output directory for the package. |
-| `decode_dir` | Where `scores.json` (or `metrics.json`) is searched for README metrics (if present). If unset, it falls back to `infer_config.decode_dir`. |
-| `files` / `yaml_files` | Used to generate `meta.yaml` for espnet2-style `from_pretrained`. |
-| `include` / `exclude` | Extra file globs to include or skip. |
-| `readme_template` | Optional template for README generation. |
-
-Example output tree:
+`pack_model` creates a publishable bundle directory, usually:
 
 ```text
-<pack_dir>/
-├── README.md
-├── meta.yaml
-└── exp/
-    └── ...
+<exp_dir>/model_pack
 ```
 
-### upload_model details
+### Packing Strategy
+
+Model packing differs between ESPnet2 and ESPnet3.
+The appropriate strategy can be set through `pack_model.strategy`, which supports the following:
+
+| Tag              | Description                                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| `auto` (default) | use `espnet2` when `training_config.task` is set, otherwise use `espnet3` |
+| `espnet2`        | force ESPnet2 packing                                                     |
+| `espnet3`        | force ESPnet3 packing                                                     |
+
+### Bundle Directory
+
+Current ESPnet3 packing copies recipe assets such as:
+
+| Asset             | Description                |
+| ----------------- | -------------------------- |
+| `conf/`           | Configuration files        |
+| `src/`            | Source code                |
+| `run.py`          | Inference entry point      |
+| `pixi.toml`       | Pixi configuration         |
+| `pixi.lock`       | Pixi dependency resolution |
+| `.python-version` | Python version information |
+
+and usually includes the experiment directory and, when enabled, the recipe
+`data_dir`.
+
+`pack_model` writes metadata in `meta.yaml` in the bundle root.
+That metadata is later used by tools, such as when [running inference through `InferenceSession`](#packaged-model-inference).
+
+In practice the packed tree often looks like:
+
+```text
+model_pack/
+├── conf/
+├── src/
+├── exp/
+├── data/         # included if `include_data_dir: true` and configured `data_dir` exists
+├── run.py
+├── meta.yaml
+├── README.md
+└── scores.json
+```
+
+### Additional file controls
+
+`publication.yaml` can also define additional files to include or exclude using the following fields:
+
+| Key          | Description                                                     |
+| ------------ | --------------------------------------------------------------- |
+| `include`    | paths copied into the bundle before `extra`                     |
+| `extra`      | more paths copied into the bundle                               |
+| `exclude`    | patterns skipped while copying                                  |
+| `yaml_files` | YAML files, saved to `model_pack/yaml_files/`                   |
+| `files`      | other artifacts (e.g checkpoints), saved to `model_pack/files/` |
+
+These allow adding or explicitly registering artifacts in `meta.yaml`.
+
+
+## 4. Packaged model inference 
+
+Direct packaged-model inference is provided by:
+
+- `espnet3.publication.InferenceSession`
+
+Typical use:
+
+```python
+from espnet3.publication import InferenceSession
+
+session = InferenceSession.from_pretrained(
+    "espnet/your-model-tag",
+    trust_user_code=True,
+)
+result = session(audio_array)
+```
+
+Important behavior:
+
+- it can load `conf/inference.yaml` from the packed bundle
+- it can use bundle metadata from `meta.yaml`
+- it can enable bundled recipe code such as `src/` when
+  `trust_user_code=True`
+
+This is the main reason current espnet3 packing includes recipe configs and
+recipe-local user code.
+
+## 5. `upload_model`
 
 `upload_model` uploads the packed directory to Hugging Face.
 
-Key behaviors:
+Required field:
 
-| Key | Meaning |
-| --- | --- |
-| `upload_model.hf_repo` | Required (e.g., `yourname/your-model-repo`). |
-| `huggingface-cli upload` | Used under the hood; make sure you are logged in or set `HF_TOKEN`. |
-| `out_dir` | The directory uploaded as a model repo. |
+- `publication_config.upload_model.hf_repo`
+
+The packed directory must already exist before upload runs.
+
+## Related pages
+
+<DocCards :cols="3">
+  <DocCard
+    title="Publication configuration"
+    desc="All options for configuring the publication stage"
+    icon="tabler:file-code"
+    href="../config/publish_config.html"
+  />
+</DocCards>
