@@ -87,29 +87,110 @@ model:
   # custom args here
 ```
 
-## Training-time forward contract (common pattern)
+## Training-time forward contract
 
-For ASR-style training, the training wrapper typically expects your model to
-accept batch fields such as:
-
-- `speech`, `speech_lengths`, `text`, `text_lengths`
-
-and return a tuple:
-
-- `loss`: scalar tensor
-- `stats`: dict of scalars (logging only)
-- `weight`: scalar tensor used as batch size for logging
-
-Example:
+`ESPnetLightningModule` calls `model(**batch)` on every training and validation
+step. Your model's `forward` **must** return exactly three values in this order:
 
 ```python
-class MyCustomModel:
+loss, stats, weight = model(**batch)
+```
+
+This is enforced — returning the wrong structure raises an error inside the
+training loop.
+
+### `loss` — scalar tensor for backprop
+
+In the standard single-optimizer path, `loss` must be a scalar `torch.Tensor`
+that requires grad. Lightning takes this return value and calls `.backward()`
+on it automatically.
+
+```python
+loss = compute_ctc_loss(...)   # scalar, requires_grad=True
+```
+
+### `stats` — the logging dict
+
+`stats` must be a `dict[str, Tensor]`. The training loop logs every entry
+directly to TensorBoard / W&B under the key `{mode}/{key}`, where `mode` is
+`train` or `valid`.
+
+```python
+stats = {
+    "loss": loss.detach(),   # → logged as "train/loss" / "valid/loss"
+    "acc":  acc.detach(),    # → logged as "train/acc"  / "valid/acc"
+}
+```
+
+**Every value must be detached.** Forgetting `.detach()` keeps the gradient
+graph alive across steps and wastes GPU memory. It does not raise an error, so
+the mistake is easy to miss.
+
+### `weight` — batch size for weighted averaging
+
+`weight` is a scalar tensor representing the number of samples in the batch.
+The training loop passes it as `batch_size` to Lightning's `log_dict`, which
+enables correct weighted averaging across variable-length batches and DDP
+workers.
+
+```python
+weight = speech.new_tensor(speech.shape[0])   # same device as loss
+```
+
+Use `tensor.new_tensor(value)` rather than `torch.tensor(value,
+device=loss.device)` to match the device of an existing tensor automatically.
+
+### Full example
+
+```python
+class MyASRModel(torch.nn.Module):
     def forward(self, speech, speech_lengths, text, text_lengths, **kwargs):
-        loss = ...
-        stats = {"loss": loss.detach()}
+        loss, acc = self._compute_loss(
+            speech, speech_lengths, text, text_lengths
+        )
+        stats = {
+            "loss": loss.detach(),
+            "acc":  acc.detach(),
+        }
         weight = speech.new_tensor(speech.shape[0])
         return loss, stats, weight
 ```
+
+### NaN / Inf handling
+
+If `loss` is NaN or Inf the **entire batch is skipped across all DDP workers**
+at once. After 100 consecutive NaN batches the training loop raises
+`RuntimeError` and stops.
+
+### Multi-optimizer (GAN-style) training
+
+For GAN-style or other multi-optimizer training, `loss` is replaced by one or
+more `OptimizationStep` objects that route each loss to the correct optimizer.
+`stats` and `weight` keep the same structure; `weight` may be `None`.
+
+```python
+from espnet3.components.modeling.optimization_spec import OptimizationStep
+
+def forward(self, **batch):
+    g_loss = ...
+    d_loss = ...
+    stats = {
+        "generator_loss":     g_loss.detach(),
+        "discriminator_loss": d_loss.detach(),
+    }
+    return [
+        OptimizationStep(loss=g_loss, name="generator"),
+        OptimizationStep(loss=d_loss, name="discriminator"),
+    ], stats, None
+```
+
+The training loop automatically logs `train/generator/loss`,
+`train/discriminator/loss`, and per-optimizer update steps in addition to the
+keys in `stats`. Only the optimizers named in the returned steps are updated for
+that batch; others are left untouched.
+
+See [Optimizer Configuration](./optimizer_configuration.html) for YAML wiring
+and per-optimizer gradient clipping.
 
 ## Collect-stats support (collect_feats)
 

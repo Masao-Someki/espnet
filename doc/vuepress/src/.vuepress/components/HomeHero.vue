@@ -93,7 +93,7 @@ const options = [
 const commands = {
   pip:  'pip install espnet',
   uv:   'uv pip install espnet',
-  pixi: 'pixi add espnet',
+  pixi: 'pixi add --pypi espnet',
   git:  'pip install git+https://github.com/espnet/espnet.git',
 }
 

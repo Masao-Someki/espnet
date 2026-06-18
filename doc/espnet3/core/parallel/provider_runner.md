@@ -577,4 +577,10 @@ When a new runner does not behave correctly, check these first:
     icon="tabler:file-code"
     href="../../../guide/espnet3/systems/InferenceRunner.html"
   />
+  <DocCard
+    title="X-Vector Extraction"
+    desc="End-to-end concrete example: computing speaker embeddings with a custom Provider and Runner."
+    icon="tabler:file-code"
+    href="./xvector.html"
+  />
 </DocCards>

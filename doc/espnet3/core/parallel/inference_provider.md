@@ -318,4 +318,10 @@ Subclass it when:
     icon="tabler:book"
     href="../../../guide/espnet3/parallel/InferenceProvider.html"
   />
+  <DocCard
+    title="X-Vector Extraction"
+    desc="Concrete provider/runner example outside inference: speaker embedding extraction."
+    icon="tabler:file-code"
+    href="./xvector.html"
+  />
 </DocCards>

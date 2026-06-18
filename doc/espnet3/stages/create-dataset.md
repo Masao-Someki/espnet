@@ -201,7 +201,7 @@ manifest representation.
     title="Dataset references and builders"
     desc="See the dataset-side builders and references used before batching."
     icon="tabler:database"
-    href=../core/components/datasets.html"
+    href="../core/components/datasets.html"
   />
   <DocCard
     title="DataOrganizer"

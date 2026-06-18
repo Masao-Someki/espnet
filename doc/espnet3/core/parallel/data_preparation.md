@@ -361,4 +361,10 @@ It is better when shard outputs are too large to keep in memory.
     icon="tabler:file-code"
     href="../../../guide/espnet3/components/CollectStatsRunner.html"
   />
+  <DocCard
+    title="X-Vector Extraction"
+    desc="Another concrete example: speaker embedding extraction with a custom Provider and Runner."
+    icon="tabler:file-code"
+    href="./xvector.html"
+  />
 </DocCards>
