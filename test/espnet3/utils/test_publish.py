@@ -10,11 +10,8 @@ from omegaconf import OmegaConf
 
 from espnet3.systems.asr.system import ASRSystem
 from espnet3.utils import publication_utils as publish
-from espnet3.utils.publication_utils import (
-    _build_results_table,
-    _render_readme,
-    _resolve_results,
-)
+from espnet3.utils.publication_utils import _render_readme, _resolve_results
+from espnet3.utils.readme_utils import build_results_table_from_file
 
 
 def _make_system(
@@ -111,62 +108,62 @@ def test_resolve_results_prioritises_publication_over_metrics(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _build_results_table
+# build_results_table_from_file
 # ---------------------------------------------------------------------------
 
 
-def test_build_results_table_returns_empty_for_none():
-    assert _build_results_table(None) == ""
+def test_build_results_table_from_file_returns_empty_for_none():
+    assert build_results_table_from_file(None) == ""
 
 
-def test_build_results_table_returns_empty_for_nonexistent_file(tmp_path):
-    assert _build_results_table(tmp_path / "missing.json") == ""
+def test_build_results_table_from_file_returns_empty_for_nonexistent_file(tmp_path):
+    assert build_results_table_from_file(tmp_path / "missing.json") == ""
 
 
-def test_build_results_table_returns_empty_for_malformed_json(tmp_path):
+def test_build_results_table_from_file_returns_empty_for_malformed_json(tmp_path):
     bad = tmp_path / "metrics.json"
     bad.write_text("not json", encoding="utf-8")
-    assert _build_results_table(bad) == ""
+    assert build_results_table_from_file(bad) == ""
 
 
-def test_build_results_table_returns_empty_for_empty_results(tmp_path):
+def test_build_results_table_from_file_returns_empty_for_empty_results(tmp_path):
     empty = tmp_path / "metrics.json"
     empty.write_text("{}", encoding="utf-8")
-    assert _build_results_table(empty) == ""
+    assert build_results_table_from_file(empty) == ""
 
 
-def test_build_results_table_returns_empty_when_all_values_are_non_dict(tmp_path):
+def test_build_results_table_from_file_empty_when_all_values_non_dict(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(json.dumps({"metric": "not_a_dict"}), encoding="utf-8")
-    assert _build_results_table(metrics_file) == ""
+    assert build_results_table_from_file(metrics_file) == ""
 
 
-def test_build_results_table_with_nested_dict_values(tmp_path):
+def test_build_results_table_from_file_with_nested_dict_values(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(
         json.dumps({"WER": {"test_clean": {"WER": 5.0}}}), encoding="utf-8"
     )
 
-    table = _build_results_table(metrics_file)
+    table = build_results_table_from_file(metrics_file)
 
     assert "| dataset | WER |" in table
     assert "| test_clean | 5.0 |" in table
 
 
-def test_build_results_table_with_flat_scalar_values(tmp_path):
+def test_build_results_table_from_file_with_flat_scalar_values(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(
         json.dumps({"my.module.WER": {"test_clean": 5.0}}), encoding="utf-8"
     )
 
-    table = _build_results_table(metrics_file)
+    table = build_results_table_from_file(metrics_file)
 
     assert "WER" in table
     assert "test_clean" in table
     assert "5.0" in table
 
 
-def test_build_results_table_with_multiple_metrics_and_test_sets(tmp_path):
+def test_build_results_table_from_file_with_multiple_metrics_and_test_sets(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(
         json.dumps(
@@ -184,27 +181,27 @@ def test_build_results_table_with_multiple_metrics_and_test_sets(tmp_path):
         encoding="utf-8",
     )
 
-    table = _build_results_table(metrics_file)
+    table = build_results_table_from_file(metrics_file)
 
     assert "| dataset | CER | WER |" in table
     assert "| test_clean | 2.0 | 5.0 |" in table
     assert "| test_other | 4.0 | 10.0 |" in table
 
 
-def test_build_results_table_uses_short_metric_name(tmp_path):
+def test_build_results_table_from_file_uses_short_metric_name(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(
         json.dumps({"espnet3.systems.asr.metrics.wer.WER": {"test": 3.0}}),
         encoding="utf-8",
     )
 
-    table = _build_results_table(metrics_file)
+    table = build_results_table_from_file(metrics_file)
 
     assert "WER" in table
     assert "espnet3" not in table
 
 
-def test_build_results_table_rows_are_sorted(tmp_path):
+def test_build_results_table_from_file_rows_are_sorted(tmp_path):
     metrics_file = tmp_path / "metrics.json"
     metrics_file.write_text(
         json.dumps(
@@ -218,7 +215,7 @@ def test_build_results_table_rows_are_sorted(tmp_path):
         encoding="utf-8",
     )
 
-    table = _build_results_table(metrics_file)
+    table = build_results_table_from_file(metrics_file)
     lines = [
         line
         for line in table.splitlines()
@@ -684,8 +681,18 @@ def test_pack_model_drops_readme_lines_for_missing_context(
     )
     monkeypatch.setattr(
         publish,
-        "get_git_metadata",
-        lambda cwd=None: {"short_commit": "abc123", "worktree": "dirty"},
+        "get_environment_info",
+        lambda cwd=None: {
+            "date": "Mon Jan 1 00:00:00 2024",
+            "python": "3.11.0",
+            "torch": "2.0.0",
+            "espnet": "202401",
+            "git_commit": "abc123full",
+            "git_short_commit": "abc123",
+            "git_branch": "main",
+            "git_dirty": "dirty",
+            "git_origin": "",
+        },
     )
     monkeypatch.setenv("USER", "tester")
 

@@ -3,27 +3,26 @@
 from __future__ import annotations
 
 import fnmatch
-import json
 import logging
 import os
 import re
 import shutil
-import sys
 from datetime import datetime
 from glob import glob, has_magic
 from pathlib import Path
 from string import Template
 from typing import Any
 
-import torch
 from huggingface_hub import HfApi
 from huggingface_hub.errors import HfHubHTTPError
 from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-import espnet2
 from espnet3.components.modeling.lightning_module import build_model_summary
-from espnet3.utils.logging_utils import get_git_metadata
+from espnet3.utils.readme_utils import (
+    build_results_table_from_file,
+    get_environment_info,
+)
 from espnet3.utils.task_utils import get_espnet_model
 
 logger = logging.getLogger(__name__)
@@ -239,52 +238,6 @@ def _resolve_results(
     return None
 
 
-def _build_results_table(results_path: Path | None) -> str:
-    """Render a markdown results table from metrics.json.
-
-    Called by ``pack_model`` when building the README context. Reads the
-    metrics.json produced by the measure stage and formats it as a markdown
-    table with test set names as rows and metric names as columns.
-
-    """
-    if results_path is None or not results_path.exists():
-        return ""
-    try:
-        results = json.loads(results_path.read_text(encoding="utf-8"))
-    except Exception:
-        return ""
-    # rows[test_name][metric_key] = value
-    rows: dict[str, dict[str, str]] = {}
-    metric_keys: set[str] = set()
-    for metric_name, per_test in results.items():
-        if not isinstance(per_test, dict):
-            continue
-        short_name = str(metric_name).rsplit(".", maxsplit=1)[-1]
-        for test_name, value in per_test.items():
-            rows.setdefault(str(test_name), {})
-            if isinstance(value, dict):
-                for k, v in value.items():
-                    metric_keys.add(k)
-                    rows[str(test_name)][k] = str(v)
-            else:
-                metric_keys.add(short_name)
-                rows[str(test_name)][short_name] = str(value)
-    if not rows or not metric_keys:
-        return ""
-    cols = sorted(metric_keys)
-    lines = [
-        "## Results",
-        "",
-        "| dataset | " + " | ".join(cols) + " |",
-        "| --- | " + " | ".join("---" for _ in cols) + " |",
-    ]
-    for test in sorted(rows):
-        vals = [rows[test].get(c, "") for c in cols]
-        lines.append("| " + " | ".join([test] + vals) + " |")
-    lines.append("")
-    return "\n".join(lines)
-
-
 def _infer_system_name(training_config: DictConfig, recipe_root: Path) -> str:
     """Infer a short system name for README rendering."""
     task_value = getattr(training_config, "task", None)
@@ -423,8 +376,8 @@ def _build_readme_context(
     """Build default README template values for a publication bundle."""
     pack_cfg = publication_config.pack_model
     recipe_root = Path(training_config.recipe_dir).resolve()
-    git_meta = get_git_metadata(recipe_root)
-    results_section = _build_results_table(results_path)
+    env_info = get_environment_info(recipe_root)
+    results_section = build_results_table_from_file(results_path)
     hf_repo = getattr(getattr(publication_config, "upload_model", None), "hf_repo", "")
     usage_load_call = (
         f'model = InferenceModel.from_pretrained("{hf_repo}", trust_user_code=True)'
@@ -457,11 +410,11 @@ def _build_readme_context(
             f"Packed model bundle generated from `{_infer_recipe_name(recipe_root)}`."
         ),
         "exp_dir": str(getattr(training_config, "exp_dir", "")),
-        "git_branch": git_meta.get("branch") or "",
-        "git_commit": git_meta.get("commit") or "",
-        "git_dirty": git_meta.get("worktree") or "",
-        "git_head": git_meta.get("short_commit") or git_meta.get("commit") or "",
-        "git_origin": git_meta.get("origin_url") or "",
+        "git_branch": env_info["git_branch"],
+        "git_commit": env_info["git_commit"],
+        "git_dirty": env_info["git_dirty"],
+        "git_head": env_info["git_short_commit"] or env_info["git_commit"],
+        "git_origin": env_info["git_origin"],
         "hf_repo": hf_repo,
         "model_detail_section": model_detail_section,
         "model_summary_section": model_summary_section,
@@ -510,13 +463,14 @@ def _write_meta(
     to locate the inference config.
 
     """
+    env_info = get_environment_info()
     meta = {
         "schema_version": 1,
         "files": files,
         "yaml_files": yaml_files,
-        "torch": str(torch.__version__),
-        "espnet": str(espnet2.__version__),
-        "python": sys.version,
+        "torch": env_info["torch"],
+        "espnet": env_info["espnet"],
+        "python": env_info["python"],
     }
     (out_dir / "meta.yaml").write_text(OmegaConf.to_yaml(meta), encoding="utf-8")
 

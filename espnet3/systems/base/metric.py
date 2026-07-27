@@ -9,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from espnet3.components.metrics.base_metric import BaseMetric
 from espnet3.utils.logging_utils import log_component
+from espnet3.utils.readme_utils import write_measure_readme
 from espnet3.utils.scp_utils import get_class_path, load_scp_paths
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ def _resolve_test_sets(metrics_config: DictConfig) -> list[str]:
 
 
 def measure(metrics_config: DictConfig):
-    """Compute metrics for each test set and write a metrics JSON file.
+    """Compute metrics for each test set and write metrics.json and README.md.
 
     Test sets are resolved in the following order:
 
@@ -60,6 +61,13 @@ def measure(metrics_config: DictConfig):
 
         then ``measure()`` scores both ``test-clean`` and ``test-other``
         when ``metrics_config.dataset.test`` is omitted.
+
+    Alongside ``metrics_config.inference_dir/metrics.json``, a
+    ``README.md`` with an Environments section (date, python/pytorch/espnet
+    versions, git hash) and a Results table is written to the same
+    directory, overwriting any previous version. It intentionally omits
+    model summary and usage info; ``pack_model`` builds a richer README
+    separately.
 
     Args:
         metrics_config: Omegaconf configuration with inference and metric settings.
@@ -111,5 +119,7 @@ def measure(metrics_config: DictConfig):
     out_path = Path(metrics_config.inference_dir) / "metrics.json"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
+
+    write_measure_readme(Path(metrics_config.inference_dir), results)
 
     return results
