@@ -1,0 +1,4 @@
+source_env_var: COMMONVOICE
+legacy_data_script: egs2/commonvoice/asr1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: commonvoice/asr/data
