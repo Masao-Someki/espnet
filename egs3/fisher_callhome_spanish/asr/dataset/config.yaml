@@ -1,0 +1,4 @@
+source_env_var: FISHER_CALLHOME_SPANISH
+legacy_data_script: egs2/fisher_callhome_spanish/asr1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: fisher_callhome_spanish/asr/data
