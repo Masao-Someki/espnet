@@ -21,3 +21,10 @@ python run.py --stages measure \
 
 Use `training_transformer.yaml` or `training_conformer.yaml` to select the
 other encoder configurations.
+
+## OmniIO audio cache
+
+Install `omniio`, `duckdb`, and `pyarrow`, then set `cache.enabled` to `true`
+in the selected training and inference configs. Run `create_dataset` before
+training. The stage writes cached WAV files and Parquet indexes under
+`${data_dir}/omniio`; dataset reads use `omniio.interface.audio_read`.

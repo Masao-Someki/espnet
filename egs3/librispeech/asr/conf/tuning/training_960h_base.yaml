@@ -2,12 +2,22 @@ task: espnet3.systems.asr.task.ASRTask
 
 dataset:
   train:
-    - data_src_args: {split: train-clean-100}
-    - data_src_args: {split: train-clean-360}
-    - data_src_args: {split: train-other-500}
+    - data_src_args:
+        split: train-clean-100
+        cache: ${cache}
+    - data_src_args:
+        split: train-clean-360
+        cache: ${cache}
+    - data_src_args:
+        split: train-other-500
+        cache: ${cache}
   valid:
-    - data_src_args: {split: dev-clean}
-    - data_src_args: {split: dev-other}
+    - data_src_args:
+        split: dev-clean
+        cache: ${cache}
+    - data_src_args:
+        split: dev-other
+        cache: ${cache}
   preprocessor:
     _target_: espnet2.train.preprocessor.CommonPreprocessor
     train: true
@@ -22,6 +32,12 @@ dataset:
 
 create_dataset:
   recipe_dir: ${recipe_dir}
+  cache: ${cache}
+
+cache:
+  enabled: false
+  backend: omniio
+  cache_dir: ${data_dir}/omniio
 
 tokenizer:
   vocab_size: 5000

@@ -1,13 +1,26 @@
+cache:
+  enabled: false
+  backend: omniio
+  cache_dir: ${data_dir}/omniio
+
 dataset:
   test:
     - name: dev-clean
-      data_src_args: {split: dev-clean}
+      data_src_args:
+        split: dev-clean
+        cache: ${cache}
     - name: dev-other
-      data_src_args: {split: dev-other}
+      data_src_args:
+        split: dev-other
+        cache: ${cache}
     - name: test-clean
-      data_src_args: {split: test-clean}
+      data_src_args:
+        split: test-clean
+        cache: ${cache}
     - name: test-other
-      data_src_args: {split: test-other}
+      data_src_args:
+        split: test-other
+        cache: ${cache}
 
 model:
   _target_: espnet2.bin.asr_inference.Speech2Text

@@ -19,3 +19,8 @@ dataset:
     - dev-other
     - test-clean
     - test-other
+
+cache:
+  enabled: false
+  backend: omniio
+  cache_dir: data/omniio
