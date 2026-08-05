@@ -1,0 +1,4 @@
+source_env_var: MUST_C
+legacy_data_script: egs2/must_c/st1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: must_c/st/data
