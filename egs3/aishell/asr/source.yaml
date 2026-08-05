@@ -1,0 +1,5 @@
+source_env_var: AISHELL
+legacy_data_script: egs2/aishell/asr1/local/data.sh
+notes: >-
+  Run the referenced egs2 data preparation script, then point source_dir at
+  the resulting Kaldi data directory or place it under this recipe's data/.
