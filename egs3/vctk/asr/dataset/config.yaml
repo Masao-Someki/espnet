@@ -1,0 +1,4 @@
+source_env_var: VCTK
+legacy_data_script: egs2/vctk/asr1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: vctk/asr/data

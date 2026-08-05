@@ -1,0 +1,6 @@
+defaults:
+  - ../../../recipe_common/asr_inference.yaml
+  - _self_
+
+recipe_dir: .
+dataset_dir: ${recipe_dir}/data
