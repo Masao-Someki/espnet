@@ -1,0 +1,5 @@
+source_env_var: WENETSPEECH
+legacy_data_script: egs2/wenetspeech/asr1/local/data.sh
+notes: >-
+  WenetSpeech requires the upstream preparation flow. Point source_dir at the
+  resulting Kaldi data directory or place the prepared data under data/.

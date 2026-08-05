@@ -1,0 +1,4 @@
+source_env_var: WENETSPEECH
+legacy_data_script: egs2/wenetspeech/asr1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: wenetspeech/asr/data
