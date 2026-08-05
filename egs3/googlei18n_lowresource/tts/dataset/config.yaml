@@ -1,0 +1,4 @@
+source_env_var: GOOGLEI18N
+legacy_data_script: egs2/googlei18n_lowresource/tts1/local/data.sh
+prepared_layout: kaldi_data_dir
+source_dir_default: googlei18n_lowresource/tts/data
