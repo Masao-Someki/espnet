@@ -1,0 +1,93 @@
+task: espnet3.systems.asr.task.ASRTask
+create_dataset:
+  recipe_dir: ${recipe_dir}
+dataset:
+  train:
+    - data_src_args:
+        split: train
+        source_dir: ${dataset_dir}
+  valid:
+    - data_src_args:
+        split: dev
+        source_dir: ${dataset_dir}
+  test:
+    - name: test
+      data_src_args:
+        split: test
+        source_dir: ${dataset_dir}
+  preprocessor:
+    _target_: espnet2.train.preprocessor.CommonPreprocessor
+    train: true
+    fs: 16000
+    token_type: bpe
+    token_list: ${tokenizer.save_path}/tokens.txt
+    bpemodel: ${tokenizer.save_path}/bpe.model
+
+tokenizer:
+  vocab_size: 5000
+  character_coverage: 1.0
+  model_type: bpe
+  save_path: ${data_dir}/${tokenizer.model_type}_${tokenizer.vocab_size}
+  text_builder:
+    func: egs3.recipe_common.tokenizer.gather_training_text
+    recipe_dir: ${recipe_dir}
+    source_dir: ${dataset_dir}
+
+model:
+  vocab_size: ${tokenizer.vocab_size}
+  token_list: ${tokenizer.save_path}/tokens.txt
+  encoder: transformer
+  encoder_conf:
+    output_size: 256
+    attention_heads: 4
+    linear_units: 1024
+    num_blocks: 12
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    attention_dropout_rate: 0.1
+    input_layer: conv2d
+    normalize_before: true
+  decoder: transformer
+  decoder_conf:
+    attention_heads: 4
+    linear_units: 2048
+    num_blocks: 6
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    self_attention_dropout_rate: 0.1
+    src_attention_dropout_rate: 0.1
+  normalize: global_mvn
+  normalize_conf:
+    stats_file: ${stats_dir}/train/feats_stats.npz
+  model_conf:
+    ctc_weight: 0.3
+    lsm_weight: 0.1
+    length_normalized_loss: false
+  frontend: default
+  frontend_conf:
+    n_fft: 512
+    win_length: 400
+    hop_length: 160
+
+optimizer:
+  _target_: torch.optim.Adam
+  lr: 0.002
+  weight_decay: 0.000001
+scheduler:
+  _target_: espnet2.schedulers.warmup_lr.WarmupLR
+  warmup_steps: 15000
+best_model_criterion:
+  - [valid/acc, 3, max]
+dataloader:
+  train:
+    iter_factory:
+      num_workers: 4
+      batches:
+        type: numel
+        shape_files: ["${stats_dir}/train/feats_shape"]
+        batch_size: 16
+        batch_bins: 4000000
+trainer:
+  accumulate_grad_batches: 1
+  max_epochs: 80
+  precision: bf16-mixed

@@ -1,0 +1,7 @@
+metrics:
+  - metric:
+      _target_: espnet3.systems.asr.metrics.wer.WER
+      clean_types:
+  - metric:
+      _target_: espnet3.systems.asr.metrics.cer.CER
+      clean_types:
