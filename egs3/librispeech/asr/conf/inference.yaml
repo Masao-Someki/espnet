@@ -1,0 +1,20 @@
+dataset:
+  test:
+    - name: dev-clean
+      data_src_args: {split: dev-clean}
+    - name: dev-other
+      data_src_args: {split: dev-other}
+    - name: test-clean
+      data_src_args: {split: test-clean}
+    - name: test-other
+      data_src_args: {split: test-other}
+
+model:
+  _target_: espnet2.bin.asr_inference.Speech2Text
+  asr_train_config: ${exp_dir}/config.yaml
+  asr_model_file: ${exp_dir}/valid.acc.ave_10best.pth
+  beam_size: 20
+  ctc_weight: 0.3
+
+input_key: speech
+output_fn: src.inference.build_output

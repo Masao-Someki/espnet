@@ -1,0 +1,3 @@
+defaults:
+  - training_960h_base.yaml
+  - _self_

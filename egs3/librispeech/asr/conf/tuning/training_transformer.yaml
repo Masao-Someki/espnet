@@ -1,0 +1,16 @@
+defaults:
+  - training_960h_base.yaml
+  - _self_
+
+model:
+  encoder: transformer
+  encoder_conf:
+    output_size: 512
+    attention_heads: 8
+    linear_units: 2048
+    num_blocks: 12
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    attention_dropout_rate: 0.0
+    input_layer: conv2d
+    normalize_before: true
