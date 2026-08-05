@@ -1,0 +1,3 @@
+defaults:
+  - ../../../recipe_common/asr_metrics.yaml
+  - _self_
