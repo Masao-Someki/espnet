@@ -1,0 +1,2 @@
+"""AutoResearch applications."""
+

@@ -1,0 +1,118 @@
+name: architecture_search
+version: 1
+start: init_study
+
+nodes:
+  init_study:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.init_study.InitStudyStage
+    executor: local
+    "on":
+      success: research_context
+      failure: summarize
+
+  research_context:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.research_context.ResearchContextStage
+    executor: local
+    "on":
+      success: propose_trial
+      failure: propose_trial
+
+  propose_trial:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.propose_trial.ProposeTrialStage
+    executor: local
+    "on":
+      success: run_trial       # config-only change, no code modification needed
+      write_files: write_files  # agent requested code changes
+      waiting_agent: propose_trial
+      no_budget: select_best
+      failure: summarize
+
+  write_files:
+    target: espnet3.autoresearch.applications.architecture_search.stages.write_files.WriteFilesStage
+    executor: local
+    "on":
+      success: run_tests
+      failure: reflect
+
+  run_tests:
+    target: espnet3.autoresearch.applications.architecture_search.stages.run_tests.RunTestsStage
+    executor: local
+    "on":
+      success: run_trial
+      failure: write_files          # loop back with error context in prompt
+      max_retries_exceeded: reflect  # give up after code_edit.max_test_retries
+
+  run_trial:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.run_trial.RunTrialStage
+    executor: trial
+    resources:
+      gpus: 1
+      cpus: 16
+      mem: 32G
+      time: "12:00:00"
+      partition: "gpuA100x4"
+      account: bbjs-delta-gpu
+    "on":
+      success: collect_result
+      failure: debug_trial
+      timeout: debug_trial
+      waiting_job: run_trial
+      early_stopped: reflect
+
+  debug_trial:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.debug_trial.DebugTrialStage
+    executor: local
+    "on":
+      success: write_files
+      waiting_agent: debug_trial
+      continue: reflect
+      failure: reflect
+
+  collect_result:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.collect_result.CollectResultStage
+    executor: local
+    "on":
+      success: accept_or_reject
+      failure: reflect
+
+  accept_or_reject:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.accept_or_reject.AcceptOrRejectStage
+    executor: local
+    "on":
+      accepted: reflect
+      rejected: reflect
+      failure: reflect
+
+  reflect:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.reflect.ReflectStage
+    executor: local
+    "on":
+      continue: update_knowledge
+      done: update_knowledge
+      waiting_agent: reflect
+      failure: update_knowledge
+
+  update_knowledge:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.update_knowledge.UpdateKnowledgeStage
+    executor: local
+    "on":
+      continue: propose_trial
+      done: select_best
+
+  select_best:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.select_best.SelectBestStage
+    executor: local
+    "on":
+      success: summarize
+      failure: summarize
+
+  summarize:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.summarize.SummarizeStage
+    executor: local
+    "on":
+      terminal: analyze
+
+  analyze:
+    target: espnet3.autoresearch.applications.hyperparameter_search.stages.analyze.AnalyzeStage
+    executor: local
+    terminal: true
