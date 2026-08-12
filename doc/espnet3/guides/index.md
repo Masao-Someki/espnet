@@ -40,6 +40,12 @@ Guides are goal-oriented. Pick the track that matches what you want to do.
     href="./running-a-baseline/index.html"
   />
   <DocCard
+    title="Production deployment"
+    desc="Connect research workflows to an optional production ASR serving backend."
+    icon="tabler:server"
+    href="./deployment/funasr.html"
+  />
+  <DocCard
     title="Customize ESPnet3"
     desc="Add system-specific stages and extend the pipeline beyond the defaults."
     icon="tabler:tool"
