@@ -153,13 +153,21 @@ def cmd_tick(args) -> int:
 
 def cmd_run_node(args) -> int:
     runtime = _load_runtime(Path(args.study_dir).resolve(), Path(args.recipe_dir).resolve())
-    result = runtime.run_node(
-        node_name=args.node,
-        run_id=args.run_id,
-        trial_id=args.trial_id,
-        attempt_id=args.attempt_id,
-        controller_mode=False,
-    )
+    if runtime.gpu_self_controller_enabled() and runtime.graph.nodes[args.node].executor == "trial":
+        result = runtime.run_gpu_self_controller(
+            node_name=args.node,
+            run_id=args.run_id,
+            trial_id=args.trial_id,
+            attempt_id=args.attempt_id,
+        )
+    else:
+        result = runtime.run_node(
+            node_name=args.node,
+            run_id=args.run_id,
+            trial_id=args.trial_id,
+            attempt_id=args.attempt_id,
+            controller_mode=False,
+        )
     return 0 if result.status not in {"failure", "timeout"} else 1
 
 

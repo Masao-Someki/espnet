@@ -24,6 +24,7 @@ class Study:
     created_at: str
     updated_at: str
     current_best_trial_id: str | None = None
+    agent_session_id: str | None = None
 
 
 @dataclass
@@ -70,7 +71,8 @@ class StateStore:
                   status TEXT NOT NULL,
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL,
-                  current_best_trial_id TEXT
+                  current_best_trial_id TEXT,
+                  agent_session_id TEXT
                 );
                 CREATE TABLE IF NOT EXISTS trials (
                   trial_id TEXT PRIMARY KEY,
@@ -140,6 +142,12 @@ class StateStore:
                 conn.execute(
                     "ALTER TABLE jobs ADD COLUMN job_type TEXT NOT NULL DEFAULT 'trial'"
                 )
+            study_columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(studies)").fetchall()
+            }
+            if "agent_session_id" not in study_columns:
+                conn.execute("ALTER TABLE studies ADD COLUMN agent_session_id TEXT")
             trial_columns = {
                 row["name"]
                 for row in conn.execute("PRAGMA table_info(trials)").fetchall()
@@ -158,10 +166,12 @@ class StateStore:
             now = utc_now()
             if row is None:
                 conn.execute(
-                    "INSERT INTO studies VALUES (?, ?, ?, ?, ?, ?)",
-                    (study_id, str(study_dir), "initialized", now, now, None),
+                    "INSERT INTO studies "
+                    "(study_id, study_dir, status, created_at, updated_at, current_best_trial_id, "
+                    "agent_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (study_id, str(study_dir), "initialized", now, now, None, None),
                 )
-                return Study(study_id, str(study_dir), "initialized", now, now, None)
+                return Study(study_id, str(study_dir), "initialized", now, now, None, None)
             return Study(**dict(row))
 
     def get_study(self, study_id: str) -> Study:
@@ -177,6 +187,20 @@ class StateStore:
             conn.execute(
                 "UPDATE studies SET status = ?, updated_at = ? WHERE study_id = ?",
                 (status, utc_now(), study_id),
+            )
+
+    def get_agent_session_id(self, study_id: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT agent_session_id FROM studies WHERE study_id = ?", (study_id,)
+            ).fetchone()
+        return str(row["agent_session_id"]) if row and row["agent_session_id"] else None
+
+    def set_agent_session_id(self, study_id: str, session_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE studies SET agent_session_id = ?, updated_at = ? WHERE study_id = ?",
+                (session_id, utc_now(), study_id),
             )
 
     def set_best_trial(self, study_id: str, trial_id: str) -> None:

@@ -6,6 +6,7 @@ import os
 import shlex
 import subprocess
 import shutil
+import time
 from pathlib import Path
 
 from espnet3.autoresearch.core.result import StageResult
@@ -39,6 +40,54 @@ class RunTrialStage(AutoResearchStage):
                 check=False,
             )
         return proc
+
+    @staticmethod
+    def _is_training_command(command: list[str]) -> bool:
+        try:
+            return command[command.index("--stages") + 1] == "train"
+        except (ValueError, IndexError):
+            # A custom command template represents the complete trial workload.
+            return True
+
+    def _run_with_gpu_monitor(self, context, command, log_path, env, timeout):
+        """Run training while the GPU worker performs cooperative early-stop checks."""
+        interval = context.scheduler.gpu_self_monitor_interval_sec()
+        started = time.monotonic()
+        next_check = started + interval
+        with open(log_path, "a", encoding="utf-8") as handle:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(context.recipe_dir),
+                env=env,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            while proc.poll() is None:
+                now = time.monotonic()
+                if timeout is not None and now - started >= timeout:
+                    proc.terminate()
+                    proc.wait(timeout=30)
+                    return "timeout", None
+                if now >= next_check:
+                    try:
+                        context.scheduler._maybe_check_keypoints(
+                            context.current_trial.trial_id
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        context.logger.warning(f"In-job early-stop check failed: {exc}")
+                    current = context.state.get_trial(context.current_trial.trial_id)
+                    if current.status == "early_stopped":
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=30)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait()
+                        return "early_stopped", None
+                    next_check = now + interval
+                time.sleep(min(5.0, max(0.1, next_check - time.monotonic())))
+        return "completed", proc
 
     # Stages that only need --training_config
     _TRAIN_ONLY_STAGES = frozenset({"create_dataset", "train_tokenizer", "collect_stats", "train"})
@@ -143,17 +192,31 @@ class RunTrialStage(AutoResearchStage):
             proc = None
             for index, command in enumerate(commands):
                 log_path = train_log if index == 0 else eval_log
-                with open(log_path, "a", encoding="utf-8") as handle:
-                    proc = subprocess.run(
-                        command,
-                        cwd=str(context.recipe_dir),
-                        env=env,
-                        stdout=handle,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        timeout=timeout,
-                        check=False,
+                if (
+                    os.environ.get("ESPNET_AR_GPU_SELF_CONTROLLER") == "1"
+                    and self._is_training_command(command)
+                ):
+                    monitor_status, proc = self._run_with_gpu_monitor(
+                        context, command, log_path, env, timeout
                     )
+                    if monitor_status == "early_stopped":
+                        return StageResult(status="early_stopped", message="Trial early stopped")
+                    if monitor_status == "timeout":
+                        trial.status = "timeout"
+                        context.state.update_trial(trial)
+                        return StageResult(status="timeout", message="Trial timed out")
+                else:
+                    with open(log_path, "a", encoding="utf-8") as handle:
+                        proc = subprocess.run(
+                            command,
+                            cwd=str(context.recipe_dir),
+                            env=env,
+                            stdout=handle,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            timeout=timeout,
+                            check=False,
+                        )
                 if proc.returncode != 0:
                     trial.status = "failed"
                     context.state.update_trial(trial)
