@@ -15,7 +15,8 @@ python -c "from espnet3.systems.asr.system import ASRSystem"
 ## Common failures
 
 - CUDA or PyTorch mismatch: reinstall PyTorch first, then reinstall `espnet`.
-- Missing optional package: install the matching extra such as `espnet[asr]`.
+- Missing optional package: install the matching extra, e.g. `uv pip install -e ".[asr]"`
+  (also `"[tts]"`, `"[enh]"`, ...).
 - Hugging Face upload missing tools: install `huggingface_hub` and log in via
   Python (`from huggingface_hub import login; login()`) or via the CLI with
   `hf login`.
@@ -35,10 +36,11 @@ dependencies such as `ffmpeg` or `cmake`, we strongly recommend using
 [pixi](https://pixi.prefix.dev/latest/).
 
 ```shell
-curl -fsSL https://pixi.sh/install.sh | sh
-pixi init
-pixi add python==3.11 pip ffmpeg cmake
-pixi shell  # Enter shell to use the installed ffmpeg, cmake, etc
+curl -fsSL https://pixi.sh/install.sh | bash
+pixi init && pixi add python=3.11 pip ffmpeg
+pixi shell  # or: eval "$(pixi shell-hook)"
+uv pip install -e .
+uv pip install -e ".[asr]"    # add extras as needed, e.g. also "[tts]" or "[enh]"
 ```
 
 ## When to report an issue

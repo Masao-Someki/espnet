@@ -244,8 +244,9 @@ class DownloadRunner(BaseRunner):
         writers["manifest"].write(f'{result["path"]}\t{result["status"]}\n')
 
     @staticmethod
-    def close_writers(writers):
+    def close_writers(writers, state, **env):
         writers["manifest"].close()
+        return None
 
     def merge(self, shard_dirs):
         out_path = self.output_dir / "downloads.tsv"
@@ -323,7 +324,7 @@ It is better when shard outputs are too large to keep in memory.
     title="Datasets"
     desc="Read how recipe-local dataset code plugs into DataOrganizer."
     icon="tabler:database"
-    href="../components/datasets.html"
+    href="../components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer API"
@@ -335,13 +336,13 @@ It is better when shard outputs are too large to keep in memory.
     title="Dataset Config"
     desc="See how dataset entries are written in YAML."
     icon="tabler:settings-2"
-    href="../config/dataset.html"
+    href="../components/data-organizer.html"
   />
   <DocCard
     title="System And Stages"
     desc="See where dataset creation fits in the overall recipe flow."
     icon="tabler:hierarchy-2"
-    href="../system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="DatasetBuilder API"

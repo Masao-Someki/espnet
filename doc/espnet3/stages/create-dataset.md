@@ -51,7 +51,19 @@ The following keys are available:
 | `recipe_dir`  | Recipe directory  | `egs3/mini_an4/asr`               |
 | `dataset_dir` | Dataset directory | `egs3/mini_an4/asr/data/mini_an4` |
 
-For more information, see [Training Configuration](../config/train_config.md)
+For more information, see [Training Configuration](../config/train_config.html)
+
+::: warning
+`create_dataset` does **not** support a `func`-style callable hook. The `create_dataset` block in
+[`egs3/TEMPLATE/asr/conf/training.yaml`](https://github.com/espnet/espnet/blob/master/egs3/TEMPLATE/asr/conf/training.yaml)
+ships with a `func: src.creating_dataset.create_dataset` field by default, but
+`BaseSystem.create_dataset()`
+([`espnet3/systems/base/system.py`](https://github.com/espnet/espnet/blob/master/espnet3/systems/base/system.py))
+never reads `func` — any key you put under `create_dataset:` is simply forwarded as a keyword
+argument to the builder methods described [below](#3-builder). Delete `func` from a copied
+`training.yaml` (or ignore it — a recipe builder written with `**_kwargs` silently absorbs it) and
+implement dataset preparation through the `DatasetBuilder` contract instead.
+:::
 
 ### Example
 
@@ -81,7 +93,7 @@ dataset:
 
 ## 3. Builder
 
-The code for preparding the dataset is defined in a builder class in `builder.py`, which inherits from [`espnet3.components.data.DatasetBuilder`](../../../espnet3/components/data/dataset_builder.py).
+The code for preparding the dataset is defined in a builder class in `builder.py`, which inherits from [`espnet3.components.data.DatasetBuilder`](https://github.com/espnet/espnet/blob/master/espnet3/components/data/dataset_builder.py).
 
 The builder has two main responsibilities:
 - **Source Preparation**: download, extract, validate, or locate raw assets
@@ -201,7 +213,7 @@ manifest representation.
     title="Dataset references and builders"
     desc="See the dataset-side builders and references used before batching."
     icon="tabler:database"
-    href="../core/components/datasets.html"
+    href="../core/components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer"
@@ -213,6 +225,6 @@ manifest representation.
     title="Training dataset config"
     desc="See how dataset options are configured in training.yaml"
     icon="tabler:puzzle"
-    href="../train/dataset.html"
+    href="../core/components/data-organizer.html"
   />
 </DocCards>

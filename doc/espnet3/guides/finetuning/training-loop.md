@@ -171,6 +171,6 @@ For example, a GAN helper that only one recipe uses can stay recipe-local.
     title="Training config"
     desc="See where trainer, optimizer, scheduler, and profiler are configured."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>

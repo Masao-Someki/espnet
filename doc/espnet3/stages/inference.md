@@ -9,27 +9,43 @@ date: 2026-05-21
 # ESPnet3 Inference Stage
 
 The `infer` stage runs model inference on the provided test set(s) and writes the outputs to disk.
-The resulting files are used to measure model performance in the [`measure`](./metrics.md) stage.
+The resulting files are used to measure model performance in the [`measure`](./metrics.html) stage.
 
 ## 1. Run
 
 ```bash
-python run.py --stages infer --inference_config conf/inference.yaml
+python run.py --stages infer \
+    --training_config conf/training.yaml \
+    --inference_config conf/inference.yaml
 ```
+
+`--inference_config` is required for `infer`. `--training_config` is also
+required unless `inference_config` defines its own `exp_tag` or a concrete
+`exp_dir` -- otherwise `run.py` cannot resolve `exp_dir`/`inference_dir` and
+raises a `ValueError` before running the stage. The common pattern is to pass
+both flags, so `training_config.exp_tag`/`exp_dir` are copied into
+`inference_config` automatically.
 
 ## 2. Configuration
 
 Keep the core settings in `inference.yaml`. For the full list, see
-[Inference configuration](../config/infer_config.md).
+[Inference configuration](../config/infer_config.html).
 
 | Config section  | Description                                   |
 | --------------- | --------------------------------------------- |
 | `model`         | model to run inference with                   |
-| `dataset`       | definition of the test set                    |
-| `inference_dir` | root output location                          |
+| `dataset`       | definition of the test set(s); each entry under `dataset.test` needs a `name`, which becomes its output subdirectory |
+| `inference_dir` | root output location (default `${exp_dir}/${self_name:}`, i.e. `${exp_dir}/<inference config filename>`) |
 | `input_key`     | dataset field or fields passed into the model |
 | `output_fn`     | function used to format the output files      |
-| `parallel`      | local or distributed runner settings          |
+| `parallel`      | local or distributed runner settings, see [below](#multi-gpu-and-parallel-inference) |
+| `runner.resume` | whether to reuse a previous run's shard outputs, see [below](#resuming-a-partial-or-failed-run) |
+
+`egs3/TEMPLATE/asr/conf/inference.yaml` ships `dataset.test:` and `model:` blank as placeholders --
+both must be filled in before running `infer`. Leaving `dataset.test` unset fails immediately with a
+bare `TypeError: 'NoneType' object is not iterable`; leaving `model` unset fails later, inside a
+worker process, with `TypeError: 'NoneType' object is not callable`. Neither error names the missing
+config field, so check `dataset.test`/`model` first if `infer` fails this way.
 
 ## 3. Outputs
 
@@ -137,8 +153,62 @@ def write_png_artifact(*, value, output_path):
 
 The writer must return the written path. That path is stored in the SCP file.
 
+## 4. Resuming a partial or failed run
 
-## 4. Implementation Details
+Each test set's work is split into shards under
+`<inference_dir>/<test_name>/split.<shard_id>/`. A shard directory containing
+a `.done` marker is treated as complete. By default (`runner.resume: true`,
+the `InferenceRunner`/`BaseRunner` default), re-running `infer` with the same
+`--inference_config` skips every shard that is already marked done and only
+computes the remaining ones -- this is what makes it safe to re-run `infer`
+after an interrupted or partially failed job.
+
+::: warning
+Resume only checks that the **shard plan** (how many shards, and which
+dataset indices went into each one) is unchanged between runs -- it does not
+fingerprint the model or provider config. If you change
+`inference_config.model` (e.g. point at a different checkpoint), `input_key`,
+`output_fn`, or any other provider setting and re-run with `resume: true` (the
+default), already-`.done` shards are skipped and their stale SCP output from
+the *previous* model/config is reused silently.
+
+To force a full re-run after changing the model or provider config, either:
+
+- pass `runner: {resume: false}` in `inference.yaml` for that run, or
+- delete `<inference_dir>/<test_name>/` (or the whole `<inference_dir>`)
+  before re-running.
+:::
+
+## 5. Multi-GPU and parallel inference
+
+`inference_config.parallel` controls sharding:
+
+```yaml
+parallel:
+  env: local
+  n_workers: 1
+```
+
+::: warning
+`n_workers` is only read when `parallel.env` is **not** `"local"`. With the
+default `env: local`, exactly one shard is created and it always runs
+sequentially on the driver process, regardless of `n_workers` -- raising
+`n_workers` under `env: local` has no effect and produces no warning. To
+actually parallelize inference across workers, set `parallel.env` to a
+non-`local` backend (see [Scaling: Inference](../guides/scaling/inference.html))
+together with `n_workers`.
+:::
+
+Running `infer` under multi-GPU DDP training in the same invocation is also
+affected by the rank-guard gap described in [the train stage
+docs](./train.html): running `--stages train infer` (or the full default
+stage list) under `trainer.devices > 1` with the local subprocess launcher
+causes every DDP rank to re-run `infer` against the same `inference_dir`
+concurrently, which fails with a shard-lock error or races on shard output.
+Run `infer` as its own single-process `python run.py --stages infer ...`
+invocation after training completes.
+
+## 6. Implementation Details
 ### Inference Providers and Runners
 
 Inference is implemented as a Provider/Runner loop.
@@ -165,15 +235,24 @@ results = runner(range(len(provider.build_dataset(config))))
 
 ### Batch Inference
 
-Inference can be run batched by setting `runner.batch_size`.
+Inference can be run batched by setting the top-level `batch_size` in
+`inference.yaml` (it is not nested under `runner:`).
 
 For example:
 ```yaml
-runner:
-  batch_size: 4
+batch_size: 4
 ```
 
 This will pass a list of indices to `InferenceRunner.forward()`.
+
+::: warning `batch_size: 1` is not the same as leaving it unset
+Any integer `batch_size`, including `1`, chunks indices into lists and calls `forward()` on the
+*batched* code path (`is_batched=True` in
+[`InferenceRunner.forward`](https://github.com/espnet/espnet/blob/master/espnet3/systems/base/inference_runner.py)) --
+`model`/`output_fn` then receive list-wrapped inputs even for a "batch" of one. If your model or
+`output_fn` only supports single-sample calls, leave `batch_size` unset (or `null`) rather than
+setting it to `1`; a mismatch here fails with `RuntimeError: Batched inference failed...`.
+:::
 
 ### `output_fn`
 
@@ -215,7 +294,7 @@ def build_output(*, data, model_output, idx):
 ```
 
 
-## 5. Using a custom model
+## 7. Using a custom model
 
 There a two common paths when using a custom models:
 

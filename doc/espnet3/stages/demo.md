@@ -8,20 +8,75 @@ date: 2026-05-28
 
 # ESPnet3 Demo Guide
 
-This page explains how to create and configure interactive Gradio demos.
+This page explains how to package and run an interactive Gradio demo from a
+published ESPnet3 model.
 
-A key advantage is that demos **reuse your existing inference code** (providers/runners/models), so you do **not** need to write extra demo-specific Python.
+A key advantage is that demos **reuse your packed model** through
+`InferenceModel`, so the demo does not re-implement inference; it only wires
+UI values to the same inference call used by `pack_model`.
 
 ## 1. Run
 
+`pack_demo`'s default `model.dir_or_tag: exp/${exp_tag}/model_pack` needs
+`exp_tag`, which is only resolved when `--training_config` is passed
+alongside `--demo_config`:
+
 ```bash
-python run.py --stages pack_demo upload_demo --demo_config conf/demo.yaml
+python run.py --stages pack_demo \
+  --training_config conf/tuning/training_e_branchformer.yaml \
+  --demo_config conf/demo.yaml
 ```
+
+::: important
+Running `pack_demo`/`upload_demo` with `--demo_config` alone crashes with
+`omegaconf.errors.InterpolationKeyError: Interpolation key 'exp_tag' not
+found`, because `demo.yaml`'s default `model.dir_or_tag` references
+`${exp_tag}` and nothing else supplies it. Always pass `--training_config`
+(or set `model.dir_or_tag` to an explicit path/tag in `demo.yaml`).
+:::
+
+Add `upload_demo` to `--stages` (with the same flags) to push the packed
+demo to a Hugging Face Space:
+
+```bash
+python run.py --stages pack_demo upload_demo \
+  --training_config conf/tuning/training_e_branchformer.yaml \
+  --demo_config conf/demo.yaml
+```
+
+::: important
+Re-running `pack_demo` against the same `pack.out_dir` can fail with
+`FileExistsError` if the packed model directory lives outside the demo
+directory (the default TEMPLATE layout, where `model_pack` sits under
+`exp/${exp_tag}/` and `demo` sits at the recipe root): `pack_demo`
+creates `demo_dir/model_pack` as a symlink to the external model directory,
+but does not remove a stale symlink left over from a previous run
+([`packing.py`](https://github.com/espnet/espnet/blob/master/espnet3/publication/demo/packing.py)'s
+`_link_local_model_into_bundle`). If a re-run fails this way, delete
+`pack.out_dir` (or just `demo_dir/model_pack`) before running `pack_demo`
+again.
+:::
+
+::: important
+Stage logs for `pack_demo`/`upload_demo` are written directly into
+`demo_config.pack.out_dir` — the same directory `upload_demo` uploads to the
+Hugging Face Space. Passing `--write_requirements` writes a full `pip
+freeze` snapshot into that same directory as `requirements.txt`, overwriting
+the curated `requirements.txt` that `pack_demo` already wrote from
+`pack.requirements`
+([`system.py`](https://github.com/espnet/espnet/blob/master/espnet3/systems/base/system.py)'s
+`stage_log_mapping`, and
+[`logging_utils.py`](https://github.com/espnet/espnet/blob/master/espnet3/utils/logging_utils.py)'s
+`_write_requirements_snapshot`). Avoid `--write_requirements` with
+`pack_demo`/`upload_demo`, and check `requirements.txt` in the packed
+directory before uploading.
+:::
 
 ## 2. Outputs
 
 After `pack_demo`, ESPnet3 writes a runnable Gradio app into the output
-directory (default is `demo/` if you set `pack.out_dir: demo`).
+directory (`demo.yaml`'s `pack.out_dir`; the TEMPLATE default is the
+recipe-relative `demo` directory):
 
 ```bash
 cd demo
@@ -31,188 +86,104 @@ python app.py
 This starts a local Gradio server. Open the printed URL in your browser.
 
 > [!IMPORTANT]
-> `gradio` is required for local demo execution. It can be installed using `pip install gradio`.
+> `gradio` is required for local demo execution. Install it with `pip install gradio`.
 
-
-After packing, the output directory contains the runnable app, configs, and
-links to your recipe assets. Example:
+A typical packed demo directory looks like:
 
 ```text
 demo/
-├── app.py
-├── config
-│   └── infer.yaml
-├── data -> ../data/
-├── demo.yaml
-├── exp -> ../exp/
+├── app.py            # copied from ui.app_script
+├── demo.yaml         # resolved config, paths rewritten to be relative
+├── model_pack -> ../model_pack/   # symlink, when the model lives outside demo_dir
 ├── README.md
-└── requirements.txt
+└── requirements.txt  # written from pack.requirements
 ```
 
-## 3. Configuration
+**After changing `app.py` or any UI asset, run `pack_demo` again** — the
+packed directory is a snapshot copied at pack time, so edits to the source
+`app.py`/assets are not picked up until the next `pack_demo`.
 
-Keep the core settings in `demo.yaml`. For the full list, see
-[Demo configuration](../config/demo_config.md).
+## 3. The three-layer demo design
 
-| Config section | Description                                            |
-| -------------- | ------------------------------------------------------ |
-| `infer_config` | Path to the inference config used by the demo runtime. |
-| `ui`           | UI layout and component definitions.                   |
-| `inputs`       | Input field definitions and preprocessing mappings.    |
-| `outputs`      | Output field definitions and postprocessing mappings.  |
+The demo has three layers with separate responsibilities:
 
-### UI configuration (Gradio)
+1. **`demo.yaml`** declares the model reference (`model.dir_or_tag`), model
+   call-time kwargs (`model.call_args`), the UI input/output specs
+   (`ui.inputs`/`ui.outputs`), and the app script to copy (`ui.app_script`).
+2. **`load_demo_session()`** loads that config and builds a `DemoSession`
+   (`espnet3.publication.demo.session`). The session resolves the packed
+   model through `InferenceModel`, resolves UI assets from the registry, and
+   builds the inference callable via `DemoSession.create_inference_fn()`.
+3. **The packed `app.py`** owns the Gradio layout. The default app builds
+   components from `session.input_specs`/`session.output_specs`, passes
+   their values positionally to `session.create_inference_fn()`, and
+   displays the returned values.
 
-UI is configured under `ui` in `demo.yaml`. The demo app is generated from this
-config and wires inputs/outputs directly to your inference runner.
+The runtime inference path is:
 
-The settings in the `ui` sections can be used to override the system defaults (defined in `espnet3.systems.<system>.demo`), if available.
-If there are no default settings defined for the target system, `ui` must be manually configured in `demo.yaml`.
+```text
+Gradio values -> input spec keys -> InferenceModel(model_input, **call_args)
+              -> result keys -> output spec values -> Gradio components
+```
 
-The UI section contains the following fields:
+ESPnet3 owns model loading, packed-config resolution, input-key mapping,
+call-time arguments, and the generic session callable. The recipe owns the
+UI layout and any presentation-specific logic.
 
-| Field          | Description                                                                   |
-| -------------- | ----------------------------------------------------------------------------- |
-| `title`        | App title shown at the top of the demo page.                                  |
-| `description`  | Markdown text shown under the title.                                          |
-| `article`      | Optional Markdown section shown at the bottom.                                |
-| `article_path` | Path to a Markdown file to load as `article`. If set, it overrides `article`. |
-| `button.label` | Label for the Run button.                                                     |
-| `inputs`       | List of input component configs (`name`, `type`, and type-specific fields).   |
-| `outputs`      | List of output component configs (`name`, `type`, and type-specific fields).  |
+## 4. Configuring `demo.yaml`
 
-### Demo README 
+For the full list of options, see [Demo configuration](../config/demo_config.html).
 
-After `pack_demo`, the packed demo directory contains a `README.md` and the demo
-UI renders it as the page article by default. To change what is shown in the
-demo screen, edit `demo/README.md` in the packed directory (or set
-`ui.article_path` to a different Markdown file).
+| Section              | Description                                                      |
+| --------------------- | ----------------------------------------------------------------- |
+| `model.dir_or_tag`     | packed model directory (relative to the demo dir) or HF Hub tag  |
+| `model.call_args`      | kwargs passed to the model at call time, e.g. `beam_size`        |
+| `ui.app_script`        | Gradio launcher script copied into the pack as `app.py`          |
+| `ui.title`             | app title                                                        |
+| `ui.description`       | markdown/text file path, or inline text                          |
+| `ui.inputs`/`ui.outputs` | list of `{key, type, label}` UI component specs                |
+| `pack.out_dir`         | packed demo output directory                                     |
+| `pack.include`, `exclude` | extra files/dirs to copy, and exclusion patterns              |
+| `pack.requirements`   | pip specifiers written to the packed `requirements.txt`          |
+| `upload_demo.hf_repo` | target Hugging Face Space                                        |
 
-### Sample UI Config
+For ordinary UI changes, edit `ui.inputs`/`ui.outputs` — each entry's `key`
+must match the packed model's input/output contract — and reuse the
+built-in `audio`/`text` asset types. Example:
 
 ```yaml
 ui:
-  title: "ESPnet3 Demo"
-  description: "Run inference with your existing provider/runner."
-  button:
-    label: "Run"
+  app_script: src/app.py
+  title: ASR demo
   inputs:
-    - name: speech
+    - key: speech
       type: audio
-      sources: [mic, upload]
-    - name: lang
-      type: dropdown
-      choices: [en, ja]
+      label: "Input Audio"
   outputs:
-    - name: text
-      type: textbox
-      lines: 2
+    - key: hyp
+      type: text
+      label: "Transcription"
 ```
 
+For a new reusable component type, subclass `UIAsset`
+(`espnet3.publication.demo.assets`) and register it in `DEFAULT_UI_ASSETS`.
+For a one-off layout, edit or replace `ui.app_script` and call
+`load_demo_session()`/`DemoSession` directly, keeping the positional order
+of Gradio inputs/outputs aligned with `session.input_specs`/`output_specs`.
 
-<!-- TODO (?)
-Topics to cover:
+## Related pages
 
-- How `demo.yaml` fields are used by the runtime and pack flow
-- Overriding UI, provider, and runner classes
-- Advanced customization patterns
--->
-
-## 4.  Developer Notes
-
-### Supported component types
-
-Each entry in `inputs`/`outputs` requires `name` and `type`. The following `type`
-values and key fields are supported:
-
-| Type       | Key Fields                                                |
-| ---------- | --------------------------------------------------------- |
-| `audio`    | `sources` (mic/upload), `audio_type` (`numpy` by default) |
-| `textbox`  | `lines`, `placeholder`                                    |
-| `dropdown` | `choices`, `value`                                        |
-| `number`   | `value`                                                   |
-| `slider`   | `min`, `max`, `step`, `value`                             |
-| `checkbox` | `value`                                                   |
-| `image`    |
-| `file`     |
-
-The component `name` becomes the key used by the demo runtime, so it must match
-the expected inference input/output mapping.
-
-For `audio` inputs, Gradio returns `(sample_rate, np.ndarray)`. The demo runtime
-normalizes this to a `float32` waveform array before passing it to the runner.
-
-UI input values are placed into a single-item dataset. The runner receives that
-dataset and should read the inputs from `dataset[0]`. Only `extra_kwargs` from
-`demo.yaml` are passed as `kwargs` to the runner.
-
-Under the hood, the demo runtime packages those UI inputs into a **single-item
-dataset**. This keeps the call pattern consistent with standard inference
-runners (`forward(idx, dataset=..., model=...)`) while still letting you pass
-simple UI fields.
-
-Minimal demo dataset (conceptual behavior):
-
-```python
-class SingleItemDataset:
-    def __init__(self, item):
-        self._item = item
-
-    def __len__(self):
-        return 1
-
-    def __getitem__(self, idx):
-        if idx != 0:
-            raise IndexError(idx)
-        # Returns UI-defined fields (e.g., speech, lang) as a dict.
-        return self._item
-```
-
-With this dataset, a runner can still use the familiar signature and pull
-values from `dataset[0]`. Example runner implementation that matches the UI
-sample above:
-
-```python
-from espnet3.parallel.base_runner import BaseRunner
-
-
-class DemoRunner(BaseRunner):
-    @staticmethod
-    def forward(idx, dataset=None, model=None, **_):
-        item = dataset[idx]
-        hyp = model(item["speech"], lang=item.get("lang"))
-        return {"hyp": hyp}
-```
-
-### Output mapping (output_keys)
-
-When outputs are defined, `output_keys` maps UI output names to keys returned by
-your runner/model result. This lets you return a structured dict (e.g.,
-`{"hyp": ...}`) and map it to UI outputs. Example:
-
-```yaml
-output_keys:
-  text: hyp
-```
-
-If `output_keys` is missing but outputs are defined, demo runtime raises an
-error.
-
-### System defaults (ASR example)
-
-For ASR, defaults live in `espnet3/systems/asr/demo.py`:
-
-- `build_ui_default()` defines the default input/output components.
-- `build_ui(demo_cfg)` optionally modifies defaults using demo config.
-- `build_inference_default()` defines default `output_keys` and `extra_kwargs`.
-
-Minimal ASR UI defaults:
-
-```python
-def build_ui_default():
-    return {
-        "title": "ASR Demo",
-        "inputs": [{"name": "speech", "type": "audio", "sources": ["mic", "upload"]}],
-        "outputs": [{"name": "text", "type": "textbox"}],
-    }
-```
+<DocCards :cols="3">
+  <DocCard
+    title="Demo configuration"
+    desc="All options for configuring the demo stage"
+    icon="tabler:file-code"
+    href="../config/demo_config.html"
+  />
+  <DocCard
+    title="Publication stages"
+    desc="Pack and upload a model before packaging a demo around it."
+    icon="tabler:package"
+    href="publish.html"
+  />
+</DocCards>

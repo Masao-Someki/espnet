@@ -81,7 +81,7 @@ Move code into `espnet3/` only when it is reusable across recipes.
     title="Config overview"
     desc="See how `training.yaml`, `inference.yaml`, and `metrics.yaml` split the workflow."
     icon="tabler:settings-2"
-    href="../../core/config/index.html"
+    href="../../config/index.html"
   />
   <DocCard
     title="Custom dataset"

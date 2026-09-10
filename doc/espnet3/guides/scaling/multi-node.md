@@ -52,27 +52,37 @@ does not solve.
 ## Dataloader sharding
 
 When training across multiple GPUs, each GPU must see a different subset of
-the data.
-ESPnet3 handles this through `total_shards` and `dist_world_size` in the
-dataloader config.
+the data. `total_shards`/`dist_world_size` are attributes ESPnet3 reads off a
+`ShardedDataset` instance (`DataLoaderBuilder._maybe_shard_dataset` calls
+`getattr(dataset, "total_shards", ...)`), so they belong under `data_src_args`
+in the `dataset:` block, not under `dataloader:`.
 
 ```yaml
-dataloader:
+dataset:
   train:
-    total_shards: 16         # total number of shards to split the data into
-    dist_world_size: 16      # must equal num_nodes * num_device
+    - data_src: my_recipe/asr
+      data_src_args:
+        split: train
+        total_shards: 16        # total number of shards to split the data into
+        dist_world_size: 16     # must equal num_nodes * num_device
 ```
 
 **Rules:**
 
-- `dist_world_size` must equal `num_nodes × num_device` exactly.
-  ESPnet3 validates this at runtime and raises a `RuntimeError` if they
-  differ.
+- `dist_world_size` must equal `num_nodes` times `num_device` exactly.
+  ESPnet3 validates this at the start of training and raises a `RuntimeError`
+  if they differ.
 - `total_shards` must be divisible by `dist_world_size`.
 - A larger `total_shards` gives more fine-grained shard rotation across
-  epochs.
-  A common choice is `total_shards = dist_world_size` (one shard per rank)
-  or a small multiple of it.
+  epochs. A common choice is `total_shards = dist_world_size` (one shard per
+  rank) or a small multiple of it.
+- Rank/world size themselves come from `torch.distributed` at runtime, not
+  from any config value — they are only queried when `num_device > 1`. A
+  multi-node job with exactly **one** GPU per node (`num_device: 1`,
+  `num_nodes > 1`) is therefore treated as world_size=1/rank=0 for sharding
+  purposes even though the real distributed world size is larger. Use
+  `num_device > 1` per node, or avoid `ShardedDataset` for single-GPU-per-node
+  multi-node jobs.
 
 **Example: 2 nodes × 8 GPUs = 16 ranks**
 
@@ -86,10 +96,22 @@ trainer:
   num_nodes: ${num_nodes}
   strategy: ddp
 
+dataset:
+  train:
+    - data_src: my_recipe/asr
+      data_src_args:
+        split: train
+        total_shards: 16
+        dist_world_size: 16
+  valid:
+    - data_src: my_recipe/asr
+      data_src_args:
+        split: valid
+        total_shards: 16
+        dist_world_size: 16
+
 dataloader:
   train:
-    total_shards: 16
-    dist_world_size: 16
     iter_factory:
       _target_: espnet2.iterators.sequence_iter_factory.SequenceIterFactory
       shuffle: true
@@ -100,8 +122,6 @@ dataloader:
           - ${stats_dir}/train/feats_shape
         batch_bins: 4000000
   valid:
-    total_shards: 16
-    dist_world_size: 16
     iter_factory:
       _target_: espnet2.iterators.sequence_iter_factory.SequenceIterFactory
       shuffle: false
@@ -112,6 +132,17 @@ dataloader:
           - ${stats_dir}/valid/feats_shape
         batch_bins: ${dataloader.train.iter_factory.batches.batch_bins}
 ```
+
+::: warning
+This `iter_factory` + shape-file `batches` combination does not actually
+support `total_shards > 1` today — shape files are keyed by the unsharded
+dataset's index, which no longer matches after sharding. See
+[Dataset sharding](./dataset-sharding.html#common-mistakes) before combining
+sharding with `iter_factory`; keep `total_shards: 1` unless you control batch
+construction yourself (e.g. `ChunkIterFactory` with an explicit `batches`
+list), or shard through the standard `DataLoader` path instead (and set
+`trainer.use_distributed_sampler: false` explicitly — see the same section).
+:::
 
 ## How shard rotation works
 
@@ -127,7 +158,9 @@ This means:
 - every shard is seen once per `total_shards / world_size` epochs
 
 Setting `total_shards` to a multiple of `dist_world_size` ensures that all
-shards are eventually visited.
+shards are eventually visited. `valid` is sharded and rotated the same way as
+`train` (same `epoch` value), so per-epoch `valid/loss` is not drawn from a
+fixed slice of data.
 
 ## Launching multi-node jobs
 
@@ -182,13 +215,20 @@ default `parallel.env: local` is usually sufficient.
 ## Common mistakes
 
 **`dist_world_size` does not match the runtime world size.**
-Set `dist_world_size: ${num_nodes * num_device}` or compute the value
-explicitly.
+Set `dist_world_size` to the literal product of `num_nodes` and `num_device`
+(OmegaConf has no multiply operator).
 Leaving it at `1` while running multi-GPU will raise a `RuntimeError`.
 
 **`total_shards` is not divisible by `dist_world_size`.**
 For example, `total_shards: 10` with `dist_world_size: 8` will fail.
 Round up `total_shards` to the nearest multiple of `dist_world_size`.
+
+**One GPU per node.**
+Rank/world size are only queried from `torch.distributed` when
+`num_device > 1`; with `num_device: 1` and `num_nodes > 1`, sharding and the
+NaN-skip check both fall back to world_size=1/rank=0 regardless of the real
+distributed world size. Prefer more than one GPU per node when using
+`ShardedDataset`.
 
 **Putting DDP strategy settings under `parallel.options`.**
 `parallel.options` is for Dask cluster options, not Lightning.
@@ -201,7 +241,13 @@ Strategy goes under `trainer`.
     title="Training Config"
     desc="Full schema for trainer, dataloader, optimizer, and scheduler."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
+  />
+  <DocCard
+    title="Dataset sharding"
+    desc="ShardedDataset, the shard rotation formula, and known iter_factory/DDP caveats."
+    icon="tabler:layout-grid"
+    href="./dataset-sharding.html"
   />
   <DocCard
     title="Multi-GPU (from PyTorch)"

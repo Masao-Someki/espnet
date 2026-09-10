@@ -33,16 +33,4 @@ Guides are goal-oriented. Pick the track that matches what you want to do.
     icon="tabler:arrows-exchange"
     href="./coming-from-other-toolkits/index.html"
   />
-  <DocCard
-    title="Running a baseline"
-    desc="Run inference, evaluate metrics, and execute a recipe on a cluster."
-    icon="tabler:player-play"
-    href="./running-a-baseline/index.html"
-  />
-  <DocCard
-    title="Customize ESPnet3"
-    desc="Add system-specific stages and extend the pipeline beyond the defaults."
-    icon="tabler:tool"
-    href="./customize/index.html"
-  />
 </DocCards>

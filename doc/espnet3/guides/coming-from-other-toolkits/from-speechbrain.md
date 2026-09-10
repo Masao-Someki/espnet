@@ -74,7 +74,7 @@ you port.
     title="System and stages"
     desc="See the architecture behind stage execution."
     icon="tabler:route"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Custom dataset"

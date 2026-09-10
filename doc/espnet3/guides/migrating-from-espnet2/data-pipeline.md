@@ -85,27 +85,28 @@ The shape is roughly:
 from pathlib import Path
 
 from espnet3.components.data.dataset_builder import DatasetBuilder
+from espnet3.utils.download_utils import download_url, extract_targz
 
 
 class MiniAn4Builder(DatasetBuilder):
-    def is_source_prepared(self, recipe_dir: str | Path, **kwargs) -> bool:
-        source_dir = Path(recipe_dir) / "source"
+    def is_source_prepared(self, recipe_dir: str | Path, **_kwargs) -> bool:
+        source_dir = Path(recipe_dir) / "downloads"
         return (source_dir / "an4").is_dir()
 
-    def prepare_source(self, recipe_dir: str | Path, **kwargs) -> None:
-        source_dir = Path(recipe_dir) / "source"
+    def prepare_source(self, recipe_dir: str | Path, **_kwargs) -> None:
+        source_dir = Path(recipe_dir) / "downloads"
         source_dir.mkdir(parents=True, exist_ok=True)
-        extract_archive(source_dir / "an4_raw.bigendian.tar.gz", source_dir)
+        extract_targz(source_dir / "an4_raw.bigendian.tar.gz", source_dir)
 
-    def is_built(self, recipe_dir: str | Path, **kwargs) -> bool:
+    def is_built(self, recipe_dir: str | Path, **_kwargs) -> bool:
         data_dir = Path(recipe_dir) / "data"
         return all(
             (data_dir / split / "wav_text.tsv").is_file()
             for split in ("train", "valid", "test")
         )
 
-    def build(self, recipe_dir: str | Path, **kwargs) -> None:
-        source_dir = Path(recipe_dir) / "source" / "an4"
+    def build(self, recipe_dir: str | Path, **_kwargs) -> None:
+        source_dir = Path(recipe_dir) / "downloads" / "an4"
         data_dir = Path(recipe_dir) / "data"
 
         rows = read_transcripts(source_dir)
@@ -115,6 +116,11 @@ class MiniAn4Builder(DatasetBuilder):
         for split, split_rows in splits.items():
             write_manifest(data_dir / split / "wav_text.tsv", split_rows)
 ```
+
+Use the shared helpers in `espnet3.utils.download_utils` (`download_url`,
+`extract_targz`) for downloads/extraction instead of ad-hoc HTTP or archive
+code -- see the real `egs3/mini_an4/asr/dataset/builder.py` for the full
+implementation.
 
 `is_source_prepared()` and `is_built()` should be cheap filesystem checks.
 `prepare_source()` and `build()` do the actual work.
@@ -381,13 +387,13 @@ Prefer online augmentation in `dataset.py` or `transform` when:
     title="Datasets"
     desc="Read the high-level dataset internals and recipe-local module layout."
     icon="tabler:database"
-    href="../../core/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Dataset references"
     desc="See how dataset modules, builders, and references are resolved."
     icon="tabler:folder-code"
-    href="../../core/components/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer"
@@ -405,7 +411,7 @@ Prefer online augmentation in `dataset.py` or `transform` when:
     title="Dataset Config"
     desc="See the YAML dataset entry format used by training and inference."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Cluster and parallel"

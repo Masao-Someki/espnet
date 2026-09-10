@@ -36,13 +36,23 @@ The cloned project looks like this:
 ```
 my_project/
 ├── run.py                  # entry point — run stages from here
+├── path.sh                 # PYTHONPATH / environment setup, sourced by shell scripts
+├── readme.md                # quick-start commands for this recipe
 ├── conf/
-│   ├── training.yaml       # model, trainer, optimizer, dataloader
-│   ├── inference.yaml      # decoder settings, test sets
-│   ...
+│   ├── training.yaml        # model, trainer, optimizer, dataloader
+│   ├── inference.yaml       # decoder settings, test sets
+│   ├── metrics.yaml         # measure-stage metrics
+│   ├── publication.yaml     # pack_model / upload_model
+│   └── demo.yaml            # pack_demo / upload_demo
+├── dataset/
+│   ├── __init__.py          # exports `Dataset` and `DatasetBuilder`
+│   ├── builder.py           # DatasetBuilder used by create_dataset
+│   ├── dataset.py            # the torch Dataset class
+│   └── config.yaml           # builder-specific settings (paths, env vars)
 └── src/
-    ├── dataset.py          # dataset class for this recipe
-    └── builder.py          # DatasetBuilder called by create_dataset
+    ├── tokenizer.py           # tokenizer-text hook wired from training.yaml
+    ├── inference.py            # build_output(), wired from inference.yaml
+    └── app.py                  # demo UI, if the recipe ships one
 ```
 
 To see how each file in the cloned project connects to a stage, see
@@ -153,6 +163,6 @@ main(args=args, system_cls=ASRSystem)
     title="Config Overview"
     desc="See how training, inference, metrics, and publication configs connect."
     icon="tabler:settings-code"
-    href="../core/config/index.html"
+    href="../config/index.html"
   />
 </DocCards>

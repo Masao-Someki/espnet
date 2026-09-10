@@ -64,34 +64,53 @@ long, the batch it lands in may have only one sample.
 
 ## Sharding for multi-GPU and multi-node
 
-Each GPU needs a non-overlapping slice of the training data.
-Set `total_shards` and `dist_world_size` to activate this:
+Each GPU needs a non-overlapping slice of the training data. This is a
+**dataset-level** attribute, not a dataloader key: `total_shards`/
+`dist_world_size` are read off a `ShardedDataset` instance
+(`getattr(dataset, "total_shards", ...)`), so set them through `data_src_args`
+in the `dataset:` block -- **not** under `dataloader:`. Those keys are not
+read by `DataLoaderBuilder`; with the standard-DataLoader path
+(`iter_factory: null`) leaving them under `dataloader:` raises a `TypeError`
+from `torch.utils.data.DataLoader`, and with `iter_factory` set they are
+silently ignored.
 
 ```yaml
-dataloader:
+dataset:
   train:
-    total_shards: 16
-    dist_world_size: 16
+    - data_src: my_recipe/asr
+      data_src_args:
+        split: train
+        total_shards: 16
+        dist_world_size: 16
 ```
 
-`dist_world_size` must equal `num_nodes × num_device`.
+`dist_world_size` must equal `num_nodes` times `num_device` (write the product
+as a literal -- OmegaConf has no multiply operator).
 `total_shards` must be divisible by `dist_world_size`.
 
-For single-GPU runs, keep both at `1` (the default).
+For single-GPU runs, either skip `ShardedDataset` entirely or set both to `1`.
 
-See [Multi-node training](./multi-node.html#dataloader-sharding) for the
-full sharding rules and shard rotation formula.
+::: warning
+Sharding does not currently work together with the `iter_factory` +
+`batch_bins` path fed from `collect_stats` shape files: those files are keyed
+by the *unsharded* dataset's index, which no longer lines up once
+`dataset.shard()` reindexes the data. Use `total_shards: 1` with
+`iter_factory`, or use the standard `DataLoader` (`iter_factory: null`) when
+sharding is required.
+:::
+
+See [Dataset sharding](./dataset-sharding.html) for the full rules and shard
+rotation formula.
 
 ## Validation dataloader
 
-The validation dataloader does not need shuffle, but it should mirror the
-training sharding settings to ensure each GPU only validates its own slice:
+The validation dataloader does not need shuffle. Give the `valid` dataset
+entry the same `total_shards`/`dist_world_size` as `train` (again via
+`data_src_args`) so each GPU validates only its own slice:
 
 ```yaml
 dataloader:
   valid:
-    total_shards: ${dataloader.train.total_shards}
-    dist_world_size: ${dataloader.train.dist_world_size}
     iter_factory:
       _target_: espnet2.iterators.sequence_iter_factory.SequenceIterFactory
       shuffle: false
@@ -103,8 +122,9 @@ dataloader:
         batch_bins: ${dataloader.train.iter_factory.batches.batch_bins}
 ```
 
-Using interpolation keeps the validation config in sync with training
-automatically.
+Validation shards rotate every epoch exactly like training (both use the same
+`epoch` value), so `valid/loss` is not drawn from a fixed slice across epochs
+when sharding is on.
 
 ## Standard DataLoader path
 
@@ -165,6 +185,17 @@ parallel:
 `n_workers` here controls how many Dask workers run stats collection
 concurrently — it is independent from `trainer.devices`.
 
+**Keying and resume.** Shape/stats files are keyed by the `CombinedDataset`
+global integer index (`uid=str(idx)`) for that split, not by a stable
+utterance ID — reordering or changing the `dataset:` entries between
+`collect_stats` and `train` silently re-maps shape entries to different
+utterances, with no error. `collect_stats` also resumes by shard (a
+`split.N/done` marker) without fingerprinting the model or dataset config, so
+changing frontend settings (e.g. `n_mels`, `hop_length`) or dataset contents
+without also changing/clearing `${stats_dir}` can skip shards and merge stale
+stats. Use a fresh `stats_dir` (or delete the old one) whenever the
+model/dataset config changes.
+
 ## Common mistakes
 
 **Leaving `dist_world_size: 1` for a multi-GPU run.**
@@ -205,6 +236,6 @@ becomes a bottleneck.
     title="Stats collection"
     desc="See how collect_stats writes the shape files used by batch_bins."
     icon="tabler:gauge"
-    href="../../core/stats-collection.html"
+    href="../../stages/collect-stats.html"
   />
 </DocCards>

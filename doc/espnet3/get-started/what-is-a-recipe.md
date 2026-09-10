@@ -20,6 +20,21 @@ Click a file or stage below to explore how data flows through the project.
 
 <FileStageMappingWidget />
 
+Stages run in this order (a system only runs the ones you pass to `--stages`):
+
+```text
+create_dataset → train_tokenizer → collect_stats → train → infer → measure
+  → pack_model → upload_model → pack_demo → upload_demo
+```
+
+`TTSSystem` inserts `create_token_list` and `remove_long_short` before `collect_stats`.
+
+`create_dataset` reads `training_config.dataset` and, for each entry, imports the recipe's
+`dataset` module and looks up two classes by name: `Dataset` and `DatasetBuilder`. A recipe's
+`dataset/__init__.py` must export exactly those two names (aliased from whatever your real
+classes are called) — this is how `BaseSystem.create_dataset()` finds your builder without any
+extra registration step.
+
 A recipe is the working project you use to:
 
 - run a baseline

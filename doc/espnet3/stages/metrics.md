@@ -12,9 +12,32 @@ This page describes the model evaluation flow in ESPnet3.
 
 ## 1. Run
 
+`measure` scores files written by the `infer` stage, so it needs to know
+where those files are. Pass `--training_config` and `--inference_config`
+alongside `--metrics_config` so `run.py` can propagate `inference_dir` into
+`metrics_config` automatically:
+
 ```bash
-python run.py --stages measure --metrics_config conf/metrics.yaml
+python run.py --stages measure \
+  --training_config conf/training.yaml \
+  --inference_config conf/inference.yaml \
+  --metrics_config conf/metrics.yaml
 ```
+
+::: important
+Passing only `--training_config` and `--metrics_config` (without
+`--inference_config`) does **not** set `metrics_config.inference_dir` and
+raises `omegaconf.errors.ConfigAttributeError: Missing key inference_dir`.
+`run.py` only copies `inference_dir` into `metrics_config` from
+`inference_config`, not from `training_config`
+([`run_utils.py`](https://github.com/espnet/espnet/blob/master/espnet3/utils/run_utils.py)'s
+`apply_training_experiment_context`). Always pass `--inference_config` when
+running `--stages measure`.
+:::
+
+For a standalone `measure` run with no training/inference config, set
+`exp_tag` (or a concrete `exp_dir`) and `inference_dir` directly in
+`metrics.yaml`.
 
 ## 2. Outputs
 
@@ -101,9 +124,11 @@ If `inputs` is omitted, `measure()` falls back to the metric instance's
 
 ```yaml
 recipe_dir: .
+# exp_tag / exp_dir / inference_dir are normally propagated automatically
+# from --training_config / --inference_config (see Section 1). Set them
+# here only for a standalone `measure` run.
 exp_tag:
 exp_dir: ${recipe_dir}/exp/${exp_tag}
-inference_dir: ${exp_dir}/${self_name:}
 
 metrics:
   - metric:
@@ -137,7 +162,7 @@ class MyMetric(BaseMetric):
     self,
     data: Dict[str, Path], # Paths to the SCP files
     test_name: str, # Current test set name
-    output_dir: str, # The root of `inference_dir`
+    inference_dir: Path, # The root of `inference_dir`
   ) -> Dict[str, Any] # Mapping the metric name to a value, e.g., {"WER": 0.05}
 ```
 

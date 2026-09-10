@@ -55,6 +55,26 @@ Important points:
 - `scheduler_monitor` is only needed for monitored epoch schedulers such as
   `ReduceLROnPlateau`
 
+**`scheduler` is required whenever `optimizer` is set.** There is no
+constant-LR fallback for omitting it (or setting `scheduler: null`) — the
+single-optimizer branch of `configure_optimizers()` only activates when both
+`optimizer` and `scheduler` are set, so leaving `scheduler` empty falls through
+to a `ValueError`. For a constant learning rate, configure an explicit no-op
+scheduler instead, e.g.:
+
+```yaml
+scheduler:
+  _target_: torch.optim.lr_scheduler.ConstantLR
+  factor: 1.0
+  total_iters: 1
+```
+
+**Use a `valid/*` monitor for epoch-based schedulers.** Training stats are
+logged once per step (not aggregated per epoch), while validation stats are
+aggregated over the whole epoch. A `scheduler_monitor` such as `train/loss`
+would therefore reflect only the last training batch, not an epoch average —
+prefer `valid/loss` (or another `valid/*` key) for monitored epoch schedulers.
+
 Example with a monitored scheduler:
 
 ```yaml
@@ -155,6 +175,6 @@ ESPnet3 rejects mixed configuration.
     title="Training configuration"
     desc="See where optimizer and scheduler settings live in YAML."
     icon="tabler:settings-2"
-    href="../../config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>

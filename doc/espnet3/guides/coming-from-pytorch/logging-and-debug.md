@@ -28,7 +28,7 @@ ESPnet3 switches the stage log handler automatically when stages run.
     title="System and Stages"
     desc="See how stage execution selects log locations."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Train Stage"
@@ -313,7 +313,7 @@ So if you already know Lightning logger config, it transfers directly.
     title="Training Config"
     desc="See trainer.logger, profiler, and fast debug settings in YAML."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Trainer"
@@ -435,7 +435,7 @@ For cluster or multi-GPU issues, also inspect the logged environment variables.
     title="Parallel Config"
     desc="See cluster and worker settings that show up in logs."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Dataloader"
@@ -477,7 +477,7 @@ from scratch.
     title="Training Config"
     desc="See where `trainer`, `logger`, and `profiler` are configured."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Trainer"
@@ -489,7 +489,7 @@ from scratch.
     title="Parallel Config"
     desc="See how environment and worker settings are logged for cluster runs."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Provider / Runner"

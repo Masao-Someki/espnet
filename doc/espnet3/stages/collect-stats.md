@@ -70,7 +70,26 @@ The `collect_stats` stage is configured in the same `training.yaml` used for tra
 At minimum, the `stats_dir` key must be set to the directionary where the output files will be dumped.
 Components that require shape or stats files (e.g. `model`, `dataloader`) should point to the corresponding files in `${stats_dir}/train/` or `${stats_dir}/valid/` (Note that these paths are read-only; results are always written to `stats_dir`).
 
-For more information, see [Training Configuration](../config/train_config.md).
+For more information, see [Training Configuration](../config/train_config.html).
+
+::: warning ASR: `model.normalize` does not survive into a `train` stage run in the same process
+`collect_stats()` removes `model.normalize` / `model.normalize_conf` from `training_config.model`
+**in place** before building the trainer
+([`espnet3/systems/base/training.py`](https://github.com/espnet/espnet/blob/master/espnet3/systems/base/training.py)),
+and `training_config` is the same config object the `train` stage reuses afterwards. If `collect_stats`
+and `train` run in the same `run.py` invocation (e.g. the default `--stages all`), the model is built
+with the task's default normalizer instead of your configured `global_mvn`/`stats_file`, with no
+warning. If your recipe sets `model.normalize`, run `collect_stats` and `train` as two separate
+`run.py` invocations, and check the saved `${exp_dir}/config.yaml` after training to confirm
+`normalize`/`normalize_conf` were actually applied.
+
+`TTSSystem` does not have this problem: its `collect_stats` override
+([`espnet3/systems/tts/system.py`](https://github.com/espnet/espnet/blob/master/espnet3/systems/tts/system.py))
+builds the trainer without popping `normalize`/`normalize_conf`, because TTS's `normalize_choices`
+defaults to `global_mvn` — popping the key would silently restore that default rather than disabling
+normalization, and would also crash on the very first run (the stats file the default normalizer
+expects does not exist yet).
+:::
 
 Example:
 
@@ -115,7 +134,7 @@ parallel:
 
 ## Related pages
 
-- [Training config](../config/train_config.md)
+- [Training config](../config/train_config.html)
 
 <DocCards :cols="3">
   <DocCard

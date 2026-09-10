@@ -83,7 +83,7 @@ That is the clean ESPnet3 path for a custom model.
     title="Training Config"
     desc="See where task, model, optimizer, and trainer settings live."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Custom Model"
@@ -132,13 +132,13 @@ So:
     title="System and Stages"
     desc="See how Systems own stage methods and config wiring."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Stages"
     desc="See the built-in stage entrypoints and their config inputs."
     icon="tabler:route"
-    href="../../stages/"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Recipe Structure"
@@ -302,7 +302,7 @@ That is the kind of recipe-local workflow logic that `System` is for.
     title="Config Overview"
     desc="See how stage-specific configs are loaded and passed to Systems."
     icon="tabler:settings-code"
-    href="../../core/config/"
+    href="../../config/index.html"
   />
 </DocCards>
 
@@ -360,12 +360,12 @@ Use it when the stage flow itself needs to change.
     title="Training Config"
     desc="See how `model`, `optimizer`, `dataloader`, and `trainer` are configured."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="System and stages"
     desc="Read the architecture-level explanation of `System` and stage dispatch."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
 </DocCards>

@@ -45,6 +45,20 @@ ESPnet3 wraps Lightning in:
 | `callbacks` | extra training callbacks |
 | `profiler` | Lightning profiler config |
 | `plugins` | Lightning plugin config |
+| `callbacks` | extra callbacks, appended after the ESPnet3 defaults |
+| `init` | initialization mode forwarded to `espnet2.torch_utils.initialize.initialize(model, init)` (e.g. `xavier_uniform`); consumed by `ESPnet3LightningTrainer` itself, not forwarded to `lightning.Trainer` |
+
+`accelerator`, `strategy`, `logger`, `profiler`, `plugins`, `callbacks`, and
+`init` are consumed by `ESPnet3LightningTrainer` itself and stripped out before
+building `lightning.Trainer`. Every other key under `trainer:` is passed
+through to `lightning.Trainer(**trainer_config)` unchanged.
+
+**`init` must live under `trainer:`.** `ESPnet3LightningTrainer` only reads
+`init` from the trainer sub-config it receives
+(`ESPnet3LightningTrainer(config=training_config.trainer, ...)`), i.e. it
+looks for `training_config.trainer.init`. A top-level `init:` key at the root
+of `training.yaml` (outside `trainer:`) is not read by the current
+implementation and has no effect.
 
 ## Example
 
@@ -67,9 +81,17 @@ trainer:
 Compared with constructing `lightning.Trainer` directly, ESPnet3 adds:
 
 - default callbacks from `get_default_callbacks(...)`
-- model initialization through `training_config.init`
+- model initialization through `trainer.init` (see the table above)
 - ESPnet dataloader safeguards
 - multi-optimizer trainer validation
+
+**Accepted `config` types.** `ESPnet3LightningTrainer.__init__` accepts
+`config: Union[DictConfig, Namespace, Dict[str, Any]]`. In practice it reads
+and writes attributes on `config` (for example `self.config.log_every_n_steps`,
+and it may set `self.config.reload_dataloaders_every_n_epochs` / `
+self.config.use_distributed_sampler`), so a plain `dict` currently raises
+`AttributeError`. Pass an `OmegaConf`/Hydra `DictConfig` (the normal case when
+`training.yaml` is loaded through Hydra) or a `Namespace`.
 
 ## Default callbacks
 
@@ -130,34 +152,21 @@ See [Multiple optimizers and schedulers](./multiple_optimizers_schedulers.html).
 `fit(...)` and `validate(...)` forward to the underlying Lightning trainer.
 `collect_stats(...)` forwards to the model-side stats path.
 
-## Custom trainer example: GANTTSLightningTrainer
+## Custom trainer example
 
-The clearest current customization example is:
-
-- `espnet3.systems.tts.gan_trainer.GANTTSLightningTrainer`
-
-Its job is intentionally narrow:
-
-- deep-copy the trainer config
-- remove the task-specific `trainer.gan` block
-- delegate the rest to `ESPnet3LightningTrainer`
-
-This is the recommended style for task-specific trainer customization:
-
-- keep the base trainer behavior
-- normalize only task-specific config
-- call `super().__init__(...)`
-
-Minimal sketch:
+No recipe currently ships a subclass of `ESPnet3LightningTrainer`; the
+standard `espnet3.systems.base.training._build_trainer` always constructs
+`ESPnet3LightningTrainer` directly. If a task family needs to normalize
+task-specific config before Lightning sees it, subclass
+`ESPnet3LightningTrainer`, strip/normalize the extra keys, and delegate the
+rest to `super().__init__(...)`:
 
 ```python
-class GANTTSLightningTrainer(ESPnet3LightningTrainer):
+class MyTaskTrainer(ESPnet3LightningTrainer):
     def __init__(self, model=None, exp_dir=None, config=None, best_model_criterion=None):
         trainer_config = copy.deepcopy(config)
-        if isinstance(trainer_config, DictConfig) and hasattr(trainer_config, "gan"):
-            delattr(trainer_config, "gan")
-        elif isinstance(trainer_config, dict):
-            trainer_config.pop("gan", None)
+        if isinstance(trainer_config, DictConfig) and hasattr(trainer_config, "my_task_only_key"):
+            delattr(trainer_config, "my_task_only_key")
 
         super().__init__(
             model=model,
@@ -167,7 +176,8 @@ class GANTTSLightningTrainer(ESPnet3LightningTrainer):
         )
 ```
 
-If you need a custom trainer, use this pattern first.
+Keep the base trainer behavior, normalize only task-specific config, and call
+`super().__init__(...)` last.
 
 ## Related pages
 
@@ -176,7 +186,7 @@ If you need a custom trainer, use this pattern first.
     title="Training configuration"
     desc="See where trainer options are set in YAML."
     icon="tabler:settings-2"
-    href="../../config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Callbacks"

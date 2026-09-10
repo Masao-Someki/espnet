@@ -70,6 +70,22 @@ This page assumes you already cloned a recipe.
 :::
 ```
 
+## Internal links
+
+Link to other pages with a **relative path ending in `.html`**, never `.md`
+and never a bare directory:
+
+```md
+[Config overview](../config/index.html)
+```
+
+VuePress builds each Markdown source file to an `.html` route, so a link
+written as `.md` or without an extension will 404 on the built site even
+though it resolves while browsing the raw Markdown. Only link to pages that
+actually exist under `doc/espnet3/` (check with
+`find doc/espnet3 -name '*.md'` if unsure). `DocCard`/`DocCards` `href`
+values follow the same rule (see the examples throughout this page).
+
 ## Using Vue components in Markdown
 
 This site enables Vue components inside Markdown through VuePress Hope
@@ -79,7 +95,7 @@ That means you can write components directly in a page, for example:
 
 ```md
 <DocCards :cols="2">
-  <DocCard title="Config overview" href="../core/config/index.html" />
+  <DocCard title="Config overview" href="../config/index.html" />
 </DocCards>
 ```
 

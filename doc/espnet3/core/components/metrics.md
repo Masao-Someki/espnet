@@ -48,6 +48,19 @@ Typical input:
 }
 ```
 
+`output_dir` is passed through as `metrics_config.inference_dir` — in a
+typical Hydra/OmegaConf config this is a plain `str`, not a `Path` instance,
+even though the abstract signature is typed as `Path`. Wrap it yourself (as
+the built-in `WER`/`CER`/`TER` metrics do: `Path(output_dir) / test_name`)
+rather than relying on it already being a `Path`.
+
+**`metrics_config.inference_dir` must be set for `measure()` to run at all.**
+It is populated when you pass `--inference_config` alongside
+`--metrics_config` (the shared run copies `inference_config.inference_dir`
+into `metrics_config`); passing only `--training_config` +
+`--metrics_config` does not populate it, so set `inference_dir` explicitly in
+`metrics.yaml` if you run `measure` standalone.
+
 ## BaseMetric
 
 ```python
@@ -117,6 +130,25 @@ This means `measure()` passes:
 - `data["hyp"]` -> `hyp.scp`
 - `data["prompt"]` -> `prompt.scp`
 
+## Multiple entries of the same metric class
+
+`measure()` keys its results dict by the metric's fully-qualified class path
+(e.g. `espnet3.systems.asr.metrics.wer.WER`). If you configure the same class
+twice in `metrics.yaml` (for example, `WER` once against `hyp.scp` and again
+against `hyp_nbest0.scp` with different `inputs`), the second entry overwrites
+the first under that same key in `metrics.json`, and both write to the same
+alignment filename (e.g. `wer_alignment`). Give each entry a distinguishable
+metric class (a small subclass is enough) if you need more than one scored
+entry of the same metric type to survive.
+
+## TER and `bpemodel`
+
+`TER` needs a trained SentencePiece model to tokenize text before scoring, so
+point `bpemodel` at the path your recipe's tokenizer stage actually wrote to —
+typically `${tokenizer.save_path}/bpe.model`, which (per the TEMPLATE
+tokenizer config) resolves to something like `${data_dir}/bpe_5000/bpe.model`,
+not an `exp/` path.
+
 ## Example: text metric
 
 ```python
@@ -175,7 +207,7 @@ class FileCountMetric(BaseMetric):
     title="Metrics configuration"
     desc="See how metric classes and inputs are selected from YAML."
     icon="tabler:settings-2"
-    href="../config/metrics.html"
+    href="../../stages/metrics.html"
   />
   <DocCard
     title="Metrics stage"
@@ -187,6 +219,6 @@ class FileCountMetric(BaseMetric):
     title="Components overview"
     desc="Return to the full component map."
     icon="tabler:puzzle"
-    href="./"
+    href="./index.html"
   />
 </DocCards>

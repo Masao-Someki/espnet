@@ -26,36 +26,36 @@ This section is a hub for the main Python packages under `espnet3/`.
     title="System and stages"
     desc="Read how run.py, System classes, stages, config slots, and stage logs fit together."
     icon="tabler:hierarchy-2"
-    href="./system-and-stages.html"
+    href="../stages/index.html"
   />
   <DocCard
     title="Components"
     desc="See the reusable data, modeling, trainer, and metric layers."
     icon="tabler:puzzle"
-    href="./components/"
+    href="./components/index.html"
   />
   <DocCard
     title="Datasets"
     desc="Start from the dataset internals hub for references, builders, organizers, and dataloaders."
     icon="tabler:database"
-    href="./datasets.html"
+    href="./components/data-organizer.html"
   />
   <DocCard
     title="Config"
     desc="See training, inference, metrics, publication, demo, and parallel config files."
     icon="tabler:settings-2"
-    href="./config/"
+    href="../config/index.html"
   />
   <DocCard
     title="Parallel"
     desc="Read the provider and runner layer for distributed execution."
     icon="tabler:stack-2"
-    href="./parallel/"
+    href="./parallel/index.html"
   />
   <DocCard
     title="Demo"
     desc="See the packaged demo runtime, UI definition, and pack pipeline."
     icon="tabler:device-desktop"
-    href="./demo/"
+    href="../stages/demo.html"
   />
 </DocCards>

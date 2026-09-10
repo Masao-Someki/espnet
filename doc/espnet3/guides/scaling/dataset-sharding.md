@@ -53,8 +53,11 @@ No utterance is permanently skipped.
 
 ## YAML config
 
-Sharding is activated by setting `total_shards` and `dist_world_size` on the
-dataset entry inside the `data` block of `training.yaml`.
+`total_shards` and `dist_world_size` are attributes ESPnet3 reads **off the
+dataset instance** (`DataLoaderBuilder._maybe_shard_dataset` looks them up
+with `getattr(dataset, "total_shards", None)`), not keys the dataloader config
+reads. Set them via `data_src_args` so they reach your `ShardedDataset`
+subclass's constructor:
 
 ```yaml
 dataset:
@@ -68,18 +71,15 @@ dataset:
         dist_world_size: 16
 ```
 
-And the corresponding dataloader config:
-
-```yaml
-dataloader:
-  train:
-    total_shards: 16
-    dist_world_size: 16
-    iter_factory:
-      ...
-```
-
-Both the dataset and the dataloader must agree on the same values.
+::: warning
+Do not put `total_shards`/`dist_world_size` under `dataloader:`. They are not
+read from there. With the ESPnet iterator path (`iter_factory:` set) they are
+silently ignored; with the standard-DataLoader path (`iter_factory: null`)
+they are forwarded verbatim to `torch.utils.data.DataLoader(...)` and raise
+`TypeError: unexpected keyword argument 'total_shards'`. Some shipped configs
+still carry these keys under `dataloader:` as leftover placeholders — treat
+them as no-ops, not as the activation mechanism.
+:::
 
 ### Validation rules
 
@@ -90,23 +90,24 @@ if any condition is violated:
 | --- | --- |
 | `dist_world_size` ≠ runtime `world_size` | `dist_world_size must match the distributed world_size` |
 | `total_shards % world_size ≠ 0` | `total_shards must be divisible by world_size` |
-| `total_shards` is unset on a `ShardedDataset` | `total_shards is set but shard() is not implemented` |
+| `total_shards` is set on the dataset but it has no `shard()` method | `total_shards is set but shard() is not implemented` |
 | Mix of `ShardedDataset` and plain `Dataset` in one `CombinedDataset` | `If any dataset is a subclass of ShardedDataset, then all dataset should be a subclass of ShardedDataset` |
 | Datasets disagree on `total_shards` or `dist_world_size` | `All sharded datasets must share the same total_shards and dist_world_size` |
 
 ### Single-GPU runs
 
-Leave both at `1` (the default):
+Simplest option: don't implement `ShardedDataset` at all — a plain `Dataset`
+has no `total_shards` attribute, so `_maybe_shard_dataset` returns it
+unsharded. If your dataset does subclass `ShardedDataset`, set both to `1` via
+`data_src_args`:
 
 ```yaml
-dataloader:
-  train:
-    total_shards: 1
-    dist_world_size: 1
+data_src_args:
+  total_shards: 1
+  dist_world_size: 1
 ```
 
-No sharding is applied.
-`DataLoaderBuilder` returns the full dataset as-is.
+`shard_idx` is then always `0` and every epoch sees the full dataset.
 
 ## Writing a sharded dataset
 
@@ -177,10 +178,12 @@ for this GPU.
 
 ### Passing sharding parameters from YAML
 
-`total_shards` and `dist_world_size` are usually passed through `data_src_args`
-in `training.yaml`:
+`total_shards` and `dist_world_size` are passed through `data_src_args` in
+`training.yaml`, and forwarded verbatim to `Dataset(**data_src_args)`:
 
 ```yaml
+# num_device: 8, num_nodes: 2 -> dist_world_size is their product (16).
+# OmegaConf has no multiply operator, so write the product as a literal.
 dataset:
   _target_: espnet3.components.data.data_organizer.DataOrganizer
   recipe_dir: ${recipe_dir}
@@ -188,12 +191,13 @@ dataset:
     - data_src: egs3.my_recipe.asr.dataset.builder
       data_src_args:
         split: train
-        total_shards: ${dataloader.train.total_shards}
-        dist_world_size: ${dataloader.train.dist_world_size}
+        total_shards: 16
+        dist_world_size: 16
 ```
 
-Using Hydra interpolation keeps the values in one place.
-The dataset receives them as keyword arguments at construction time.
+Keep `train` and `valid` entries in sync (same `total_shards`/
+`dist_world_size`) — a shared YAML anchor or a recipe-local Hydra
+interpolation target works if both splits come from the same builder.
 
 ## Multiple datasets in one split
 
@@ -253,14 +257,41 @@ reasonable default.
 ## Common mistakes
 
 **`dist_world_size` left at `1` for a multi-GPU run.**
-Set `dist_world_size: ${num_nodes * num_device}` or compute the product
-explicitly.
+Set `dist_world_size` to the literal product of `num_nodes × num_device`
+(OmegaConf has no multiply operator, so compute it by hand).
 The runtime world size is determined by `torch.distributed.get_world_size()`,
 not by any ESPnet3 config field.
 
 **`total_shards` not divisible by `dist_world_size`.**
 For example, `total_shards: 10` with `dist_world_size: 8` will fail at
 DataLoader construction.
+
+**Using `total_shards > 1` together with an `iter_factory` batch sampler
+(`SequenceIterFactory`, `batch_bins`, etc.) fed from `collect_stats` shape
+files.** Shape files are keyed by the *unsharded* `CombinedDataset`'s global
+index, but batching happens after `dataset.shard()` reindexes the data, so
+sampler indices resolve to different (or out-of-range) utterances on the
+shard. This combination is not currently supported — either keep
+`total_shards: 1` when using `iter_factory` with shape-file batching, or
+switch to a standard `DataLoader` (`iter_factory: null`) for sharded training.
+
+**Switching to the standard `DataLoader` for sharded training under DDP
+without also disabling Lightning's own sampler.** ESPnet3 only sets
+`trainer.use_distributed_sampler = False` automatically when
+`dataloader.train.iter_factory` is set (`ESPnet3LightningTrainer` checks
+`is_espnet_sampler`). With `iter_factory: null`, Lightning's default
+`DistributedSampler` still wraps whatever `DataLoader` `DataLoaderBuilder`
+returns — and that `DataLoader` already iterates a rank-specific shard, so
+each rank ends up training on only `1 / world_size` of its own shard. Add
+`use_distributed_sampler: false` under `trainer:` explicitly whenever you
+combine `ShardedDataset` with the standard-DataLoader path under `ddp`.
+
+**Assuming validation is sharded once and stays fixed.**
+The validation dataloader is built the same way as training and rotates
+shards every epoch too (same `epoch` value), so `valid` does not see a fixed
+slice of data across epochs. Per-epoch `valid/loss` values used by
+`best_model_criterion` are therefore not directly comparable across epochs
+when sharding is enabled.
 
 **Mixing a `ShardedDataset` and a plain `Dataset` in the same split.**
 Both datasets in the same split must subclass `ShardedDataset`.
@@ -281,7 +312,7 @@ Verify shard coverage by checking `sum(len(ds.shard(i)) for i in range(total_sha
 <DocCards :cols="3">
   <DocCard
     title="Large-scale data"
-    desc="batch_bins, dataloader total_shards and dist_world_size in training.yaml."
+    desc="batch_bins and dataset-level total_shards/dist_world_size in training.yaml."
     icon="tabler:database"
     href="./data-pipeline.html"
   />
@@ -301,6 +332,6 @@ Verify shard coverage by checking `sum(len(ds.shard(i)) for i in range(total_sha
     title="Datasets"
     desc="Dataset builders, DataOrganizer, and CombinedDataset internals."
     icon="tabler:layers-intersect"
-    href="../../core/components/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
 </DocCards>

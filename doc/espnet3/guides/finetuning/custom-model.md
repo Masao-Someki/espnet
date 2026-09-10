@@ -174,12 +174,12 @@ Prefer `src/model.py` when:
     title="Training Config"
     desc="See where the recipe-local model is instantiated and optimized."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Inference Config"
     desc="See how the custom model connects to provider, runner, and output_fn."
     icon="tabler:wave-sine"
-    href="../../core/config/inference.html"
+    href="../../config/infer_config.html"
   />
 </DocCards>

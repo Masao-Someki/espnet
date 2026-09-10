@@ -243,6 +243,6 @@ def forward(idx, model, dataset, **env):
     title="Parallel Config"
     desc="Review local, local GPU, and cluster backend settings."
     icon="tabler:settings"
-    href="../config/parallel.html"
+    href="./provider_runner.html"
   />
 </DocCards>

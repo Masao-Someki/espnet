@@ -20,14 +20,18 @@ In practice, this means:
 This is the core pattern:
 
 ```python
-from egs3.TEMPLATE.asr.run import ALL_STAGES, build_parser, main, parse_cli_and_stage_args
+from egs3.TEMPLATE.asr.run import DEFAULT_STAGES, build_parser, main, parse_cli_and_stage_args
 from espnet3.systems.asr.system import ASRSystem
 
 if __name__ == "__main__":
-    parser = build_parser(stages=ALL_STAGES)
-    args, stages_to_run = parse_cli_and_stage_args(parser, stages=ALL_STAGES)
+    parser = build_parser(stages=DEFAULT_STAGES)
+    args, stages_to_run = parse_cli_and_stage_args(parser, stages=DEFAULT_STAGES)
     main(args=args, system_cls=ASRSystem, stages=stages_to_run)
 ```
+
+`egs3/TEMPLATE/asr/run.py` only exports `DEFAULT_STAGES` (there is no
+`ALL_STAGES` in the template); a recipe that adds stages defines its own
+`ALL_STAGES` list locally (Step 3 below).
 
 ## Step 1: check whether you really need a new stage
 
@@ -386,7 +390,7 @@ python run.py --stages prepare_labels --prepare_labels_config conf/prepare_label
     title="System and stages"
     desc="See how systems, run.py, and stage execution fit together."
     icon="tabler:hierarchy-2"
-    href="../core/system-and-stages.html"
+    href="../stages/index.html"
   />
   <DocCard
     title="Stage reference"
@@ -398,6 +402,6 @@ python run.py --stages prepare_labels --prepare_labels_config conf/prepare_label
     title="Config overview"
     desc="See how stage settings are loaded from YAML configs."
     icon="tabler:settings-2"
-    href="../core/config/index.html"
+    href="../config/index.html"
   />
 </DocCards>
