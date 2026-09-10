@@ -77,9 +77,13 @@ def self_name(path):
     Examples:
         **In a config file named ``training.yaml``.**
 
+        .. code-block:: yaml
+
             exp_tag: ${self_name:}
 
         **The expression is rewritten during loading to.**
+
+        .. code-block:: text
 
             training
     """
@@ -102,6 +106,8 @@ def config_path(path):
 
     Examples:
         In a config file at ``conf/demo.yaml``:
+
+        .. code-block:: yaml
 
             pack:
               readme: ${config_path:../src/hf_demo_readme.md}
@@ -172,6 +178,7 @@ def _process_dict_config_entry(
     resolve: bool = True,
     bind_self_name: bool = True,
 ) -> list:
+    """Process dict config entry."""
     results = []
     for key, val in entry.items():
         # Skip null entries (can be used for disabling config entries)
@@ -276,16 +283,16 @@ def load_config_with_defaults(path: str, resolve: bool = True) -> OmegaConf:
     - ``"_self_"`` → appends the current config in-place
 
     Example:
-        # config.yaml
-        defaults:
-          - model: conformer
-          - optim: adam
-          - _self_
+        .. code-block:: yaml
 
-        # This will recursively load:
-        #   model/conformer.yaml
-        #   optim/adam.yaml
-        # and merge them with config.yaml itself at the end.
+            # config.yaml
+            defaults:
+              - model: conformer
+              - optim: adam
+              - _self_
+
+            # This recursively loads model/conformer.yaml and optim/adam.yaml,
+            # then merges them with config.yaml itself at the end.
 
     Args:
         path (str): Path to the main YAML config file.
@@ -326,9 +333,13 @@ def load_default_config(
     Example:
         **Template example.**
 
+        .. code-block:: text
+
             egs3/TEMPLATE/asr/conf/training.yaml
 
         **Recipe example.**
+
+        .. code-block:: text
 
             egs3/librispeech/asr/conf/training.yaml
 
@@ -373,14 +384,20 @@ def load_and_merge_config(
     Examples:
         **If a recipe config lives at.**
 
+        .. code-block:: text
+
             egs3/mini_an4/asr/conf/training.yaml
 
         With ``config_name="training.yaml"``, this function can infer
         ``default_package="egs3.TEMPLATE.asr"`` and merge:
 
+        .. code-block:: text
+
             egs3/TEMPLATE/asr/conf/training.yaml
 
         with:
+
+        .. code-block:: text
 
             egs3/mini_an4/asr/conf/training.yaml
 
@@ -426,6 +443,7 @@ def load_and_merge_config(
 
 
 def _ensure_target_convert_all(cfg) -> None:
+    """Ensure target convert all."""
     if isinstance(cfg, DictConfig):
         if "_target_" in cfg:
             cfg["_convert_"] = "all"
@@ -481,9 +499,11 @@ def _normalize_relative_resolver_paths(
 ) -> None:
     # This runs during config loading rather than inside load_yaml/load_line
     # because the resolver callback cannot access the path of the parent YAML.
+    """Normalize relative resolver paths."""
     _corpus_and_system: str | None = None
 
     def _apply_substitutions(raw: str) -> str:
+        """Apply substitutions."""
         nonlocal _corpus_and_system
         if config_name is not None:
             raw = raw.replace("${self_name:}", config_name)
@@ -498,6 +518,7 @@ def _normalize_relative_resolver_paths(
         return _rewrite_relative_resolver_paths(raw, base_path)
 
     def _walk(node) -> None:
+        """Support the surrounding workflow."""
         if isinstance(node, DictConfig):
             for key in list(node.keys()):
                 child = node._get_node(key)
@@ -530,6 +551,7 @@ def _rewrite_relative_resolver_paths(value: str, base_path: Path) -> str:
     """
 
     def replace(match: re.Match) -> str:
+        """Replace a resolved configuration value."""
         resolver = match.group("resolver")
         quote, normalized_path = _split_optional_quotes(match.group("path").strip())
 
@@ -550,12 +572,14 @@ def _rewrite_relative_resolver_paths(value: str, base_path: Path) -> str:
 def _split_optional_quotes(raw_path: str) -> tuple[str, str]:
     # Resolver paths may be quoted when the path contains spaces. Preserve the
     # quote style so the rewritten resolver expression remains parseable.
+    """Split optional quotes."""
     if len(raw_path) >= 2 and raw_path[0] == raw_path[-1] and raw_path[0] in ("'", '"'):
         return raw_path[0], raw_path[1:-1].strip()
     return "", raw_path
 
 
 def _build_config_path(base_path: Path, entry: str) -> Path:
+    """Build config path."""
     entry_path = Path(entry)
     if entry_path.suffix and entry_path.suffix != ".yaml":
         raise ValueError(

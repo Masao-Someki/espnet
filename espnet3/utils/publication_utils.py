@@ -75,6 +75,7 @@ def _build_pack_ignore(src_root: Path, excludes: list[str]):
     """Build a copytree ignore callback that matches relative paths."""
 
     def _ignore(current_dir: str, names: list[str]) -> list[str]:
+        """Support the surrounding workflow."""
         ignored: list[str] = []
         current_root = Path(current_dir)
         for name in names:

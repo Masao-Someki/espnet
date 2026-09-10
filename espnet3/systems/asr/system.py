@@ -93,6 +93,7 @@ class ASRSystem(BaseSystem):
         return super().train()
 
     def _has_tokenizer(self) -> bool:
+        """Return whether tokenizer."""
         tokenizer_config = self.training_config.tokenizer
         output_path = Path(tokenizer_config.save_path)
         model = output_path / f"{tokenizer_config.model_type}.model"

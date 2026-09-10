@@ -59,6 +59,7 @@ class RemoveLongShortRunner(BaseRunner):
         min_duration: float,
         max_duration: float,
     ) -> Dict[str, Any]:
+        """Process one."""
         utt_id, wav_path, _ = entries[idx]
         duration = sf.info(wav_path).duration
 

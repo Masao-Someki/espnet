@@ -94,10 +94,8 @@ class InferenceProvider(EnvironmentProvider, ABC):
         """Build the environment once on the driver for local inference.
 
         Returns:
-            Dict[str, Any]: Environment dict with at least these keys:
-                - ``"dataset"``: The instantiated dataset.
-                - ``"model"``: The instantiated model.
-              Any additional fields from ``params`` are also included.
+            Dict[str, Any]: Environment dict containing the instantiated
+            ``"dataset"`` and ``"model"`` plus any fields from ``params``.
 
         Example:
             >>> provider = InferenceProvider(config, params={"device": "cuda"})
@@ -138,6 +136,7 @@ class InferenceProvider(EnvironmentProvider, ABC):
         cls = self.__class__
 
         def setup_fn() -> Dict[str, Any]:
+            """Create the worker setup callable."""
             dataset = cls.build_dataset(config)
             model = cls.build_model(config)
             env = {"dataset": dataset, "model": model}
@@ -148,6 +147,7 @@ class InferenceProvider(EnvironmentProvider, ABC):
         return setup_fn
 
     def _log_env(self, env: Dict[str, Any]) -> None:
+        """Support the surrounding workflow."""
         global _LOGGED_ENV
         if _LOGGED_ENV:
             return
@@ -156,6 +156,7 @@ class InferenceProvider(EnvironmentProvider, ABC):
 
     @classmethod
     def _log_env_static(cls, env: Dict[str, Any]) -> None:
+        """Support the surrounding workflow."""
         global _LOGGED_ENV
         if _LOGGED_ENV:
             return

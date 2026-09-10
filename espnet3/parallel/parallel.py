@@ -37,6 +37,8 @@ except ImportError:
             pass
 
     class _MissingCluster:
+        """Placeholder that reports the missing Dask cluster dependency."""
+
         def __init__(self, *args, **kwargs):
             """Raise a helpful error when a Dask cluster type is unavailable."""
             raise RuntimeError(
@@ -73,6 +75,7 @@ CLUSTER_MAP = {
 
 
 def _ensure_dask():
+    """Ensure dask."""
     if not _DASK_AVAILABLE:
         raise RuntimeError(
             "Dask is not available. Install dask[distributed] and "
@@ -299,6 +302,7 @@ def wrap_func_with_worker_env(func: Callable) -> Callable:
     )
 
     def wrapped(*args, **kwargs):
+        """Invoke the wrapped callable with injected environment values."""
         from distributed.worker import get_worker
 
         worker = get_worker()

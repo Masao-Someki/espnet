@@ -102,6 +102,7 @@ def collect_stats_batch(
 
 
 def _build_collate_fn(dataloader_config):
+    """Build collate fn."""
     if not isinstance(dataloader_config, DictConfig):
         dataloader_config = (
             OmegaConf.create(dataloader_config)
@@ -119,6 +120,7 @@ def _build_collate_fn(dataloader_config):
 
 
 def _build_dataset(config: DictConfig):
+    """Build dataset."""
     dataset = _instantiate_dataset(config.dataset_config, config.mode)
     shard_idx = config.get("shard_idx")
     if shard_idx is not None:
@@ -132,6 +134,7 @@ def _build_dataset(config: DictConfig):
 
 
 def _build_model(config: DictConfig):
+    """Build model."""
     model_config = config.model_config
     if not isinstance(model_config, DictConfig):
         model_config = OmegaConf.create(model_config)
@@ -150,6 +153,7 @@ def _build_model(config: DictConfig):
 
 
 def _chunk_indices(num_items: int, batch_size: int) -> List[List[int]]:
+    """Split indices."""
     if batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
     batches = [
@@ -160,6 +164,7 @@ def _chunk_indices(num_items: int, batch_size: int) -> List[List[int]]:
 
 
 def _instantiate_dataset(dataset_config, mode: str):
+    """Instantiate dataset."""
     if not isinstance(dataset_config, DictConfig):
         dataset_config = OmegaConf.create(dataset_config)
 
@@ -173,6 +178,7 @@ def _instantiate_dataset(dataset_config, mode: str):
 def _get_dataset_length(
     dataset_config, mode: str, shard_idx: Optional[int] = None
 ) -> int:
+    """Return dataset length."""
     dataset = _instantiate_dataset(dataset_config, mode)
     if shard_idx is not None:
         if not hasattr(dataset, "shard"):
@@ -263,6 +269,7 @@ class CollectStatsInferenceProvider(EnvironmentProvider):
         config = self.config
 
         def setup():
+            """Prepare worker-local execution state."""
             env = dict()
             collate_fn = _build_collate_fn(dataloader_config)
             env["collate_fn"] = collate_fn
@@ -484,6 +491,7 @@ def _collect_stats_common(
     batch_size: int,
     shard_idx: Optional[int] = None,
 ):
+    """Collect stats common."""
     num_items = _get_dataset_length(dataset_config, mode, shard_idx)
     index_batches = _chunk_indices(num_items, batch_size) if num_items else []
 

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_key_list(keys) -> List[str]:
+    """Normalize key list."""
     if keys is None:
         return []
     if isinstance(keys, (list, tuple, ListConfig)):
@@ -29,6 +30,7 @@ def _normalize_key_list(keys) -> List[str]:
 
 
 def _iter_outputs(result: Any) -> List[Dict[str, Any]]:
+    """Iterate over outputs."""
     if isinstance(result, list):
         outputs: List[Dict[str, Any]] = []
         for item in result:
@@ -44,6 +46,7 @@ def _materialize_output_value(
     output_dir: Path,
     artifact_config: dict | None,
 ):
+    """Materialize output value."""
     if isinstance(value, (str, int, float, bool)):
         return value
 
@@ -152,6 +155,7 @@ class InferenceRunner(BaseRunner):
         hyp_key,
         ref_key,
     ) -> None:
+        """Validate output with keys."""
         if not isinstance(output, dict):
             raise TypeError(
                 f"Expected dict output, got {type(output).__name__}: {output}"
@@ -184,6 +188,7 @@ class InferenceRunner(BaseRunner):
     def _resolve_output_keys(
         output: Dict[str, Any], idx_key: str, output_keys
     ) -> List[str]:
+        """Resolve output keys."""
         keys = _normalize_key_list(output_keys)
         if keys:
             return keys
@@ -432,6 +437,7 @@ class InferenceRunner(BaseRunner):
 
 @lru_cache(maxsize=None)
 def _load_output_fn(path: str):
+    """Load output fn."""
     module_path, func_name = path.rsplit(".", 1)
     module = import_module(module_path)
     return getattr(module, func_name)

@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _instantiate_model(config: DictConfig) -> Any:
+    """Instantiate model."""
     task = config.get("task")
     if task:
         model_config = OmegaConf.to_container(config.model, resolve=True)
@@ -29,6 +30,7 @@ def _instantiate_model(config: DictConfig) -> Any:
 
 
 def _build_trainer(config: DictConfig) -> ESPnet3LightningTrainer:
+    """Build trainer."""
     model = _instantiate_model(config)
     lit_model = ESPnetLightningModule(model, config)
     trainer = ESPnet3LightningTrainer(
@@ -41,6 +43,7 @@ def _build_trainer(config: DictConfig) -> ESPnet3LightningTrainer:
 
 
 def _ensure_directories(config: DictConfig) -> None:
+    """Ensure directories."""
     Path(config.exp_dir).mkdir(parents=True, exist_ok=True)
     if hasattr(config, "stats_dir"):
         Path(config.stats_dir).mkdir(parents=True, exist_ok=True)

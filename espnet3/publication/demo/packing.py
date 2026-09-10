@@ -304,6 +304,7 @@ def _setup_demo_assets(demo_dir: Path, demo_config) -> None:
 
 def _resolve_demo_out_dir(out_dir, system) -> Path:
     # explicit > exp_dir/demo > cwd/demo
+    """Resolve demo out dir."""
     if out_dir:
         return Path(out_dir)
     exp_dir = getattr(system, "exp_dir", None)
@@ -314,6 +315,7 @@ def _resolve_demo_out_dir(out_dir, system) -> Path:
 
 def _prepare_demo_config(demo_cfg, demo_dir: Path, system) -> DictConfig:
     # --- deep-copy to avoid mutating the live system config ---
+    """Support the surrounding workflow."""
     cfg = OmegaConf.create(OmegaConf.to_container(demo_cfg, resolve=True))
 
     # --- drop build-time keys that have no meaning at demo runtime ---
@@ -365,6 +367,7 @@ def _prepare_demo_config(demo_cfg, demo_dir: Path, system) -> DictConfig:
 
 def _copy_pack_includes(demo_cfg, demo_dir: Path) -> None:
     # --- read include / exclude lists from config ---
+    """Support the surrounding workflow."""
     pack_cfg = getattr(demo_cfg, "pack", None)
     include_cfg = getattr(pack_cfg, "include", None) if pack_cfg else None
     if not include_cfg:
@@ -451,6 +454,7 @@ def _build_demo_readme_context(demo_cfg) -> dict[str, str]:
 
 def _resolve_app_script(demo_config) -> Path:
     # --- read from config ---
+    """Resolve app script."""
     ui_cfg = getattr(demo_config, "ui", None)
     explicit = getattr(ui_cfg, "app_script", None) if ui_cfg else None
     if not explicit:
@@ -473,6 +477,7 @@ def _resolve_app_script(demo_config) -> Path:
 
 def _resolve_ui_description_path(demo_config) -> Path | None:
     # --- read from config ---
+    """Resolve ui description path."""
     ui_cfg = getattr(demo_config, "ui", None)
     description = getattr(ui_cfg, "description", None) if ui_cfg else None
     if not description:

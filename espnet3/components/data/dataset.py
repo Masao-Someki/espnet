@@ -44,11 +44,9 @@ class CombinedDataset:
         datasets (List[Any]): A list of dataset instances. Each must implement
             ``__getitem__`` and ``__len__``.
         transforms (List[Tuple[Callable, Callable]]): A list of
-            (transform, preprocessor) tuples. Each pair corresponds to the matching
-            dataset in ``datasets``.
-            - ``transform(sample)`` is applied first.
-            - Then ``preprocessor(uid, sample)`` or ``preprocessor(sample)`` is applied,
-              depending on ``use_espnet_preprocessor``.
+            ``(transform, preprocessor)`` tuples matching ``datasets``. The
+            transform runs first, followed by ``preprocessor(uid, sample)`` or
+            ``preprocessor(sample)`` according to ``use_espnet_preprocessor``.
         use_espnet_preprocessor (bool): If True, applies the preprocessor as
             ``preprocessor(uid, sample)``. This is used for ESPnet ``AbsPreprocessor``
             compatible pipelines.
@@ -217,6 +215,7 @@ class CombinedDataset:
         raise IndexError("Index out of range in CombinedDataset")
 
     def _getitem_by_utterance_id(self, uid: str):
+        """Support the surrounding workflow."""
         if self._string_index_mode:
             return self._getitem_string_mode(uid)
 
@@ -249,6 +248,7 @@ class CombinedDataset:
         """Determine whether datasets should be accessed via string keys."""
 
         def supports_integer_index(dataset):
+            """Support the surrounding workflow."""
             try:
                 dataset[0]
             except Exception:
@@ -276,6 +276,7 @@ class CombinedDataset:
             self._register_dataset_keys(dataset_idx, keys)
 
     def _collect_string_keys(self, dataset):
+        """Collect string keys."""
         if isinstance(dataset, Mapping):
             keys_iter = dataset.keys()
         elif hasattr(dataset, "keys") and callable(getattr(dataset, "keys")):
@@ -297,6 +298,7 @@ class CombinedDataset:
         return keys
 
     def _register_dataset_keys(self, dataset_idx: int, keys: List[str]):
+        """Register dataset keys."""
         for key in keys:
             if key in self._uid_to_dataset:
                 raise ValueError(
@@ -305,6 +307,7 @@ class CombinedDataset:
             self._uid_to_dataset[key] = (dataset_idx, key)
 
     def _select_reference_key_for_dataset(self, dataset_idx: int):
+        """Select reference key for dataset."""
         if not self._string_index_mode or self._dataset_supports_int[dataset_idx]:
             return 0
 
@@ -314,6 +317,7 @@ class CombinedDataset:
         return keys[0]
 
     def _resolve_string_mode_index(self, idx):
+        """Resolve string mode index."""
         if isinstance(idx, int):
             if idx < 0:
                 raise IndexError("Index out of range in CombinedDataset")
@@ -353,6 +357,7 @@ class CombinedDataset:
         raise TypeError("Index must be an integer or string utterance ID.")
 
     def _getitem_string_mode(self, idx):
+        """Support the surrounding workflow."""
         uid, dataset_idx, dataset_key = self._resolve_string_mode_index(idx)
         dataset = self.datasets[dataset_idx]
         transform, preprocessor = self.transforms[dataset_idx]

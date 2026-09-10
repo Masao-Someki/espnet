@@ -40,10 +40,10 @@ def build_model_summary(model) -> Dict[str, object]:
         forward pass, so no example batch or shape inference is required.
 
     Examples:
-        ```python
-        summary = build_model_summary(model)
-        print(summary["total_params_display"])
-        ```
+        .. code-block:: python
+
+            summary = build_model_summary(model)
+            print(summary["total_params_display"])
     """
     params = list(model.parameters())
     buffers = list(model.buffers())
@@ -115,6 +115,7 @@ class ESPnetLightningModule(lightning.LightningModule):
 
     Example:
         **Single optimizer path.**
+
         .. code-block:: python
 
             def forward(self, **batch):
@@ -124,6 +125,7 @@ class ESPnetLightningModule(lightning.LightningModule):
                 return loss, stats, weight
 
         **GAN-style path updating both optimizers in a single batch.**
+
         .. code-block:: python
 
             def forward(self, **batch):
@@ -139,6 +141,7 @@ class ESPnetLightningModule(lightning.LightningModule):
                 ], stats, None
 
         **GAN-style path updating only the generator for one batch.**
+
         .. code-block:: python
 
             def forward(self, **batch):
@@ -522,6 +525,7 @@ class ESPnetLightningModule(lightning.LightningModule):
             scheduler_monitor: valid/loss
 
         **Lightning receives.**
+
         - ``interval="epoch"``
         - ``monitor="valid/loss"``
 
@@ -591,24 +595,14 @@ class ESPnetLightningModule(lightning.LightningModule):
             }, None
 
         **Important rules.**
+
         - Single-optimizer-path training must return a tensor loss directly.
         - Multiple-path training must return ``OptimizationStep`` or
           ``list[OptimizationStep]`` as ``loss`` so that ESPnet3 knows which optimizer
           should be used to update parameters.
-        - Optimizer and scheduler names must match exactly.
-          **Valid.**
-
-          .. code-block:: yaml
-
-              optimizers: {generator: {...}, discriminator: {...}}
-              schedulers: {generator: {...}, discriminator: {...}}
-
-          **Error example.**
-
-          .. code-block:: yaml
-
-              optimizers: {generator: {...}, discriminator: {...}}
-              schedulers: {generator: {...}, decoder: {...}}
+        - Optimizer and scheduler names must match exactly; for example,
+          ``{generator, discriminator}`` is valid for both mappings, whereas
+          ``{generator, decoder}`` is not a valid scheduler-name set.
         - In the multiple-path configuration, gradient clipping is configured per
           optimizer via ``gradient_clip_val`` and ``gradient_clip_algorithm``.
           Trainer-level global clipping settings must not be used.
@@ -985,13 +979,15 @@ class ESPnetLightningModule(lightning.LightningModule):
         """Run one train/valid iteration for single or multiple optimizer modes.
 
         **Expected model return.**
-        - Single-optimizer-path training or validation.
-          ``loss: torch.Tensor, stats: dict, weight: Optional[Tensor]``
-        - Multiple-optimizer training or validation.
-          `loss: OptimizationStep | list[OptimizationStep], stats: dict,
-          weight: Optional[Tensor]`
+
+        - Single-optimizer-path training or validation returns
+          ``(loss: torch.Tensor, stats: dict, weight: Optional[Tensor])``.
+        - Multiple-optimizer training or validation returns
+          ``(loss: OptimizationStep | list[OptimizationStep], stats: dict,
+          weight: Optional[Tensor])``.
 
         **Training behavior differs between the two paths.**
+
         - Single optimizer path keeps Lightning automatic optimization enabled.
           This method
           only prepares and returns the loss tensor, and Lightning performs the

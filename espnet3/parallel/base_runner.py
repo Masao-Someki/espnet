@@ -422,6 +422,7 @@ class BaseRunner(ABC):
         shard_subdir = self.shard_subdir
 
         def setup_fn():
+            """Create the worker setup callable."""
             env = provider_setup()
             env.setdefault("output_dir", output_dir_str)
             if shard_subdir:
@@ -431,6 +432,7 @@ class BaseRunner(ABC):
         runner_cls = self.__class__
 
         def shard_task(shard_spec, **env):
+            """Run one task shard with its prepared environment."""
             return runner_cls._run_one_shard(
                 int(shard_spec["shard_id"]),
                 shard_spec["items"],

@@ -65,14 +65,16 @@ class DataLoaderBuilder:
         epoch (int): Current epoch number. Used to reseed samplers deterministically.
 
     Example:
-        builder = DataLoaderBuilder(
-            dataset=train_dataset,
-            config=config,
-            collate_fn=collate_fn,
-            num_device=4,
-            epoch=3
-        )
-        train_loader = builder.build(mode="train")
+        .. code-block:: python
+
+            builder = DataLoaderBuilder(
+                dataset=train_dataset,
+                config=config,
+                collate_fn=collate_fn,
+                num_device=4,
+                epoch=3,
+            )
+            train_loader = builder.build(mode="train")
     """
 
     def __init__(self, dataset, config, collate_fn, num_device: int, epoch: int):
@@ -84,6 +86,7 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def _get_world_info(self):
+        """Return world info."""
         if self.num_device > 1:
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
@@ -222,6 +225,7 @@ class DataLoaderBuilder:
         return self._build_standard_dataloader(config, dataset)
 
     def _build_standard_dataloader(self, dataloader_config, dataset=None, mode="train"):
+        """Build standard dataloader."""
         if dataset is None:
             dataset = self.dataset
 
@@ -255,6 +259,7 @@ class DataLoaderBuilder:
         return loader
 
     def _build_iter_factory(self, factory_config, dataset=None, mode="train"):
+        """Build iter factory."""
         if dataset is None:
             dataset = self.dataset
 

@@ -51,12 +51,14 @@ class RemoveLongShortProvider(EnvironmentProvider):
         params = self.params
 
         def setup() -> Dict[str, Any]:
+            """Prepare worker-local execution state."""
             return RemoveLongShortProvider._build_env(params)
 
         return setup
 
     @staticmethod
     def _build_env(params: Dict[str, Any]) -> Dict[str, Any]:
+        """Build env."""
         manifest_path = params.get("manifest_path", None)
         if manifest_path is None:
             raise RuntimeError(

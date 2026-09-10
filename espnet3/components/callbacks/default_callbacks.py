@@ -431,8 +431,9 @@ def get_default_callbacks(
     """Return a list of callbacks tailored for most training workflows.
 
     **Includes.**
+
         - ``ModelCheckpoint`` for saving the last model checkpoint (``save_last``)
-        - One or more ``ModelCheckpoint``s for saving the top-K checkpoints according to
+        - One or more ``ModelCheckpoint`` instances for saving the top-K checkpoints according to
             specific metrics
         - ``AverageCheckpointsCallback`` to compute and save the average model from top-K
             checkpoints
@@ -443,13 +444,10 @@ def get_default_callbacks(
     Args:
         exp_dir (str): Directory to store checkpoints and logs.
         log_interval (int): Frequency (in training steps) to refresh the progress bar.
-        best_model_criterion (List[Tuple[str, int, str]]): A list of criteria for
-            saving top-K checkpoints.
-        Each item is a tuple ``(name, top_k, mode)`` where:
-            - ``name`` (str): The name of the validation value to monitor
-                (e.g., "val/loss").
-            - ``top_k`` (int): Number of best models to keep.
-            - ``mode`` (str): "min" to keep models with lowest value, "max" for highest.
+        best_model_criterion (List[Tuple[str, int, str]]): Criteria for saving
+            top-K checkpoints. Each tuple is ``(name, top_k, mode)``, where
+            ``name`` is the validation value to monitor, ``top_k`` is the number
+            of retained checkpoints, and ``mode`` is ``"min"`` or ``"max"``.
 
     Returns:
         List[Callback]: A list of callbacks to be passed to the PyTorch Lightning

@@ -37,6 +37,7 @@ _BASE_RECORD_FACTORY = logging.getLogRecordFactory()
 
 
 def _record_factory(*args, **kwargs):
+    """Support the surrounding workflow."""
     record = _BASE_RECORD_FACTORY(*args, **kwargs)
     record.stage = _LOG_STAGE.get()
     record.hostname = socket.gethostname()
@@ -44,6 +45,7 @@ def _record_factory(*args, **kwargs):
 
 
 def _ensure_log_record_factory() -> None:
+    """Ensure log record factory."""
     if logging.getLogRecordFactory() is not _record_factory:
         logging.setLogRecordFactory(_record_factory)
 
@@ -53,6 +55,7 @@ _ensure_log_record_factory()
 
 @contextmanager
 def log_stage(name: str):
+    """Log metadata and status for a pipeline stage."""
     token = _LOG_STAGE.set(name)
     try:
         yield
@@ -62,6 +65,7 @@ def log_stage(name: str):
 
 def _build_record(*args, **kwargs):
     # Inject custom fields used by LOG_FORMAT (stage/hostname) into each LogRecord.
+    """Build record."""
     record = _BASE_RECORD_FACTORY(*args, **kwargs)
     record.stage = _LOG_STAGE.get()
     record.hostname = socket.gethostname()
@@ -560,7 +564,7 @@ def _collect_env(
     """Collect environment variables matching prefixes or explicit keys.
 
     Args:
-        prefixes (Iterable[str] | None): Prefixes to match (e.g., "CUDA_").
+        prefixes (Iterable[str] | None): Prefixes to match (e.g., ``"CUDA_"``).
         keys (Iterable[str] | None): Exact variable names to include.
 
     Returns:
@@ -713,6 +717,7 @@ def build_qualified_name(obj) -> str:
     """Return a compact, fully-qualified name for objects or classes.
 
     **Description.**
+
         Produces a stable, human-readable identifier for logging and debugging.
         For objects, it prefers the object's class path. For builtins without a
         module path, it falls back to a truncated string, and includes length
@@ -795,6 +800,7 @@ def build_callable_name(func) -> str:
 
 
 def _iter_attrs(obj) -> Iterable[tuple[str, object]]:
+    """Iterate over attrs."""
     if not hasattr(obj, "__dict__"):
         return []
     return sorted(
@@ -804,6 +810,7 @@ def _iter_attrs(obj) -> Iterable[tuple[str, object]]:
 
 
 def _truncate_text(text: str, max_len: int = 200) -> str:
+    """Truncate text."""
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
@@ -934,7 +941,8 @@ def log_component(
 
             log_component(logger, "Custom", "example", CustomThing("demo", 7), 1)
 
-        **Example log output.**
+    **Example log output.**
+
         .. code-block:: text
 
             Custom[example] class: my_module.CustomThing

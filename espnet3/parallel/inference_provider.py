@@ -78,6 +78,7 @@ class InferenceProvider(EnvironmentProvider, ABC):
         params = dict(self.params)
 
         def setup() -> Dict[str, Any]:
+            """Prepare worker-local execution state."""
             env = {
                 "dataset": self.build_dataset(config),
                 "model": self.build_model(config),
@@ -89,6 +90,7 @@ class InferenceProvider(EnvironmentProvider, ABC):
         return setup
 
     def _log_env(self, env: Dict[str, Any]) -> None:
+        """Support the surrounding workflow."""
         global _LOGGED_ENV
         if _LOGGED_ENV:
             return

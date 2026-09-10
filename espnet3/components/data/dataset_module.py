@@ -30,6 +30,7 @@ from omegaconf import DictConfig, OmegaConf
 def _to_plain_dict(config: Any) -> dict[str, Any]:
 
     # Keep unresolved OmegaConf values as-is at this layer.
+    """Convert to plain dict."""
     if isinstance(config, DictConfig):
         return dict(OmegaConf.to_container(config, resolve=False))
     return dict(config)
@@ -44,6 +45,7 @@ _DATA_SRC_ARGS_KEY = "data_src_args"
 
 
 def _is_tag(ref: str) -> bool:
+    """Return whether tag."""
     return "/" in ref
 
 

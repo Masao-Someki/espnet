@@ -133,6 +133,7 @@ class DemoSession:
         )
 
         def run_inference(*values: Any) -> Any:
+            """Run inference through the configured demo session."""
             logger.info(
                 "Demo inference start | num_inputs=%d input_keys=%s output_keys=%s",
                 len(values),
@@ -221,6 +222,7 @@ def _build_demo_model(
     demo_cfg,
     demo_dir: Path,
 ) -> InferenceModel:
+    """Build demo model."""
     model_cfg = demo_cfg.model
     dir_or_tag = model_cfg.get("dir_or_tag")
     if not dir_or_tag:

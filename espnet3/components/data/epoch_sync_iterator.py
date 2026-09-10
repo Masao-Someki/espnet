@@ -148,6 +148,7 @@ class EpochSyncIterator:
         # that is discarded (an abandoned prefetch, for instance) leaves every
         # later pass empty. The plain-iterable branch is kept for backward
         # compatibility; DataLoaderBuilder always passes a callable.
+        """Return new pass."""
         if not callable(self._source):
             return self._source
         if self._pending_pass is not None:

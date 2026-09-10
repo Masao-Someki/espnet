@@ -16,6 +16,7 @@ from espnet3.components.modeling.lightning_module import ESPnetLightningModule
 
 
 def _get_or_initialize(config, item_name: str = None, default=None) -> Any:
+    """Return or initialize."""
     if item_name is not None:
         item = getattr(config, item_name, default)
     else:
@@ -223,6 +224,7 @@ class ESPnet3LightningTrainer:
             )
 
     def _del_config_key(self, key):
+        """Remove config key."""
         if isinstance(self.config, DictConfig) or isinstance(self.config, Namespace):
             delattr(self.config, key)
         elif isinstance(self.config, dict):
@@ -230,6 +232,7 @@ class ESPnet3LightningTrainer:
 
     @staticmethod
     def _del_config_key_on(config, key):
+        """Remove config key on."""
         if isinstance(config, DictConfig) or isinstance(config, Namespace):
             if hasattr(config, key):
                 delattr(config, key)
