@@ -418,6 +418,12 @@ Use this path only when `output_fn` is not enough.
 
 ## Related pages
 
+**Stage API:** [`infer`](../../guide/espnet3/systems/infer.html),
+[`InferenceProvider`](../../guide/espnet3/systems/InferenceProvider.html),
+[`InferenceRunner`](../../guide/espnet3/systems/InferenceRunner.html), and
+[`write_artifact`](../../guide/espnet3/utils/write_artifact.html). Run this after
+[training](./train.html) and before [measurement](./metrics.html).
+
 <DocCards :cols="3">
   <DocCard
     title="Inference configuration"

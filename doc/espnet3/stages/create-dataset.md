@@ -208,6 +208,11 @@ manifest representation.
 
 ## Related pages
 
+**Stage API:** [`DataOrganizer`](../../guide/espnet3/components/DataOrganizer.html),
+[`DatasetBuilder`](../../guide/espnet3/components/DatasetBuilder.html), and
+[`instantiate_dataset_reference`](../../guide/espnet3/components/instantiate_dataset_reference.html).
+Continue with [collect_stats](./collect-stats.html) after dataset preparation.
+
 <DocCards :cols="3">
   <DocCard
     title="Dataset references and builders"

@@ -134,6 +134,12 @@ parallel:
 
 ## Related pages
 
+**Stage API:** [`collect_stats`](../../guide/espnet3/components/collect_stats.html),
+[`CollectStatsInferenceProvider`](../../guide/espnet3/components/CollectStatsInferenceProvider.html),
+and [`DataLoaderBuilder`](../../guide/espnet3/components/DataLoaderBuilder.html).
+Run this after [dataset preparation](./create-dataset.html) and before
+[training](./train.html) when normalization or shape-based batching is enabled.
+
 - [Training config](../config/train_config.html)
 
 <DocCards :cols="3">

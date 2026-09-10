@@ -173,6 +173,12 @@ of Gradio inputs/outputs aligned with `session.input_specs`/`output_specs`.
 
 ## Related pages
 
+**Stage API:** [`pack_demo`](../../guide/espnet3/publication/pack_demo.html),
+[`upload_demo`](../../guide/espnet3/publication/upload_demo.html),
+[`DemoSession`](../../guide/espnet3/publication/DemoSession.html), and
+[`UIAsset`](../../guide/espnet3/publication/UIAsset.html). Build a model bundle
+with [publication stages](./publish.html) before packing a demo.
+
 <DocCards :cols="3">
   <DocCard
     title="Demo configuration"

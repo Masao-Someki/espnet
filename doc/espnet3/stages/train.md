@@ -136,6 +136,12 @@ single-process invocations.
 :::
 
 ## Related pages
+
+**Stage API:** [`train`](../../guide/espnet3/systems/train.html),
+[`ASRSystem`](../../guide/espnet3/systems/ASRSystem.html),
+[`ESPnetLightningModule`](../../guide/espnet3/components/ESPnetLightningModule.html), and
+[`Trainer`](../core/components/trainer.html). Continue with
+[inference](./inference.html) after checkpoints are available.
 <DocCards :cols="3">
   <DocCard
     title="Training configuration"

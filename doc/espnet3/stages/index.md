@@ -33,6 +33,23 @@ declares (`resolve_stages` in
 passing an explicit subset (e.g. `--stages infer measure`) still executes in the table order above,
 not CLI order.
 
+## How to use this overview
+
+Use the cards below to choose the stage you need. Each stage guide explains its
+purpose, required configuration, inputs and outputs, implementation API, safe
+re-run behavior, and the next stage to run. The execution implementation is
+available through [`BaseSystem`](../../guide/espnet3/systems/BaseSystem.html),
+[`ASRSystem`](../../guide/espnet3/systems/ASRSystem.html),
+[`TTSSystem`](../../guide/espnet3/systems/TTSSystem.html), and
+[`run_stages`](../../guide/espnet3/utils/run_stages.html).
+
+For a normal ASR workflow, start with [dataset preparation](./create-dataset.html),
+then [statistics](./collect-stats.html), [training](./train.html),
+[inference](./inference.html), [measurement](./metrics.html), and finally
+[publication](./publish.html) or [demo packaging](./demo.html). See
+[configuration files](../config/index.html) before running a stage and the
+[generated Python API](../api-reference.html) for implementation details.
+
 ::: warning No rank guard on multi-GPU local launches
 `run_stages()`
 ([`espnet3/utils/stages_utils.py`](https://github.com/espnet/espnet/blob/master/espnet3/utils/stages_utils.py))

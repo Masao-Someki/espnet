@@ -146,6 +146,12 @@ error; set `upload_model.update: true` to upload over it.
 
 ## Related pages
 
+**Stage API:** [`pack_model`](../../guide/espnet3/utils/pack_model.html),
+[`upload_model`](../../guide/espnet3/utils/upload_model.html), and
+[`InferenceModel`](../../guide/espnet3/publication/InferenceModel.html).
+Run these after [training](./train.html), normally after [measurement](./metrics.html);
+then use [demo packaging](./demo.html) when publishing an interactive UI.
+
 <DocCards :cols="3">
   <DocCard
     title="Publication configuration"

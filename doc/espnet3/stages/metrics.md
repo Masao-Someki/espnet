@@ -174,6 +174,12 @@ For aligned SCP inputs, the normal implementation pattern is
 
 ## Related pages
 
+**Stage API:** [`measure`](../../guide/espnet3/systems/measure.html),
+[`BaseMetric`](../../guide/espnet3/components/BaseMetric.html),
+[`WER`](../../guide/espnet3/systems/WER.html), and
+[`CER`](../../guide/espnet3/systems/CER.html). This stage consumes files from
+[inference](./inference.html) and can precede [publication](./publish.html).
+
 <DocCards :cols="3">
   <DocCard
     title="Custom metrics"
