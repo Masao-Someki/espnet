@@ -26,6 +26,7 @@ class CER(BaseMetric):
         ref_key: str = "ref",
         hyp_key: str = "hyp",
         clean_types: Iterable[str] | None = None,
+        lowercase: bool = False,
     ) -> None:
         """Initialize the CER metric.
 
@@ -33,8 +34,10 @@ class CER(BaseMetric):
             ref_key: Key name for reference text entries.
             hyp_key: Key name for hypothesis text entries.
             clean_types: Optional cleaner types passed to TextCleaner.
+            lowercase: Lowercase both references and hypotheses before scoring.
         """
         self.cleaner = TextCleaner(clean_types)
+        self.lowercase = lowercase
         self.ref_key = ref_key
         self.hyp_key = hyp_key
 
@@ -48,6 +51,8 @@ class CER(BaseMetric):
             Cleaned string, or a placeholder to avoid empty inputs.
         """
         cleaned = self.cleaner(text).strip()
+        if self.lowercase:
+            cleaned = cleaned.lower()
         return cleaned if cleaned else "."
 
     def _ensure_jiwer(self) -> None:

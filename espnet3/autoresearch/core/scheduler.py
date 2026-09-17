@@ -56,6 +56,7 @@ class AutoResearchGraphRuntime:
             state,
             self.study_id,
             self.study_dir,
+            self.recipe_dir,
             configured_session_id=getattr(config.autoresearch.agent, "session_id", None),
         )
         self.logger = logging.getLogger("espnet3.autoresearch")
@@ -296,6 +297,11 @@ class AutoResearchGraphRuntime:
                 {"current_node": current_node, "status": result.status},
             )
             return
+        # A proposal is study-scoped: it must not inherit the trial that
+        # triggered reflection/update_knowledge.  Otherwise global ticks skip
+        # the local node while the parallel-slot accounting still counts it.
+        if next_node == "propose_trial":
+            current_trial_id = None
         next_cfg = self.graph.nodes[next_node]
         next_run_id = f"run_{uuid.uuid4().hex}"
         attempt = 0
@@ -829,21 +835,6 @@ class AutoResearchGraphRuntime:
             if not unchecked:
                 return
 
-            # Read CSV tail
-            try:
-                with open(metrics_csv, newline="", encoding="utf-8", errors="replace") as f:
-                    rows = list(csv.reader(f))
-                if rows:
-                    header = ",".join(rows[0])
-                    tail_rows = "\n".join(",".join(r) for r in rows[-10:])
-                    metrics_snapshot = f"{header}\n{tail_rows}"
-                else:
-                    metrics_snapshot = ""
-            except Exception:
-                metrics_snapshot = ""
-
-            comparison = self._collect_keypoint_comparison(trial_id)
-
             progress = [
                 f"epoch={current_epoch}/{total_epochs}" if current_epoch is not None else "epoch=unknown",
                 f"iteration={current_iteration}" if current_iteration is not None else "iteration=unknown",
@@ -858,14 +849,19 @@ class AutoResearchGraphRuntime:
                 "Return exactly one JSON object with no markdown fences:",
                 '{"should_stop": bool, "reason": "...", "key_metrics": {...}}',
                 "",
-                "Current training metrics (metrics.csv tail):",
-                metrics_snapshot,
-                "",
-                "Other trials metrics for comparison:",
-                comparison,
+                "Read current evidence with tools as needed; do not ask for pasted copies:",
+                f"- Trial directory: {trial_dir}",
+                f"- Training log: {trial_dir / 'train.log'}",
+                f"- Evaluation log: {trial_dir / 'eval.log'}",
+                f"- Live training metrics: {metrics_csv}",
+                f"- Trial history and scores: {self.study_dir / 'trials.csv'}",
+                f"- Study objective: {self.study_dir / 'program.md'}",
                 "",
                 "Should this trial be early stopped?",
-                "Stop ONLY if the trajectory is clearly inferior to other trials and unlikely to recover.",
+                "Use the `pretrain_validation` entry in train.log as this trial's zero-shot "
+                "baseline. At an epoch keypoint, stop if the current fixed-dev valid/loss is "
+                "worse than that baseline; report both values in key_metrics.",
+                "Also stop if the trajectory is clearly inferior to other trials and unlikely to recover.",
                 "Be conservative — prefer to continue unless the evidence is strong.",
             ])
 
@@ -1088,7 +1084,11 @@ class AutoResearchGraphRuntime:
             )
         self._refresh_active_jobs(
             trial_id=trial_id,
-            include_trial_jobs=trial_id is not None,
+            # A controller tick must reconcile trial jobs as well.  The old
+            # condition left completed Slurm jobs marked active unless their
+            # per-trial monitor ran, which is unavailable in self-controller
+            # mode.
+            include_trial_jobs=True,
         )
         if trial_id is not None:
             try:

@@ -159,11 +159,11 @@ class DebugTrialStage(AutoResearchStage):
                 return "(unavailable)"
 
         base_configs_context = "\n\n".join([
-            "## Base configs (propose patches against these)\n"
+            "## Base configs\n"
             "Runtime keys are injected automatically — do NOT include them.\n",
             "### training config\n```yaml\n" + _load_base("training_config", "training.yaml") + "```",
-            "### inference config\n```yaml\n" + _load_base("inference_config", "inference.yaml") + "```",
-            "### metrics config\n```yaml\n" + _load_base("metrics_config", "metrics.yaml") + "```",
+            "### Fixed inference config (immutable; do not propose patches)\n```yaml\n" + _load_base("inference_config", "inference.yaml") + "```",
+            "### Fixed metrics config (immutable; do not propose patches)\n```yaml\n" + _load_base("metrics_config", "metrics.yaml") + "```",
         ])
 
         repo_context_parts = [
@@ -212,8 +212,6 @@ class DebugTrialStage(AutoResearchStage):
                 "files_modified": ["list of src/ files edited (empty if none)"],
                 "config_patches": {
                     "training": {"dotted.key": "value (or empty dict)"},
-                    "inference": {"dotted.key": "value (or empty dict)"},
-                    "metrics": {"dotted.key": "value (or empty dict)"},
                 },
                 "should_retry": True,
             },
@@ -245,11 +243,6 @@ class DebugTrialStage(AutoResearchStage):
         structured = dict(response.structured or {})
         config_patches = dict(structured.get("config_patches", {}) or {})
         patch = dict(config_patches.get("training", {}) or structured.get("config_patch", {}) or {})
-        extra_config_patches = {
-            k: dict(v or {})
-            for k, v in config_patches.items()
-            if k != "training" and v
-        }
         patch, removed = self._sanitize_patch(context, patch)
         files_modified = list(structured.get("files_modified", []) or [])
         should_retry = bool(structured.get("should_retry", bool(patch or files_modified)))
@@ -311,15 +304,13 @@ class DebugTrialStage(AutoResearchStage):
             training_out = artifact_dir / "resolved_training_config.yaml"
             write_resolved_config(training_out, OmegaConf.create(merged_training))
 
-            # Inference/metrics configs don't have a tokenizer context, so only
-            # apply runtime patches + agent-specific patches (not the full HP patch).
+            # Evaluation is immutable across attempts.  Debug patches may repair
+            # training only; inference/metrics receive trial-local paths only.
             runtime_only_infer = {**runtime_patch, "inference_dir": str(artifact_dir / "inference")}
             for config_key, config_name, out_name in [
                 ("inference_config", "inference.yaml", "resolved_inference_config.yaml"),
                 ("metrics_config", "metrics.yaml", "resolved_metrics_config.yaml"),
             ]:
-                cfg_name_stem = config_name.split(".")[0]
-                agent_patch = extra_config_patches.get(cfg_name_stem, {})
                 cfg = load_recipe_stage_config(
                     context.recipe_dir,
                     Path(getattr(context.config.autoresearch.recipe, config_key)),
@@ -327,7 +318,7 @@ class DebugTrialStage(AutoResearchStage):
                     resolve=False,
                 )
                 unresolved = OmegaConf.to_container(cfg, resolve=False)
-                unresolved = apply_dotted_patch(unresolved, {**runtime_only_infer, **agent_patch})
+                unresolved = apply_dotted_patch(unresolved, runtime_only_infer)
                 plain = OmegaConf.to_container(OmegaConf.create(unresolved), resolve=True)
                 write_resolved_config(artifact_dir / out_name, OmegaConf.create(plain))
 

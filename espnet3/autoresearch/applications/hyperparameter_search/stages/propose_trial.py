@@ -209,16 +209,16 @@ class ProposeTrialStage(AutoResearchStage):
                 return "(unavailable)"
 
         base_configs_context = "\n\n".join([
-            "## Base configs (read-only reference — propose patches against these)\n"
+            "## Base configs\n"
             "Runtime keys (exp_dir, stats_dir, recipe_dir, data_dir, exp_tag, inference_dir) "
             "are injected automatically — do NOT include them in your patches.\n",
             "### training config\n```yaml\n"
             + _load_base_config_text("training_config", "training.yaml")
             + "```",
-            "### inference config\n```yaml\n"
+            "### Fixed inference config (immutable; do not propose patches)\n```yaml\n"
             + _load_base_config_text("inference_config", "inference.yaml")
             + "```",
-            "### metrics config\n```yaml\n"
+            "### Fixed metrics config (immutable; do not propose patches)\n```yaml\n"
             + _load_base_config_text("metrics_config", "metrics.yaml")
             + "```",
         ])
@@ -264,8 +264,6 @@ class ProposeTrialStage(AutoResearchStage):
                 "rationale": "string",
                 "config_patches": {
                     "training": {"dotted.key": "value (required — HP changes go here)"},
-                    "inference": {"dotted.key": "value (optional — only if inference.yaml must change). IMPORTANT: use only concrete resolved values here (strings, numbers, booleans). Do NOT use OmegaConf interpolations like ${key} — they will not resolve in inference.yaml context."},
-                    "metrics": {"dotted.key": "value (optional — only if metrics.yaml must change)"},
                 },
                 "expected_effect": "string",
                 "risk": "string",
@@ -300,17 +298,11 @@ class ProposeTrialStage(AutoResearchStage):
             risk = "May not improve the current best."
             extra_stages: list[str] = []
             removed: list[str] = []
-            extra_config_patches: dict = {}
         else:
             structured = dict(response.structured or {})
             # Support both new multi-config format and legacy single config_patch
             config_patches = dict(structured.get("config_patches", {}) or {})
             patch = dict(config_patches.get("training", {}) or structured.get("config_patch", {}) or {})
-            extra_config_patches = {
-                k: dict(v or {})
-                for k, v in config_patches.items()
-                if k != "training" and v
-            }
             rationale = str(structured.get("rationale", response.content or ""))
             expected_effect = str(structured.get("expected_effect", ""))
             risk = str(structured.get("risk", ""))
@@ -367,49 +359,17 @@ class ProposeTrialStage(AutoResearchStage):
         training_out = trial_dir / "resolved_training_config.yaml"
         write_resolved_config(training_out, OmegaConf.create(train_plain))
 
-        # Resolve inference and metrics configs: runtime keys + agent patches + resolve.
-        # Agent may supply extra patches via config_patches.inference / config_patches.metrics.
-        # Pre-resolve any OmegaConf interpolations in effective_patch using train_plain so that
-        # keys like ${tokenizer.save_path} resolve correctly even in configs that lack those keys.
-        def _pre_resolve_patch(patch: dict, resolved_train: dict) -> dict:
-            def _get_dotted(d: dict, dotted_key: str):
-                keys = dotted_key.split(".")
-                cur = d
-                for k in keys:
-                    if not isinstance(cur, dict) or k not in cur:
-                        return None
-                    cur = cur[k]
-                return cur
-
-            result = {}
-            for k, v in patch.items():
-                if isinstance(v, str) and "${" in v:
-                    resolved_v = _get_dotted(resolved_train, k)
-                    result[k] = resolved_v if resolved_v is not None else v
-                else:
-                    result[k] = v
-            return result
-
-        runtime_with_infer_dir = _pre_resolve_patch(
-            {**effective_patch, "inference_dir": str(trial_dir / "inference")},
-            train_plain,
-        )
-
-        def _key_exists_in_config(cfg: dict, dotted_key: str) -> bool:
-            keys = dotted_key.split(".")
-            cur = cfg
-            for k in keys:
-                if not isinstance(cur, dict) or k not in cur:
-                    return False
-                cur = cur[k]
-            return True
-
+        # Evaluation is a study invariant.  Never apply either training HPs or
+        # agent-provided config_patches.inference/metrics to these configs; only
+        # trial-local runtime paths are substituted below.
+        runtime_inference_paths = {
+            **runtime_patch,
+            "inference_dir": str(trial_dir / "inference"),
+        }
         for config_key, config_name, out_name in [
             ("inference_config", "inference.yaml", "resolved_inference_config.yaml"),
             ("metrics_config", "metrics.yaml", "resolved_metrics_config.yaml"),
         ]:
-            cfg_name_stem = config_name.split(".")[0]  # "inference" or "metrics"
-            agent_patch = extra_config_patches.get(cfg_name_stem, {})
             cfg = load_recipe_stage_config(
                 context.recipe_dir,
                 Path(getattr(context.config.autoresearch.recipe, config_key)),
@@ -417,15 +377,7 @@ class ProposeTrialStage(AutoResearchStage):
                 resolve=False,
             )
             unresolved = OmegaConf.to_container(cfg, resolve=False)
-            # Filter out training-only HP keys that don't exist in this config's base
-            # structure (e.g. model.specaug_conf.* or dataset.preprocessor.* from a
-            # training patch must not bleed into inference/metrics configs).
-            safe_patch = {
-                k: v for k, v in runtime_with_infer_dir.items()
-                if k in _runtime_keys or k == "inference_dir"
-                or _key_exists_in_config(unresolved, k)
-            }
-            unresolved = apply_dotted_patch(unresolved, {**safe_patch, **agent_patch})
+            unresolved = apply_dotted_patch(unresolved, runtime_inference_paths)
             plain = OmegaConf.to_container(OmegaConf.create(unresolved), resolve=True)
             write_resolved_config(trial_dir / out_name, OmegaConf.create(plain))
 

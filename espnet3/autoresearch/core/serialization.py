@@ -100,16 +100,41 @@ def unflatten_dict(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_dotted_patch(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """Apply a dotted-key patch onto a nested dict."""
+    """Apply a dotted-key patch onto a nested dict, indexing into lists by position.
+
+    A dotted key part that is a plain non-negative integer (e.g. ``"0"``) is
+    treated as a list index whenever the current container is a list, so
+    keys like ``dataset.train.0.transform.transforms.1.apply_prob`` can reach
+    into a ``dataset.train: [...]``-style list without clobbering it (and its
+    sibling entries) into a dict.
+    """
     merged = json.loads(json.dumps(base))
+
+    def _set_child(container, part: str, ensure_kind: type):
+        if isinstance(container, list):
+            idx = int(part)
+            while len(container) <= idx:
+                container.append({} if ensure_kind is dict else [])
+            if not isinstance(container[idx], (dict, list)):
+                container[idx] = {} if ensure_kind is dict else []
+            return container[idx]
+        if part not in container or not isinstance(container[part], (dict, list)):
+            container[part] = {} if ensure_kind is dict else []
+        return container[part]
+
     for key, value in patch.items():
         current = merged
         parts = str(key).split(".")
         for part in parts[:-1]:
-            if part not in current or not isinstance(current[part], dict):
-                current[part] = {}
-            current = current[part]
-        current[parts[-1]] = value
+            current = _set_child(current, part, dict)
+        last = parts[-1]
+        if isinstance(current, list):
+            idx = int(last)
+            while len(current) <= idx:
+                current.append(None)
+            current[idx] = value
+        else:
+            current[last] = value
     return merged
 
 

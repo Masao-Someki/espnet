@@ -119,10 +119,16 @@ def cmd_init(args) -> int:
     state.create_or_load_study(str(config.autoresearch.study_name), study_dir)
     program_path = study_dir / "program.md"
     if not program_path.exists():
-        program_path.write_text(
-            "# AutoResearch Objective\n\nDescribe the search goal here.\n",
-            encoding="utf-8",
-        )
+        objective_file = Path(str(getattr(config.autoresearch, "objective_file", "program.md")))
+        objective_sources = [config_path.parent / objective_file, recipe_dir / objective_file]
+        objective_source = next((path for path in objective_sources if path.is_file()), None)
+        if objective_source is not None:
+            shutil.copyfile(objective_source, program_path)
+        else:
+            program_path.write_text(
+                "# AutoResearch Objective\n\nDescribe the search goal here.\n",
+                encoding="utf-8",
+            )
     study_id = str(config.autoresearch.study_name)
     if not state.list_node_runs(study_id):
         bootstrap_runtime = _load_runtime(study_dir, recipe_dir)

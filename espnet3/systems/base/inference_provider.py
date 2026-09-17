@@ -33,7 +33,10 @@ def _convert_relative_paths_to_absolute(obj: Any, seen: set | None = None) -> No
         return
     seen.add(oid)
     obj_vars = getattr(obj, "__dict__", None)
-    if not obj_vars:
+    # C-extension and PyTorch helper objects can expose a non-dict proxy as
+    # ``__dict__``. They do not carry recipe file paths and must not make
+    # inference setup fail merely because their internals are opaque.
+    if not isinstance(obj_vars, dict) or not obj_vars:
         return
     for attr, val in list(obj_vars.items()):
         if isinstance(val, str):
@@ -44,7 +47,10 @@ def _convert_relative_paths_to_absolute(obj: Any, seen: set | None = None) -> No
                         setattr(obj, attr, candidate)
                     except (AttributeError, TypeError):
                         pass
-        elif isinstance(val, dict):
+        # Some third-party models expose lazy mapping subclasses of ``dict``.
+        # Iterating their values can import every optional model backend, so
+        # restrict this path rewrite to ordinary eagerly-populated dicts.
+        elif type(val) is dict:
             for v in val.values():
                 _convert_relative_paths_to_absolute(v, seen)
         elif isinstance(val, (list, tuple)):

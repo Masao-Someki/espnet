@@ -25,6 +25,7 @@ class Study:
     updated_at: str
     current_best_trial_id: str | None = None
     agent_session_id: str | None = None
+    agent_context_initialized: bool = False
 
 
 @dataclass
@@ -72,7 +73,8 @@ class StateStore:
                   created_at TEXT NOT NULL,
                   updated_at TEXT NOT NULL,
                   current_best_trial_id TEXT,
-                  agent_session_id TEXT
+                  agent_session_id TEXT,
+                  agent_context_initialized INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS trials (
                   trial_id TEXT PRIMARY KEY,
@@ -148,6 +150,11 @@ class StateStore:
             }
             if "agent_session_id" not in study_columns:
                 conn.execute("ALTER TABLE studies ADD COLUMN agent_session_id TEXT")
+            if "agent_context_initialized" not in study_columns:
+                conn.execute(
+                    "ALTER TABLE studies ADD COLUMN agent_context_initialized "
+                    "INTEGER NOT NULL DEFAULT 0"
+                )
             trial_columns = {
                 row["name"]
                 for row in conn.execute("PRAGMA table_info(trials)").fetchall()
@@ -168,10 +175,10 @@ class StateStore:
                 conn.execute(
                     "INSERT INTO studies "
                     "(study_id, study_dir, status, created_at, updated_at, current_best_trial_id, "
-                    "agent_session_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (study_id, str(study_dir), "initialized", now, now, None, None),
+                    "agent_session_id, agent_context_initialized) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (study_id, str(study_dir), "initialized", now, now, None, None, 0),
                 )
-                return Study(study_id, str(study_dir), "initialized", now, now, None, None)
+                return Study(study_id, str(study_dir), "initialized", now, now, None, None, False)
             return Study(**dict(row))
 
     def get_study(self, study_id: str) -> Study:
@@ -201,6 +208,22 @@ class StateStore:
             conn.execute(
                 "UPDATE studies SET agent_session_id = ?, updated_at = ? WHERE study_id = ?",
                 (session_id, utc_now(), study_id),
+            )
+
+    def agent_context_initialized(self, study_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT agent_context_initialized FROM studies WHERE study_id = ?",
+                (study_id,),
+            ).fetchone()
+        return bool(row and row["agent_context_initialized"])
+
+    def mark_agent_context_initialized(self, study_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE studies SET agent_context_initialized = 1, updated_at = ? "
+                "WHERE study_id = ?",
+                (utc_now(), study_id),
             )
 
     def set_best_trial(self, study_id: str, trial_id: str) -> None:

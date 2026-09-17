@@ -95,6 +95,9 @@ class RunTrialStage(AutoResearchStage):
     _INFER_STAGES = frozenset({"infer"})
     # Stages that need all three configs
     _MEASURE_STAGES = frozenset({"measure"})
+    # These are graph nodes which complete before RunTrialStage.  They are
+    # recorded in Trial.extra_stages for routing, but are not run.py stages.
+    _GRAPH_ONLY_EXTRA_STAGES = frozenset({"implement_code", "write_files"})
 
     def _stage_command(
         self,
@@ -148,7 +151,11 @@ class RunTrialStage(AutoResearchStage):
             return [[str(part).format(**values) for part in template]]
 
         trial = context.current_trial
-        extra_stages = list(getattr(trial, "extra_stages", None) or [])
+        extra_stages = [
+            stage
+            for stage in (getattr(trial, "extra_stages", None) or [])
+            if stage not in self._GRAPH_ONLY_EXTRA_STAGES
+        ]
         return self._build_default_commands(training_cfg, inference_cfg, metrics_cfg, extra_stages)
 
     def run(self, context) -> StageResult:

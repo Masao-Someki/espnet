@@ -34,8 +34,9 @@ def compute_tick_handoff_after_seconds(walltime_seconds: int | None) -> int | No
     """Return when a long-running tick job should hand off to its successor."""
     if walltime_seconds is None or walltime_seconds <= 0:
         return None
-    cushion = min(1800, max(60, walltime_seconds // 4))
-    return max(1, walltime_seconds - cushion)
+    # Reserve the final quarter for an in-flight scheduling iteration and the
+    # successor submission.  A six-hour controller therefore hands off at 4.5h.
+    return max(1, walltime_seconds * 3 // 4)
 
 
 def build_tick_loop_script(
@@ -57,6 +58,12 @@ def build_tick_loop_script(
     """Build a bash script for a self-renewing tick job."""
     quoted_study_dir = shlex.quote(str(study_dir))
     quoted_recipe_dir = shlex.quote(str(recipe_dir))
+    # ``pixi run`` changes the interpreter, so the repository checkout is not
+    # necessarily importable even though the controller was launched from it.
+    # Keep tick jobs usable from recipe-local Pixi environments without
+    # installing the whole checkout into every recipe environment.
+    repo_root = recipe_dir.resolve().parents[2]
+    quoted_repo_root = shlex.quote(str(repo_root))
     tick_cmd = [
         "pixi",
         "run",
@@ -113,6 +120,7 @@ def build_tick_loop_script(
 
     handoff_after = compute_tick_handoff_after_seconds(parse_slurm_time_to_seconds(slurm_time))
     lines = [
+        f"export PYTHONPATH={quoted_repo_root}:$PYTHONPATH",
         'finish_tick_job() {',
         '  if printenv ESPNET_AR_TICK_JOB_ID >/dev/null 2>&1; then',
         "    pixi run python -m espnet3.autoresearch.cli.main finish-tick-job "
