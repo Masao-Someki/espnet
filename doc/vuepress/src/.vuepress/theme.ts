@@ -37,6 +37,10 @@ export default hopeTheme({
 
   plugins: {
 
+    // This documentation site does not display Git metadata. Disable the
+    // theme's default Git history scan, which otherwise spawns Git for every page.
+    git: false,
+
     // All features are enabled for demo, only preserve features you need here
     mdEnhance: {
       align: true,

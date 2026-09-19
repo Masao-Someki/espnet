@@ -9,6 +9,18 @@ export default defineUserConfig({
 
   lang: "en-US",
 
+  plugins: [
+    {
+      name: "local-normal-page",
+      alias: {
+        "@theme-hope/components/NormalPage": path.resolve(
+          __dirname,
+          "./theme/components/NormalPage.vue",
+        ),
+      },
+    },
+  ],
+
   head: [
     [
       "script",
@@ -31,14 +43,6 @@ export default defineUserConfig({
 
   bundler: viteBundler({
     viteOptions: {
-      resolve: {
-        alias: {
-          "@theme-hope/components/NormalPage": path.resolve(
-            __dirname,
-            "./theme/components/NormalPage.vue",
-          ),
-        },
-      },
       build: {
         sourcemap: false,
         rollupOptions: {
