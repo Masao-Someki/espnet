@@ -25,6 +25,52 @@ A good ESPnet3 name should be:
 
 If a new name would create a synonym for an existing concept, do not add it.
 
+## System directory names
+
+Apply these rules, in order, to names under `espnet3/systems/`:
+
+1. Use lowercase.
+2. Keep the name clear and unambiguous.
+3. Use the shortest name that remains clear. For a system directory, established
+   domain abbreviations are appropriate when they prevent an unwieldy name:
+   `esp2`, `asr`, `tts`, `st`, and `enh` are accepted terms. This is a deliberate
+   exception to the general preference for full words in variables, files, and APIs.
+4. Prefer one word where possible. Use underscores only when they preserve an
+   established name, version, variant, or meaningful structure.
+
+ESPnet2 task-derived systems use `esp2_<task>`, such as `esp2_asr` and
+`esp2_asr_transducer`. The short prefix keeps directory names manageable while
+grouping their ESPnet2 provenance in alphabetical listings. ESPnet2-derived work
+without a task-shaped system remains a regular system name, such as `speechlm`.
+
+<details>
+<summary>Examples of system directory names</summary>
+
+| Name | Why it fits |
+| --- | --- |
+| `f5tts` | Established one-word system name. |
+| `openbeats` | Established one-word system name. |
+| `parakeet` | Clear one-word system name. |
+| `granitespeech` | Clear one-word system name. |
+| `speechlm` | Established name; no separator is needed. |
+| `whisper` | Established one-word system name. |
+| `wav2vec2` | Established one-word system name. |
+| `wavlm` | Established one-word system name. |
+| `hubert` | Established one-word system name. |
+| `seamlessm4t` | Established one-word system name. |
+| `owsm_v3` | The underscore preserves a meaningful version. |
+| `owsm_v4` | The underscore preserves a meaningful version. |
+| `qwen2_audio` | The underscore preserves the established model family structure. |
+| `qwen2_5_omni` | The underscores preserve the established version and variant. |
+| `esp2_asr` | ESPnet2 ASR task-derived system. |
+| `esp2_asr_transducer` | ESPnet2 ASR transducer system; the short `esp2` prefix keeps it manageable. |
+| `esp2_tts` | ESPnet2 TTS task-derived system. |
+| `esp2_st` | ESPnet2 speech translation task-derived system. |
+| `esp2_enh` | ESPnet2 speech enhancement task-derived system. |
+| `huggingface_asr` | A toolkit plus task clearly identifies a wrapper system. |
+
+</details>
+
 ## Python naming
 
 Follow normal Python naming first:
