@@ -33,9 +33,8 @@ egs3/<recipe>/<system>/dataset/
   config.yaml
 ```
 
-![DatasetBuilder lifecycle](../images/data_builder.png)
-
-That layer is usually driven by
+The DatasetBuilder lifecycle separates source preparation from recipe-local
+cache construction. That layer is usually driven by
 [`DatasetBuilder`](../../../guide/espnet3/components/DatasetBuilder.html):
 
 - [`is_source_prepared()`](../../../guide/espnet3/components/DatasetBuilder.html)
