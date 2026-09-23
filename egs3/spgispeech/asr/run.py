@@ -7,13 +7,6 @@ from egs3.TEMPLATE.asr.run import (
 from espnet3.systems.esp2_asr.system import ASRSystem
 
 if __name__ == "__main__":
-    parser = build_parser(
-        stages=DEFAULT_STAGES,
-    )
+    parser = build_parser(stages=DEFAULT_STAGES)
     args, stages_to_run = parse_cli_and_stage_args(parser, stages=DEFAULT_STAGES)
-
-    main(
-        args=args,
-        system_cls=ASRSystem,
-        stages=stages_to_run,
-    )
+    main(args=args, system_cls=ASRSystem, stages=stages_to_run)
