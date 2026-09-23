@@ -134,14 +134,12 @@ dataloader:
 ```
 
 ::: warning
-This `iter_factory` + shape-file `batches` combination does not actually
-support `total_shards > 1` today — shape files are keyed by the unsharded
-dataset's index, which no longer matches after sharding. See
-[Dataset sharding](./dataset-sharding.html#common-mistakes) before combining
-sharding with `iter_factory`; keep `total_shards: 1` unless you control batch
-construction yourself (e.g. `ChunkIterFactory` with an explicit `batches`
-list), or shard through the standard `DataLoader` path instead (and set
-`trainer.use_distributed_sampler: false` explicitly — see the same section).
+`iter_factory` cannot be combined with `total_shards > 1`: shape-file
+`batches` are keyed by the unsharded dataset's index, so ESPnet3 raises a
+`RuntimeError` at startup. Keep `total_shards: 1` with `iter_factory`, or
+shard through the standard `DataLoader` path (`iter_factory: null`), where
+ESPnet3 disables Lightning's `DistributedSampler` automatically. See
+[Dataset sharding](./dataset-sharding.html#common-mistakes).
 :::
 
 ## How shard rotation works
