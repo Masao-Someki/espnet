@@ -335,20 +335,20 @@ def load_default_config(
 
         .. code-block:: text
 
-            egs3/TEMPLATE/asr/conf/training.yaml
+            egs3/TEMPLATE/esp2_asr/conf/training.yaml
 
         **Recipe example.**
 
         .. code-block:: text
 
-            egs3/librispeech/asr/conf/training.yaml
+            egs3/librispeech/esp2_asr/conf/training.yaml
 
     Args:
         config_name (str): Config filename under ``conf/``, such as
             ``training.yaml``, ``inference.yaml``, or ``metrics.yaml``.
         default_package (str): Python package that contains the default
             recipe resources. For example, ``egs3.TEMPLATE.esp2_asr`` points to files
-            under ``egs3/TEMPLATE/asr/``. Other installed recipe packages can
+            under ``egs3/TEMPLATE/esp2_asr/``. Other installed recipe packages can
             also be used as long as they provide ``conf/<config_name>``.
 
     Returns:
@@ -393,7 +393,7 @@ def load_and_merge_config(
 
         .. code-block:: text
 
-            egs3/TEMPLATE/asr/conf/training.yaml
+            egs3/TEMPLATE/esp2_asr/conf/training.yaml
 
         with:
 
