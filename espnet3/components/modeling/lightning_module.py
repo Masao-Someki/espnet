@@ -1275,4 +1275,5 @@ class ESPnetLightningModule(lightning.LightningModule):
                     else self.config.parallel
                 ),
                 write_collected_feats=False,
+                resume=self.config.get("collect_stats", {}).get("resume", True),
             )

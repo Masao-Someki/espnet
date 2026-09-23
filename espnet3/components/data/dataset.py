@@ -1,13 +1,16 @@
 """Dataset classes for ESPnet3."""
 
 import copy
+import logging
 from abc import ABC
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from torch.utils.data.dataset import Dataset
+from torch.utils.data.dataset import Dataset, Subset
 
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
+
+logger = logging.getLogger(__name__)
 
 
 def do_nothing(*x):
@@ -39,6 +42,19 @@ class CombinedDataset:
         * String mode: if any dataset requires string-based utterance IDs, the
           organizer builds a lookup table mapping every UID to its source dataset
           while preserving DataLoader-friendly integer access.
+
+    **Stable UID protocol.** ``get_uid(idx)`` is the single source of truth for
+    the utterance ID used from ``collect_stats`` (shape-file keys) through
+    batching (the UID returned alongside each sample when ``use_espnet_collator``
+    is set, and passed to the preprocessor). Per sub-dataset, in order:
+    (1) if the sub-dataset implements ``get_utt_id(idx: int) -> str``, that value
+    is used and is stable across dataset reordering/sharding; (2) if the
+    sub-dataset is string-key-only (see indexing modes above), its registered
+    key is used; (3) otherwise the global position ``str(idx)`` is used, which is
+    **not** stable if dataset order or composition changes between
+    ``collect_stats`` and training -- see ``has_stable_uids``. A dataset opts
+    into stable UIDs solely by implementing ``get_utt_id``; no other config is
+    required.
 
     Args:
         datasets (List[Any]): A list of dataset instances. Each must implement
@@ -112,6 +128,8 @@ class CombinedDataset:
         self._dataset_key_lists: List[Optional[List[str]]] = []
 
         self._initialize_index_mode()
+        self._has_stable_uids = False
+        self._register_stable_uids()
 
         # Check the first sample from all dataset to ensure they all have the same keys
         sample_keys = None
@@ -180,6 +198,13 @@ class CombinedDataset:
 
     def __getitem__(self, idx):
         """Return the item at the given index from the appropriate sub-dataset."""
+        if (
+            isinstance(idx, str)
+            and self._has_stable_uids
+            and idx in self._uid_to_dataset
+        ):
+            return self._getitem_string_mode(idx)
+
         if self._string_index_mode:
             return self._getitem_string_mode(idx)
 
@@ -191,30 +216,27 @@ class CombinedDataset:
             else:
                 idx = numerical_idx
 
-        for i, cum_len in enumerate(self.cumulative_lengths):
-            if idx < cum_len:
-                ds_idx = idx if i == 0 else idx - self.cumulative_lengths[i - 1]
-                try:
-                    sample = self.datasets[i][ds_idx]
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to access dataset at index {i} or "
-                        f"item at index {ds_idx}. "
-                        f"Original error: {e}"
-                    ) from e
+        dataset_idx, ds_idx = self._resolve_global_index(idx)
+        try:
+            sample = self.datasets[dataset_idx][ds_idx]
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to access dataset at index {dataset_idx} or "
+                f"item at index {ds_idx}. "
+                f"Original error: {e}"
+            ) from e
 
-                transformed = self.transforms[i][0](sample)  # apply transform
-                if self.use_espnet_preprocessor:
-                    transformed = self.transforms[i][1](str(idx), transformed)
-                else:
-                    transformed = self.transforms[i][1](transformed)
+        transformed = self.transforms[dataset_idx][0](sample)  # apply transform
+        uid = self.get_uid(idx)
+        if self.use_espnet_preprocessor:
+            transformed = self.transforms[dataset_idx][1](uid, transformed)
+        else:
+            transformed = self.transforms[dataset_idx][1](transformed)
 
-                if self.use_espnet_collator:
-                    return str(idx), transformed
-                else:
-                    return transformed
-
-        raise IndexError("Index out of range in CombinedDataset")
+        if self.use_espnet_collator:
+            return uid, transformed
+        else:
+            return transformed
 
     def _getitem_by_utterance_id(self, uid: str):
         if self._string_index_mode:
@@ -304,6 +326,122 @@ class CombinedDataset:
                 )
             self._uid_to_dataset[key] = (dataset_idx, key)
 
+    # ------------------------------------------------------------------
+    # Stable UID protocol
+    # ------------------------------------------------------------------
+    def _register_stable_uids(self):
+        """Register stable UIDs and determine ``has_stable_uids``.
+
+        For each sub-dataset that implements ``get_utt_id`` and supports
+        integer indexing, registers ``get_utt_id(i)`` for every item into
+        ``_uid_to_dataset`` (so string lookups resolve through it even
+        outside string-index mode). String-key-only sub-datasets are already
+        registered by ``_initialize_index_mode``. Logs a one-time warning if
+        any sub-dataset ends up without a stable UID.
+
+        Raises:
+            ValueError: If two sub-datasets register the same UID.
+            TypeError: If ``get_utt_id`` returns a non-``str`` value.
+        """
+        per_dataset_stable = []
+        for dataset_idx, dataset in enumerate(self.datasets):
+            if (
+                hasattr(dataset, "get_utt_id")
+                and self._dataset_supports_int[dataset_idx]
+            ):
+                for ds_idx in range(self.lengths[dataset_idx]):
+                    uid = dataset.get_utt_id(ds_idx)
+                    if not isinstance(uid, str):
+                        raise TypeError(
+                            "get_utt_id must return a str, got "
+                            f"{type(uid).__name__} from dataset {dataset_idx} "
+                            f"index {ds_idx}."
+                        )
+                    if uid in self._uid_to_dataset:
+                        raise ValueError(
+                            f"Duplicate utterance ID '{uid}' detected across "
+                            "datasets."
+                        )
+                    self._uid_to_dataset[uid] = (dataset_idx, ds_idx)
+                per_dataset_stable.append(True)
+            elif (
+                self._string_index_mode and not self._dataset_supports_int[dataset_idx]
+            ):
+                per_dataset_stable.append(True)
+            else:
+                per_dataset_stable.append(False)
+
+        self._has_stable_uids = bool(per_dataset_stable) and all(per_dataset_stable)
+        if self.datasets and not self._has_stable_uids:
+            logger.warning(
+                "CombinedDataset has no stable utterance IDs for at least one "
+                "sub-dataset (no get_utt_id implementation and not "
+                "string-keyed); shape files will be keyed by dataset "
+                "position. Reordering or changing dataset entries between "
+                "collect_stats and train is NOT detected beyond item count. "
+                "Implement get_utt_id(idx: int) -> str on the dataset to opt "
+                "into stable UIDs."
+            )
+
+    def _resolve_global_index(self, idx: int) -> Tuple[int, int]:
+        """Resolve a global index to ``(dataset_idx, index within dataset)``.
+
+        Raises:
+            IndexError: If ``idx`` is negative or out of range.
+        """
+        if idx < 0:
+            raise IndexError("Index out of range in CombinedDataset")
+        for i, cum_len in enumerate(self.cumulative_lengths):
+            if idx < cum_len:
+                ds_idx = idx if i == 0 else idx - self.cumulative_lengths[i - 1]
+                return i, ds_idx
+        raise IndexError("Index out of range in CombinedDataset")
+
+    def get_uid(self, idx: int) -> str:
+        """Return the stable utterance ID for a global integer index.
+
+        This is the single source of truth for the UID used consistently
+        from ``collect_stats`` (shape-file keys) through batching. See the
+        class docstring's "Stable UID protocol" section for the per-dataset
+        resolution order.
+
+        Args:
+            idx (int): Global index into the combined dataset
+                (``0 <= idx < len(self)``).
+
+        Returns:
+            str: The UID for this index.
+
+        Raises:
+            IndexError: If ``idx`` is negative or out of range.
+        """
+        dataset_idx, ds_idx = self._resolve_global_index(idx)
+        dataset = self.datasets[dataset_idx]
+        if hasattr(dataset, "get_utt_id"):
+            return dataset.get_utt_id(ds_idx)
+        if self._string_index_mode and not self._dataset_supports_int[dataset_idx]:
+            return self._dataset_key_lists[dataset_idx][ds_idx]
+        return str(idx)
+
+    def uids(self) -> List[str]:
+        """Return every item's stable UID, in ascending integer-index order.
+
+        Returns:
+            List[str]: ``[get_uid(i) for i in range(len(self))]``.
+        """
+        return [self.get_uid(i) for i in range(len(self))]
+
+    @property
+    def has_stable_uids(self) -> bool:
+        """Whether every sub-dataset provides a UID stable across reordering.
+
+        True only when every sub-dataset either implements ``get_utt_id`` or
+        is string-key-only (see the class docstring). False means at least
+        one sub-dataset falls back to position-based UIDs (``str(idx)``),
+        which do not survive dataset reordering or composition changes.
+        """
+        return self._has_stable_uids
+
     def _select_reference_key_for_dataset(self, dataset_idx: int):
         if not self._string_index_mode or self._dataset_supports_int[dataset_idx]:
             return 0
@@ -315,30 +453,15 @@ class CombinedDataset:
 
     def _resolve_string_mode_index(self, idx):
         if isinstance(idx, int):
-            if idx < 0:
-                raise IndexError("Index out of range in CombinedDataset")
-            dataset_idx = 0
-            for i, cum_len in enumerate(self.cumulative_lengths):
-                if idx < cum_len:
-                    dataset_idx = i
-                    break
-            else:
-                raise IndexError("Index out of range in CombinedDataset")
-
-            ds_idx = (
-                idx
-                if dataset_idx == 0
-                else idx - self.cumulative_lengths[dataset_idx - 1]
-            )
+            dataset_idx, ds_idx = self._resolve_global_index(idx)
             if self._dataset_supports_int[dataset_idx]:
-                uid = str(idx)
                 dataset_key = ds_idx
             else:
                 keys = self._dataset_key_lists[dataset_idx]
                 if keys is None:
                     raise RuntimeError("String dataset keys are not initialized.")
                 dataset_key = keys[ds_idx]
-                uid = dataset_key
+            uid = self.get_uid(idx)
             return uid, dataset_idx, dataset_key
 
         if isinstance(idx, str):
@@ -376,6 +499,13 @@ class CombinedDataset:
         All datasets must be subclasses of `espnet3.data.dataset.ShardedDataset`,
         and implement a `shard()` method.
 
+        The returned dataset carries over ``use_espnet_collator`` from ``self``
+        (it is not reset). When a sub-dataset provides stable UIDs
+        (``get_utt_id``) and its ``shard()`` returns a plain
+        ``torch.utils.data.Subset``, the shard is wrapped so
+        ``get_uid``/``get_utt_id`` keep resolving to the parent's stable IDs
+        instead of being re-numbered from 0 -- see ``_ShardView``.
+
         Args:
             shard_idx (int): Index of the shard to retrieve.
 
@@ -383,19 +513,35 @@ class CombinedDataset:
             CombinedDataset: A new CombinedDataset containing the sharded datasets.
 
         Raises:
-            RuntimeError: If any dataset does not support sharding.
+            RuntimeError: If any dataset does not support sharding, or if a
+                stable-UID dataset's ``shard()`` returns something that is
+                neither a ``Subset`` nor an object exposing ``get_utt_id``.
         """
         if not all(isinstance(dataset, ShardedDataset) for dataset in self.datasets):
             raise RuntimeError(
                 "All dataset should be the subclass of "
                 "espnet3.components.data.dataset.ShardedDataset."
             )
-        sharded_datasets = [dataset.shard(shard_idx) for dataset in self.datasets]
-        return CombinedDataset(
+        sharded_datasets = []
+        for dataset in self.datasets:
+            sharded = dataset.shard(shard_idx)
+            if hasattr(dataset, "get_utt_id"):
+                if isinstance(sharded, Subset):
+                    sharded = _ShardView(dataset, sharded)
+                elif not hasattr(sharded, "get_utt_id"):
+                    raise RuntimeError(
+                        "shard() must return a Subset or an object exposing "
+                        "get_utt_id when the parent dataset provides stable "
+                        "IDs."
+                    )
+            sharded_datasets.append(sharded)
+        result = CombinedDataset(
             sharded_datasets,
             self.transforms,
             self.use_espnet_preprocessor,
         )
+        result.use_espnet_collator = self.use_espnet_collator
+        return result
 
     def __repr__(self) -> str:
         """Return a concise, inspectable summary of combined datasets."""
@@ -551,3 +697,36 @@ class ShardedDataset(ABC, Dataset):
             "which should return a `torch.utils.data.Dataset` object "
             "representing the shard corresponding to the given index."
         )
+
+
+class _ShardView(ShardedDataset):
+    """Wraps a ``Subset`` shard so ``get_utt_id`` resolves through the parent.
+
+    ``CombinedDataset.shard()`` uses this when a parent dataset exposes
+    stable UIDs (``get_utt_id``) and its own ``shard()`` returns a plain
+    ``torch.utils.data.Subset`` (the pattern documented in the Dataset
+    Sharding guide). Wrapping keeps each shard item's UID equal to the
+    parent's ``get_utt_id`` for that item's original index, instead of being
+    re-numbered from 0 within the shard. ``total_shards``/``dist_world_size``
+    are copied from the parent so ``CombinedDataset``'s sharding-consistency
+    checks still see them.
+    """
+
+    def __init__(self, parent: Any, subset: Subset):
+        """Initialize _ShardView object."""
+        self._parent = parent
+        self._subset = subset
+        self.total_shards = getattr(parent, "total_shards", None)
+        self.dist_world_size = getattr(parent, "dist_world_size", None)
+
+    def __len__(self):
+        """Return the number of items in this shard."""
+        return len(self._subset)
+
+    def __getitem__(self, idx):
+        """Return the shard-local item at ``idx``."""
+        return self._subset[idx]
+
+    def get_utt_id(self, idx: int) -> str:
+        """Return the parent dataset's stable ID for this shard-local index."""
+        return self._parent.get_utt_id(self._subset.indices[idx])

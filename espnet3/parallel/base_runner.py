@@ -66,6 +66,8 @@ class BaseRunner(ABC):
         async_num_workers (int | None): If set, overrides detected worker count
             to decide how many shards to create.
         async_result_dir (str | Path): Output directory for per-shard JSONL results.
+        fingerprint (Optional[Dict[str, Any]]): Identity of the current run's
+            configuration/inputs, recorded in the manifest and checked on resume.
 
     Notes:
         - In parallel sync mode (when a Dask cluster is configured), tasks are
@@ -82,13 +84,31 @@ class BaseRunner(ABC):
         output_dir: str | Path | None = None,
         shard_subdir: str = "",
         resume: bool = True,
+        fingerprint: Optional[Dict[str, Any]] = None,
     ):
-        """Initialize BaseRunner object."""
+        """Initialize BaseRunner object.
+
+        Args:
+            provider: Provider that builds the runtime env.
+            batch_size: If set, chunk indices into batches of this size.
+            output_dir: Root directory for shard/manifest output.
+            shard_subdir: Subdirectory under ``output_dir`` for this runner's
+                shards (e.g. the dataset split name).
+            resume: Whether a matching prior manifest may be resumed.
+            fingerprint: Opaque, JSON-serializable identity of the current
+                run's configuration and inputs (e.g. model/dataset config and
+                dataset content hash), recorded in the manifest. When resuming,
+                a mismatch against the recorded fingerprint raises
+                ``RuntimeError`` instead of silently reusing stale shard
+                outputs. Subclasses that do not need staleness detection may
+                leave this ``None``.
+        """
         self.provider = provider
         self.batch_size = batch_size
         self.output_dir = Path(output_dir) if output_dir is not None else None
         self.shard_subdir = shard_subdir or ""
         self.resume = resume
+        self.fingerprint = fingerprint
 
     @staticmethod
     @abstractmethod
@@ -257,10 +277,11 @@ class BaseRunner(ABC):
         manifest_path = self._get_manifest_path(self.output_dir, self.shard_subdir)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "version": 1,
+            "version": 2,
             "output_dir": str(self.output_dir),
             "shard_subdir": self.shard_subdir,
             "shards": list(shards),
+            "fingerprint": self.fingerprint,
         }
         with manifest_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -313,6 +334,14 @@ class BaseRunner(ABC):
         if manifest is None:
             self._write_manifest(planned_shards)
             return planned_shards
+
+        if manifest.get("fingerprint") != self.fingerprint:
+            raise RuntimeError(
+                "Cannot resume: the recorded fingerprint does not match the "
+                "current model/dataset configuration. Remove "
+                f"{self._get_shards_root(self.output_dir, self.shard_subdir)} "
+                "(or use a fresh output_dir) to recompute."
+            )
 
         manifest_shards = manifest["shards"]
         if len(manifest_shards) != len(planned_shards):

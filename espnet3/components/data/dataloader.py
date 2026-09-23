@@ -41,6 +41,9 @@ def log_dataloader(logger: logging.Logger, loader, label: str) -> None:
     )
 
 
+logger = logging.getLogger(__name__)
+
+
 class DataLoaderBuilder:
     """Builder class for constructing training and validation DataLoaders in ESPnet3.
 
@@ -84,7 +87,16 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def _get_world_info(self):
-        if self.num_device > 1:
+        """Return world info.
+
+        ``num_device > 1`` alone misses the multi-node, one-GPU-per-node case
+        (world_size > 1 but num_device == 1 on each node), so this also treats
+        an already-initialized ``torch.distributed`` process group as
+        distributed.
+        """
+        if self.num_device > 1 or (
+            torch.distributed.is_available() and torch.distributed.is_initialized()
+        ):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
         else:
@@ -191,10 +203,37 @@ class DataLoaderBuilder:
 
         Raises:
             ValueError: If the provided mode is neither "train" nor "valid".
+            RuntimeError: If ``iter_factory`` is configured together with
+                ``total_shards > 1`` on the dataset. Shape-file batches are
+                keyed by the unsharded dataset's index space, so after
+                ``dataset.shard()`` they would resolve to different
+                utterances (or go out of range) instead of raising -- this
+                combination is unsupported and rejected before any batch
+                sampler is built. Set ``data_src_args.total_shards: 1``, or
+                use the standard DataLoader path
+                (``dataloader.<mode>.iter_factory: null``) together with
+                ``trainer.use_distributed_sampler: false``.
         """
         mode_config = getattr(self.config.dataloader, mode, DictConfig({}))
 
         config = copy.copy(mode_config)
+
+        total_shards = getattr(self.dataset.datasets[0], "total_shards", None)
+        if (
+            config.iter_factory is not None
+            and total_shards is not None
+            and total_shards > 1
+        ):
+            raise RuntimeError(
+                "iter_factory cannot be combined with total_shards > 1: "
+                "shape-file batches are keyed by the unsharded dataset and "
+                "would resolve to different utterances after "
+                "dataset.shard(). Set data_src_args.total_shards: 1, or use "
+                "the standard DataLoader path "
+                "(dataloader.<mode>.iter_factory: null) and set "
+                "trainer.use_distributed_sampler: false."
+            )
+
         dataset = self._maybe_shard_dataset(self.dataset)
         if hasattr(config, "multiple_iterator"):
             raise RuntimeError(
