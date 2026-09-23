@@ -116,7 +116,8 @@ Lightning settings to match that path.
 Current behavior:
 
 - `reload_dataloaders_every_n_epochs = 1`
-- `use_distributed_sampler = False` when ESPnet's sampler is active
+- `use_distributed_sampler = False` when ESPnet's sampler is active, or when
+  the training dataset shards (`total_shards > 1`) on the standard `DataLoader` path
 
 This keeps Lightning from conflicting with ESPnet's own iterator and sharding
 logic.

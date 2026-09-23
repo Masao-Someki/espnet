@@ -91,12 +91,14 @@ as a literal -- OmegaConf has no multiply operator).
 For single-GPU runs, either skip `ShardedDataset` entirely or set both to `1`.
 
 ::: warning
-Sharding does not currently work together with the `iter_factory` +
-`batch_bins` path fed from `collect_stats` shape files: those files are keyed
-by the *unsharded* dataset's index, which no longer lines up once
-`dataset.shard()` reindexes the data. Use `total_shards: 1` with
-`iter_factory`, or use the standard `DataLoader` (`iter_factory: null`) when
-sharding is required.
+`iter_factory` cannot be combined with `total_shards > 1`: shape-file
+batches are keyed by the *unsharded* dataset's index, which no longer
+matches after sharding, so ESPnet3 raises a `RuntimeError` at startup
+instead of silently training on the wrong utterances. Either keep
+`total_shards: 1` with `iter_factory`, or shard through the standard
+`DataLoader` path (`iter_factory: null`) — on that path ESPnet3 disables
+Lightning's `DistributedSampler` automatically. See
+[Dataset sharding](./dataset-sharding.html#common-mistakes) for details.
 :::
 
 See [Dataset sharding](./dataset-sharding.html) for the full rules and shard
@@ -185,16 +187,18 @@ parallel:
 `n_workers` here controls how many Dask workers run stats collection
 concurrently — it is independent from `trainer.devices`.
 
-**Keying and resume.** Shape/stats files are keyed by the `CombinedDataset`
-global integer index (`uid=str(idx)`) for that split, not by a stable
-utterance ID — reordering or changing the `dataset:` entries between
-`collect_stats` and `train` silently re-maps shape entries to different
-utterances, with no error. `collect_stats` also resumes by shard (a
-`split.N/done` marker) without fingerprinting the model or dataset config, so
-changing frontend settings (e.g. `n_mels`, `hop_length`) or dataset contents
-without also changing/clearing `${stats_dir}` can skip shards and merge stale
-stats. Use a fresh `stats_dir` (or delete the old one) whenever the
-model/dataset config changes.
+**Keying and resume.** Shape/stats files are keyed by
+`CombinedDataset.get_uid(idx)`. If your recipe `Dataset` implements
+`get_utt_id(idx) -> str`, that stable utterance ID is used and survives
+reordering or adding entries; otherwise the global integer position
+(`str(idx)`) is used and ESPnet3 logs a warning at startup, because a
+reordered `dataset:` block would then re-map shape entries to different
+utterances. `collect_stats` resumes per shard (`split.N/done`) and records a
+fingerprint of the model/dataset/dataloader config and dataset contents in
+`manifest.json`; a rerun whose fingerprint differs (or an old `stats_dir`
+without one) fails with a `RuntimeError` instead of merging stale stats.
+Delete `${stats_dir}` (or point to a fresh one) to recompute, or set
+`collect_stats.resume: false` in `training.yaml` to force recomputation.
 
 ## Common mistakes
 

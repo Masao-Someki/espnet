@@ -271,20 +271,21 @@ DataLoader construction.
 files.** Shape files are keyed by the *unsharded* `CombinedDataset`'s global
 index, but batching happens after `dataset.shard()` reindexes the data, so
 sampler indices resolve to different (or out-of-range) utterances on the
-shard. This combination is not currently supported — either keep
-`total_shards: 1` when using `iter_factory` with shape-file batching, or
-switch to a standard `DataLoader` (`iter_factory: null`) for sharded training.
+shard. ESPnet3 therefore rejects this combination with a `RuntimeError` when
+the dataloader is built (any `iter_factory`, including `ChunkIterFactory`
+with an explicit `batches` list). Keep `total_shards: 1` when using
+`iter_factory`, or switch to the standard `DataLoader` (`iter_factory: null`)
+for sharded training.
 
-**Switching to the standard `DataLoader` for sharded training under DDP
-without also disabling Lightning's own sampler.** ESPnet3 only sets
-`trainer.use_distributed_sampler = False` automatically when
-`dataloader.train.iter_factory` is set (`ESPnet3LightningTrainer` checks
-`is_espnet_sampler`). With `iter_factory: null`, Lightning's default
-`DistributedSampler` still wraps whatever `DataLoader` `DataLoaderBuilder`
-returns — and that `DataLoader` already iterates a rank-specific shard, so
-each rank ends up training on only `1 / world_size` of its own shard. Add
-`use_distributed_sampler: false` under `trainer:` explicitly whenever you
-combine `ShardedDataset` with the standard-DataLoader path under `ddp`.
+**Expecting Lightning's `DistributedSampler` on top of a sharded standard
+`DataLoader`.** The `DataLoader` that `DataLoaderBuilder` returns already
+iterates a rank-specific shard, so wrapping it in Lightning's default
+`DistributedSampler` would leave each rank with only `1 / world_size` of
+its own shard. `ESPnet3LightningTrainer` therefore sets
+`trainer.use_distributed_sampler = False` automatically whenever the
+training dataset has `total_shards > 1` and `iter_factory: null` (and logs
+that it did so), just as it does when `iter_factory` is set. An explicit
+`use_distributed_sampler: true` in `trainer:` is overridden on that path.
 
 **Assuming validation is sharded once and stays fixed.**
 The validation dataloader is built the same way as training and rotates
