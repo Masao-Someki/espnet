@@ -476,6 +476,156 @@ def test_distributed_sampler_disabled_if_espnet_sampler(
     assert wrapper.config.use_distributed_sampler is False
 
 
+class DummyShardedTrainDataset(torch.utils.data.Dataset):
+    """Standalone sharded dataset (mirrors ShardedDataset without importing it)."""
+
+    def __init__(self, total_shards=None):
+        if total_shards is not None:
+            self.total_shards = total_shards
+            self.dist_world_size = 1
+
+    def __getitem__(self, idx):
+        return {
+            "x": torch.tensor([idx], dtype=torch.float32),
+            "y": torch.tensor([idx], dtype=torch.float32),
+        }
+
+    def __len__(self):
+        return 4
+
+
+@pytest.fixture
+def sharded_dataset_config():
+    """Dataset config whose train/valid entries resolve to a sharded dataset."""
+    return OmegaConf.create(
+        {
+            "_target_": "espnet3.components.data.data_organizer.DataOrganizer",
+            "train": [
+                {
+                    "name": "train_dummy",
+                    "data_src": DUMMY_DATA_SRC,
+                }
+            ],
+            "valid": [
+                {
+                    "name": "valid_dummy",
+                    "data_src": DUMMY_DATA_SRC,
+                }
+            ],
+        }
+    )
+
+
+def test_distributed_sampler_disabled_for_sharded_standard_dataloader(
+    monkeypatch, base_trainer_config, model_config, sharded_dataset_config
+):
+    """T6: standard DataLoader + ShardedDataset(total_shards>1) disables
+    trainer.use_distributed_sampler to avoid double sharding with Lightning's
+    DistributedSampler."""
+    monkeypatch.setattr(
+        data_organizer_module,
+        "instantiate_dataset_reference",
+        lambda config, recipe_dir=None: DummyShardedTrainDataset(total_shards=2),
+    )
+    model_config = OmegaConf.create(model_config)
+    model_config.dataset = sharded_dataset_config
+    trainer_config = OmegaConf.create(base_trainer_config)
+
+    model = nn.Linear(10, 1)
+    lit = ESPnetLightningModule(model, model_config)
+    wrapper = ESPnet3LightningTrainer(model=lit, config=trainer_config, exp_dir=exp_dir)
+
+    assert wrapper.config.use_distributed_sampler is False
+
+
+def test_distributed_sampler_untouched_for_plain_standard_dataloader(
+    base_trainer_config, model_config, dummy_dataset_config
+):
+    """T6: a non-sharded dataset with the standard DataLoader path leaves
+    use_distributed_sampler at Lightning's own default (unset here)."""
+    model_config = OmegaConf.create(model_config)
+    model_config.dataset = dummy_dataset_config
+    trainer_config = OmegaConf.create(base_trainer_config)
+
+    model = nn.Linear(10, 1)
+    lit = ESPnetLightningModule(model, model_config)
+    wrapper = ESPnet3LightningTrainer(model=lit, config=trainer_config, exp_dir=exp_dir)
+
+    assert "use_distributed_sampler" not in wrapper.config
+
+
+def test_distributed_sampler_explicit_true_untouched_for_plain_standard_dataloader(
+    base_trainer_config, model_config, dummy_dataset_config
+):
+    """T6: an explicit use_distributed_sampler=True is not overwritten when the
+    dataset is not sharded and the standard DataLoader path is used."""
+    model_config = OmegaConf.create(model_config)
+    model_config.dataset = dummy_dataset_config
+    trainer_config = OmegaConf.create(base_trainer_config)
+    trainer_config.use_distributed_sampler = True
+
+    model = nn.Linear(10, 1)
+    lit = ESPnetLightningModule(model, model_config)
+    wrapper = ESPnet3LightningTrainer(model=lit, config=trainer_config, exp_dir=exp_dir)
+
+    assert wrapper.config.use_distributed_sampler is True
+
+
+def test_distributed_sampler_untouched_for_sharded_iter_factory(
+    monkeypatch,
+    base_trainer_config,
+    model_config_espnet_sampler,
+    sharded_dataset_config,
+):
+    """T6: total_shards>1 combined with iter_factory is already routed through
+    the is_espnet_sampler branch (invariant 4 rejects this combination one
+    layer up in DataLoaderBuilder.build); the trainer-level auto-disable must
+    not additionally fire from a stale reading of total_shards in that case."""
+    monkeypatch.setattr(
+        data_organizer_module,
+        "instantiate_dataset_reference",
+        lambda config, recipe_dir=None: DummyShardedTrainDataset(total_shards=2),
+    )
+    model_config_espnet_sampler.dataset = sharded_dataset_config
+    model = ESPnetLightningModule(nn.Linear(1, 1), model_config_espnet_sampler)
+
+    wrapper = ESPnet3LightningTrainer(
+        model=model, config=base_trainer_config, exp_dir="exp"
+    )
+
+    # Both paths agree: use_distributed_sampler must be False either way.
+    assert wrapper.config.use_distributed_sampler is False
+
+
+def test_trainer_construction_with_empty_train_dataset_does_not_raise(
+    base_trainer_config, model_config
+):
+    """Regression (I1): DataOrganizer allows an empty train/valid list
+
+    (test_data_organizer_empty_train_valid_ok), which yields a CombinedDataset
+    whose ``datasets`` attribute is ``[]`` rather than absent. Indexing that
+    list with ``[0]`` unconditionally used to raise IndexError; the
+    double-sharding auto-disable must treat an empty dataset list the same as
+    "no sharded dataset" instead.
+    """
+    empty_dataset_config = OmegaConf.create(
+        {
+            "_target_": "espnet3.components.data.data_organizer.DataOrganizer",
+            "train": [],
+            "valid": [],
+        }
+    )
+    model_config = OmegaConf.create(model_config)
+    model_config.dataset = empty_dataset_config
+    trainer_config = OmegaConf.create(base_trainer_config)
+
+    model = nn.Linear(10, 1)
+    lit = ESPnetLightningModule(model, model_config)
+    wrapper = ESPnet3LightningTrainer(model=lit, config=trainer_config, exp_dir=exp_dir)
+
+    assert "use_distributed_sampler" not in wrapper.config
+
+
 def test_fit_calls_trainer_fit(
     monkeypatch, base_trainer_config, model_config, dummy_dataset_config
 ):

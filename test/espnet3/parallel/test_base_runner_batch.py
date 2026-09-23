@@ -1,4 +1,5 @@
 import ast
+import json
 import types
 
 import pytest
@@ -349,3 +350,115 @@ def test_failed_shard_releases_lock(tmp_path):
     FailingRunner.fail = False
     out = runner([0, 1])
     assert out == {"records": [[0, 1]]}
+
+
+def test_resume_accepts_same_fingerprint(tmp_path):
+    """Invariant 5 (T5): same fingerprint on resume does not raise."""
+    ResumeRunner.calls = {"forward": 0}
+
+    runner = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_same",
+        fingerprint={"sha256": "a"},
+    )
+    first = runner([0, 1, 2, 3])
+
+    resumed = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_same",
+        fingerprint={"sha256": "a"},
+    )
+    second = resumed([0, 1, 2, 3])
+
+    assert first == {"records": [[0, 1], [2, 3]]}
+    assert second == {"records": [[0, 1], [2, 3]]}
+    assert ResumeRunner.calls["forward"] == 2
+
+
+def test_resume_rejects_fingerprint_mismatch(tmp_path):
+    """Invariant 5 (T5): a changed fingerprint rejects resume."""
+    ResumeRunner.calls = {"forward": 0}
+
+    runner = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_mismatch",
+        fingerprint={"sha256": "a"},
+    )
+    runner([0, 1, 2, 3])
+
+    resumed = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_mismatch",
+        fingerprint={"sha256": "b"},
+    )
+
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        resumed([0, 1, 2, 3])
+
+    # The done marker is preserved; the mismatch is rejected outright.
+    assert (tmp_path / "resume_fp_mismatch" / "split.0" / "done").exists()
+
+
+def test_resume_rejects_manifest_without_fingerprint(tmp_path):
+    """Invariant 5 (T5): a v1 manifest (no fingerprint key) rejects resume."""
+    shard_subdir = "resume_fp_v1"
+    shards_root = tmp_path / shard_subdir
+    shards_root.mkdir(parents=True)
+    manifest_path = shards_root / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "output_dir": str(tmp_path),
+                "shard_subdir": shard_subdir,
+                "shards": [{"shard_id": 0, "items": [[0, 1], [2, 3]]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir=shard_subdir,
+        fingerprint={"sha256": "a"},
+    )
+
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        runner([0, 1, 2, 3])
+
+
+def test_resume_false_bypasses_fingerprint_check(tmp_path):
+    """Invariant 5: resume=False always recomputes regardless of fingerprint."""
+    ResumeRunner.calls = {"forward": 0}
+
+    runner = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_force",
+        fingerprint={"sha256": "a"},
+    )
+    runner([0, 1, 2, 3])
+
+    rerun = ResumeRunner(
+        TrackingProvider(),
+        batch_size=2,
+        output_dir=tmp_path,
+        shard_subdir="resume_fp_force",
+        fingerprint={"sha256": "b"},
+        resume=False,
+    )
+    out = rerun([0, 1, 2, 3])
+
+    assert out == {"records": [[0, 1], [2, 3]]}
+    assert ResumeRunner.calls["forward"] == 4

@@ -1,6 +1,7 @@
 """Trainer class for the espnet3 package."""
 
 import copy
+import logging
 import warnings
 from argparse import Namespace
 from typing import Any, Dict, Union
@@ -137,6 +138,33 @@ class ESPnet3LightningTrainer:
         # then we had to set the distributed_sampler to False.
         if self.model.is_espnet_sampler:
             self.config.use_distributed_sampler = False
+
+        # Standard DataLoader + ShardedDataset(total_shards > 1) already
+        # partitions the dataset per rank (DataLoaderBuilder._maybe_shard_dataset);
+        # Lightning's DistributedSampler would otherwise shard it a second time
+        # on top of that, silently dropping most of each rank's data.
+        train_dataloader_config = getattr(self.model.config.dataloader, "train", None)
+        train_iter_factory = getattr(train_dataloader_config, "iter_factory", None)
+        train_datasets = getattr(
+            getattr(self.model, "train_dataset", None), "datasets", None
+        )
+        first_train_dataset = train_datasets[0] if train_datasets else None
+        total_shards = getattr(first_train_dataset, "total_shards", None)
+        shards_double_sharded = (
+            train_iter_factory is None and total_shards is not None and total_shards > 1
+        )
+        if shards_double_sharded:
+            self.config.use_distributed_sampler = False
+            # Note: the local variable ``logger`` above is the Lightning
+            # logger built from config, not a ``logging.Logger`` -- look one
+            # up explicitly instead.
+            logging.getLogger(__name__).info(
+                "Disabling trainer.use_distributed_sampler: the training "
+                "dataset shards via total_shards=%s on the standard "
+                "DataLoader path (iter_factory: null); Lightning's "
+                "DistributedSampler would otherwise shard it a second time.",
+                total_shards,
+            )
 
         trainer_config = copy.deepcopy(self.config)
         for key in (
