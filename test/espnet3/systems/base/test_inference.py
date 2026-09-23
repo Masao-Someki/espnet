@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import numpy as np
@@ -202,7 +203,7 @@ def test_inference_rejects_test_entry_without_name(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
 
-    with pytest.raises(RuntimeError, match="must define non-empty `name`"):
+    with pytest.raises(RuntimeError, match=re.escape("must define non-empty ``name``")):
         inference_mod.infer(cfg)
 
 

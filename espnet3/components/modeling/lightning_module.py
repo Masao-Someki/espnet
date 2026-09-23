@@ -1180,7 +1180,7 @@ class ESPnetLightningModule(lightning.LightningModule):
         Raises:
             AssertionError: If ``config.stats_dir`` is not provided.
         """
-        assert hasattr(self.config, "stats_dir"), "config.statsdir must be defined"
+        assert hasattr(self.config, "stats_dir"), "config.stats_dir must be defined"
 
         # Detach dataset/dataloader configs from the root so interpolations like
         # ${dataset_dir} remain resolved when used standalone during collection.

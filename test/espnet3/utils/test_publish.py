@@ -706,6 +706,47 @@ def test_pack_model_drops_readme_lines_for_missing_context(
     assert "README will not include a rendered results table" in caplog.text
 
 
+def test_pack_model_readme_description_uses_markdown_backticks(tmp_path, monkeypatch):
+    recipe_dir = tmp_path
+    exp_dir = recipe_dir / "exp"
+    exp_dir.mkdir()
+    out_dir = tmp_path / "model_pack"
+    publication_config = OmegaConf.create(
+        {
+            "pack_model": {
+                "out_dir": str(out_dir),
+                "readme": "egs3/TEMPLATE/esp2_asr/src/hf_model_readme.md",
+            }
+        }
+    )
+    system = _make_system(
+        exp_dir=exp_dir,
+        recipe_dir=recipe_dir,
+        publication_config=publication_config,
+        task="espnet3.systems.esp2_asr.task.ASRTask",
+    )
+    monkeypatch.setattr(
+        publish,
+        "get_git_metadata",
+        lambda cwd=None: {"short_commit": "abc123", "worktree": "dirty"},
+    )
+    monkeypatch.setenv("USER", "tester")
+
+    publish.pack_model(
+        training_config=system.training_config,
+        publication_config=system.publication_config,
+    )
+
+    readme = (out_dir / "README.md").read_text(encoding="utf-8")
+    description_line = next(
+        line for line in readme.splitlines() if line.startswith("Packed model")
+    )
+    assert description_line.startswith("Packed model bundle generated from `")
+    assert description_line.endswith("`.")
+    # RST-style double backticks must not leak into this Markdown line.
+    assert "``" not in description_line
+
+
 def test_pack_model_with_explicit_artifacts(tmp_path):
     recipe_dir = tmp_path
     exp_dir = recipe_dir / "exp"
