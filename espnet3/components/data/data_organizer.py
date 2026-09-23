@@ -45,7 +45,7 @@ class DatasetConfig:
         **Recipe-backed dataset entry.**
             >>> config_dict = {
             ...     "name": "custom",
-            ...     "data_src": "mini_an4/asr",
+            ...     "data_src": "mini_an4/esp2_asr",
             ...     "data_src_args": {"split": "test"},
             ...     "transform": {
             ...         "_target_": "my_project.transforms.uppercase_transform",
@@ -53,7 +53,7 @@ class DatasetConfig:
             ... }
             >>> config = DatasetConfig(**config_dict)
             >>> config.data_src
-            'mini_an4/asr'
+            'mini_an4/esp2_asr'
 
         **Local recipe dataset entry.**
             >>> config = DatasetConfig(
