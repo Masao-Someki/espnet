@@ -16,9 +16,12 @@ from omegaconf import ListConfig
 try:
     from espnet2.torch_utils.device_funcs import is_out_of_memory_error
 except ImportError:
+
     def is_out_of_memory_error(error: BaseException) -> bool:
         """Recognize common OOM errors on ESPnet2 versions without the helper."""
         return "out of memory" in str(error).lower()
+
+
 from espnet3.parallel.base_runner import BaseRunner, concatenate_shard_files
 from espnet3.parallel.env_provider import EnvironmentProvider
 from espnet3.utils.writer_utils import write_artifact
