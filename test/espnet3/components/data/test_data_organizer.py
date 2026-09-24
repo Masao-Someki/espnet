@@ -17,6 +17,7 @@ from espnet3.components.data.dataset import (
     DatasetWithTransform,
     ShardedDataset,
 )
+from espnet3.components.data.dataset_uid import parse_uid
 
 # ===============================================================
 # Test Case Summary for DataOrganizer & CombinedDataset
@@ -88,6 +89,15 @@ SPLIT_RECORDING_PREPROCESSOR_TARGET = (
 )
 ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET = (
     "test.espnet3.components.data." "test_data_organizer.TrainFlagRecordingPreprocessor"
+)
+LABELED_DATASET_TARGET = (
+    "test.espnet3.components.data.test_data_organizer.LabeledDataset"
+)
+LABELED_SHARDED_TARGET = (
+    "test.espnet3.components.data.test_data_organizer.LabeledShardedDataset"
+)
+UNRESOLVABLE_SHARDED_TARGET = (
+    "test.espnet3.components.data.test_data_organizer.UnresolvableShardedDataset"
 )
 
 
@@ -239,28 +249,30 @@ class DummyOverrideDataset(DummyDataset):
         ]
 
 
-class StableIdDataset:
-    """Int-addressable dataset that opts into the stable UID protocol."""
+class LabeledDataset:
+    """Tiny int-addressable dataset with distinguishable per-item text.
 
-    def __init__(self, items):
-        # items: list[(utt_id, text)]
-        self.items = list(items)
+    Used to verify dataset-hash UID behavior: the UID depends on the entry's
+    config (via the "label"/other kwargs passed at construction), not on the
+    dataset instance's identity.
+    """
+
+    def __init__(self, label: str, n: int = 1):
+        self.label = label
+        self.n = n
 
     def __len__(self):
-        return len(self.items)
+        return self.n
 
     def __getitem__(self, idx):
-        _utt_id, text = self.items[idx]
-        return {"audio": np.random.random(16000), "text": text}
-
-    def get_utt_id(self, idx: int) -> str:
-        return self.items[idx][0]
+        return {"audio": np.random.random(16000), "text": f"{self.label}{idx}"}
 
 
-class StableIdShardedDataset(ShardedDataset):
+class LabeledShardedDataset(ShardedDataset):
     """ShardedDataset whose shard() returns a torch Subset (recommended shape)."""
 
-    def __init__(self, items, total_shards: int = 2, dist_world_size: int = 1):
+    def __init__(self, label: str, items, total_shards: int = 2, dist_world_size=1):
+        self.label = label
         self.items = list(items)
         self.total_shards = total_shards
         self.dist_world_size = dist_world_size
@@ -269,17 +281,44 @@ class StableIdShardedDataset(ShardedDataset):
         return len(self.items)
 
     def __getitem__(self, idx):
-        _utt_id, text = self.items[idx]
-        return {"audio": np.random.random(16000), "text": text}
-
-    def get_utt_id(self, idx: int) -> str:
-        return self.items[idx][0]
+        return {"audio": np.random.random(16000), "text": self.items[idx]}
 
     def shard(self, idx):
         from torch.utils.data import Subset
 
         indices = [i for i in range(len(self.items)) if i % self.total_shards == idx]
         return Subset(self, indices)
+
+
+class _PlainShardWrapper:
+    """A shard() result with no ``indices`` attribute (unresolvable position)."""
+
+    def __init__(self, items):
+        self.items = list(items)
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        return {"audio": np.random.random(16000), "text": self.items[idx]}
+
+
+class UnresolvableShardedDataset(ShardedDataset):
+    """ShardedDataset whose shard() result exposes no ``indices``."""
+
+    def __init__(self, items, total_shards: int = 1, dist_world_size: int = 1):
+        self.items = list(items)
+        self.total_shards = total_shards
+        self.dist_world_size = dist_world_size
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        return {"audio": np.random.random(16000), "text": self.items[idx]}
+
+    def shard(self, idx):
+        return _PlainShardWrapper(self.items)
 
 
 def _entry(name: str, *, transform: bool = False, data_src: str = DUMMY_DATA_SRC):
@@ -291,6 +330,40 @@ def _entry(name: str, *, transform: bool = False, data_src: str = DUMMY_DATA_SRC
     if transform:
         entry["transform"] = {"_target_": DUMMY_TRANSFORM_TARGET}
     return entry
+
+
+def _labeled_entry(name: str, n: int = 1):
+    """Entry routed (via patch_dataset_reference's "dataset" key) to a
+    LabeledDataset whose items are distinguishable by ``name``."""
+    return {
+        "name": name,
+        "dataset": {"_target_": LABELED_DATASET_TARGET, "label": name, "n": n},
+    }
+
+
+def _labeled_sharded_entry(name: str, items, total_shards: int = 2):
+    return {
+        "name": name,
+        "dataset": {
+            "_target_": LABELED_SHARDED_TARGET,
+            "label": name,
+            "items": list(items),
+            "total_shards": total_shards,
+            "dist_world_size": 1,
+        },
+    }
+
+
+def _unresolvable_sharded_entry(name: str, items):
+    return {
+        "name": name,
+        "dataset": {
+            "_target_": UNRESOLVABLE_SHARDED_TARGET,
+            "items": list(items),
+            "total_shards": 1,
+            "dist_world_size": 1,
+        },
+    }
 
 
 # Fixtures
@@ -638,8 +711,8 @@ def test_data_organizer_no_preprocessor_config():
         ],
     }
     organizer = DataOrganizer(
-        train=instantiate(OmegaConf.create(config)["train"]),
-        valid=instantiate(OmegaConf.create(config)["valid"]),
+        train=config["train"],
+        valid=config["valid"],
     )
     assert organizer.train[0]["text"] == "hello"
     assert organizer.valid[0]["text"] == "hello"
@@ -1197,69 +1270,82 @@ def test_espnet_preprocessor_explicit_train_in_config_warns(caplog):
 
 
 # -----------------------------------------------------------------------
-# T1: stable UID protocol (get_uid / uids / has_stable_uids)
+# Dataset-hash UID protocol (CombinedDataset.get_uid / uid_entries) and
+# CombinedDataset(uid_prefixes=None) backward compatibility.
 # -----------------------------------------------------------------------
 
 
-def test_combined_dataset_get_uid_uses_get_utt_id():
-    items = [("utt_a", "hello"), ("utt_b", "world")]
-    ds = StableIdDataset(items)
+def test_combined_dataset_uid_prefixes_none_falls_back_to_str_index():
+    """Direct construction without uid_prefixes keeps the legacy str(idx) UID."""
+    ds = DummyDataset()
     combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
 
-    assert combined.has_stable_uids is True
-    assert [combined.get_uid(i) for i in range(len(combined))] == ["utt_a", "utt_b"]
-    assert combined.uids() == ["utt_a", "utt_b"]
-
-
-def test_combined_dataset_stable_uid_survives_reorder():
-    items = [("utt_a", "hello"), ("utt_b", "world")]
-    combined_a = CombinedDataset([StableIdDataset(items)], [(do_nothing, do_nothing)])
-    combined_b = CombinedDataset(
-        [StableIdDataset(list(reversed(items)))], [(do_nothing, do_nothing)]
-    )
-
-    # Same UID resolves to the same underlying text regardless of dataset order.
-    assert combined_a["utt_b"]["text"] == combined_b["utt_b"]["text"] == "world"
-    # But positional (int) access differs since the order was reversed.
-    assert combined_a[0]["text"] != combined_b[0]["text"]
-
-
-def test_combined_dataset_uid_falls_back_to_index_without_get_utt_id(caplog):
-    ds = DummyDataset()
-    with caplog.at_level(
-        logging.WARNING,
-        logger="espnet3.components.data.dataset",
-    ):
-        combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
-
-    assert combined.has_stable_uids is False
     assert combined.get_uid(0) == "0"
     assert combined.get_uid(1) == "1"
-    assert any("position" in r.message for r in caplog.records)
+    assert combined.uid_entries is None
 
 
-def test_combined_dataset_duplicate_stable_uid_raises():
-    ds1 = StableIdDataset([("utt_a", "hello")])
-    ds2 = StableIdDataset([("utt_a", "world")])
-    with pytest.raises(ValueError, match="Duplicate utterance ID 'utt_a'"):
-        CombinedDataset(
-            [ds1, ds2],
-            [(do_nothing, do_nothing), (do_nothing, do_nothing)],
+def test_uid_points_to_same_sample_after_reorder_and_append():
+    """(a) Same UID -> same sample after the entries are reordered and a new
+    entry is appended; the appended entry gets a brand-new UID prefix."""
+    entry_a = _labeled_entry("A")
+    entry_b = _labeled_entry("B")
+    entry_c = _labeled_entry("C")
+
+    organizer1 = DataOrganizer(train=[entry_a, entry_b], valid=[entry_a, entry_b])
+    uid_a = organizer1.train.get_uid(0)
+    uid_b = organizer1.train.get_uid(1)
+    text_a = organizer1.train[0]["text"]
+    text_b = organizer1.train[1]["text"]
+
+    organizer2 = DataOrganizer(
+        train=[entry_b, entry_a, entry_c], valid=[entry_b, entry_a, entry_c]
+    )
+
+    # Same UID resolves to the same sample regardless of the new position.
+    assert organizer2.train[uid_a]["text"] == text_a
+    assert organizer2.train[uid_b]["text"] == text_b
+    # Positional access differs since the order changed.
+    assert organizer2.train.get_uid(0) != uid_a
+
+    uid_c = organizer2.train.get_uid(2)
+    prefix_a, _ = parse_uid(uid_a)
+    prefix_b, _ = parse_uid(uid_b)
+    prefix_c, _ = parse_uid(uid_c)
+    assert prefix_c not in {prefix_a, prefix_b}
+
+
+def test_data_organizer_duplicate_entries_raise():
+    """(e, DataOrganizer side) Two entries with identical config -> ValueError."""
+    entry = _entry("dup")
+    with pytest.raises(ValueError, match="identical configuration"):
+        DataOrganizer(
+            train=[entry, dict(entry)],
+            valid=[entry, dict(entry)],
         )
 
 
-def test_combined_dataset_numeric_utt_id_not_confused_with_index():
-    # utt_id "3" lives at position 0; combined["3"] must resolve via get_utt_id,
-    # not via int("3") == 3 (out of range for this 1-item dataset anyway).
-    ds = StableIdDataset([("3", "target")])
-    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+def test_combined_dataset_uid_lookup_rejects_unknown_hash():
+    organizer = DataOrganizer(
+        train=[_labeled_entry("only")], valid=[_labeled_entry("only")]
+    )
+    with pytest.raises(KeyError, match="is not part of this dataset"):
+        organizer.train["deadbeef:0"]
 
-    assert combined["3"]["text"] == "target"
-    assert combined[0]["text"] == "target"
+
+def test_combined_dataset_uid_lookup_rejects_out_of_range_position():
+    organizer = DataOrganizer(
+        train=[_labeled_entry("only")], valid=[_labeled_entry("only")]
+    )
+    uid = organizer.train.get_uid(0)
+    prefix, _ = parse_uid(uid)
+    with pytest.raises(IndexError, match="out of range"):
+        organizer.train[f"{prefix}:99"]
 
 
 # -----------------------------------------------------------------------
-# T4 (shard flag, F-A): shard() preserves use_espnet_collator and stable UIDs
+# T4 (shard flag, F-A): shard() preserves use_espnet_collator and dataset-hash
+# UIDs (original within-dataset position, not re-numbered from 0).
 # -----------------------------------------------------------------------
 
 
@@ -1282,48 +1368,48 @@ def test_sharded_combined_dataset_keeps_collator_flag():
     assert sample["text"] == "SHARD1_HELLO"
 
 
-def test_sharded_combined_dataset_preserves_stable_uid_via_shard_view():
-    items = [("utt_a", "a"), ("utt_b", "b"), ("utt_c", "c"), ("utt_d", "d")]
-    ds = StableIdShardedDataset(items, total_shards=2, dist_world_size=1)
-    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+def test_shard_preserves_original_uid_position_for_subset():
+    """shard() returning a Subset (exposing .indices) keeps get_uid pointing
+    at the item's original (pre-shard) position within the dataset."""
+    entry = _labeled_sharded_entry("sharded", ["a", "b", "c", "d"], total_shards=2)
+    organizer = DataOrganizer(train=[entry], valid=[entry])
+    full_uids = [organizer.train.get_uid(i) for i in range(4)]
 
-    shard0 = combined.shard(0)
-    shard1 = combined.shard(1)
+    shard0 = organizer.train.shard(0)
+    shard1 = organizer.train.shard(1)
 
-    # Shard 0 keeps items at original indices 0, 2 -> utt_a, utt_c.
-    assert shard0.has_stable_uids is True
-    assert set(shard0.uids()) == {"utt_a", "utt_c"}
-    assert shard0["utt_a"]["text"] == "a"
-    # Shard 1 keeps items at original indices 1, 3 -> utt_b, utt_d.
-    assert set(shard1.uids()) == {"utt_b", "utt_d"}
-    assert shard1["utt_d"]["text"] == "d"
+    # Shard 0 keeps items at original indices 0, 2 -> "a", "c".
+    assert shard0[0]["text"] == "a"
+    assert shard0.get_uid(0) == full_uids[0]
+    assert shard0.get_uid(1) == full_uids[2]
+    # Shard 1 keeps items at original indices 1, 3 -> "b", "d".
+    assert shard1[1]["text"] == "d"
+    assert shard1.get_uid(0) == full_uids[1]
+    assert shard1.get_uid(1) == full_uids[3]
 
 
-def test_sharded_combined_dataset_shard_view_rejects_non_subset_without_get_utt_id():
-    class BrokenShardStableDataset(ShardedDataset):
-        def __init__(self):
-            self.items = [("utt_a", "a")]
-            self.total_shards = 1
-            self.dist_world_size = 1
+def test_shard_without_indices_uses_at_s_label():
+    """shard() returning an object with no .indices -> "<hash>@s<k>:<local>"
+    label, which is not a well-formed UID (parse_uid returns None for it)."""
+    entry = _unresolvable_sharded_entry("unresolvable", ["a"])
+    organizer = DataOrganizer(train=[entry], valid=[entry])
 
-        def __len__(self):
-            return len(self.items)
+    shard0 = organizer.train.shard(0)
+    uid = shard0.get_uid(0)
 
-        def __getitem__(self, idx):
-            return {"audio": np.random.random(16000), "text": self.items[idx][1]}
+    assert "@s0:" in uid
+    assert parse_uid(uid) is None
 
-        def get_utt_id(self, idx):
-            return self.items[idx][0]
 
-        def shard(self, idx):
-            # Neither a Subset nor an object exposing get_utt_id.
-            return list(self.items)
+def test_uid_lookup_on_sharded_dataset_raises():
+    entry = _labeled_sharded_entry("sharded2", ["a", "b"], total_shards=2)
+    organizer = DataOrganizer(train=[entry], valid=[entry])
+    uid0 = organizer.train.get_uid(0)
 
-    combined = CombinedDataset([BrokenShardStableDataset()], [(do_nothing, do_nothing)])
-    with pytest.raises(
-        RuntimeError, match="must return a Subset or an object exposing get_utt_id"
-    ):
-        combined.shard(0)
+    shard0 = organizer.train.shard(0)
+
+    with pytest.raises(RuntimeError, match="UID lookup on a sharded dataset"):
+        shard0[uid0]
 
 
 def test_combined_dataset_negative_index_raises_index_error():
