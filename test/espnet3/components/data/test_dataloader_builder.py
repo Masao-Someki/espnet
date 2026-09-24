@@ -1245,3 +1245,175 @@ def test_build_iter_factory_defaults_to_the_builder_dataset(monkeypatch):
     }
     loader = builder._build_iter_factory(factory_config)  # dataset=None path
     assert list(loader) == [[0], [1]]
+
+
+# --- §4/(d): training-side validation against collect_stats' uid table ---
+
+
+class _DummyUidTableDataset:
+    """Minimal dataset exposing only ``uid_entries``/``datasets`` for the
+    DataLoaderBuilder training-side validation tests -- decoupled from the
+    real ``CombinedDataset`` (owned separately in the parallel work split)."""
+
+    def __init__(self, uid_entries):
+        self.uid_entries = uid_entries
+        self.datasets = [self]
+
+
+def _make_shape_file_iter_factory_config(shape_file):
+    return OmegaConf.create(
+        {
+            "dataloader": {
+                "train": {
+                    "iter_factory": {
+                        "_target_": (
+                            "test.espnet3.components.data."
+                            "test_dataloader_builder.DummyIterFactory"
+                        ),
+                        "batches": {
+                            "type": "unsorted",
+                            "shape_files": [str(shape_file)],
+                            "batch_size": 1,
+                            "batch_bins": 1000000,
+                        },
+                    }
+                }
+            }
+        }
+    )
+
+
+def test_iter_factory_accepts_matching_uid_table(tmp_path, monkeypatch):
+    """(d)/(f): a current dataset config matching the on-disk table builds
+    successfully."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    entries = [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})]
+    write_uid_table(shape_dir, entries)
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: [[0, 1], [2]],
+    )
+    dataset = _DummyUidTableDataset(entries)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    iterator = builder.build("train")
+    assert list(iterator) == [[0, 1], [2]]
+
+
+def test_iter_factory_rejects_missing_uid_table(tmp_path, monkeypatch):
+    """(d): no dataset_uids.json in the shape-file directory -> RuntimeError
+    naming collect_stats, raised before build_batch_sampler runs."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry
+
+    def _fail_if_called(**kwargs):
+        raise AssertionError("build_batch_sampler must not be called")
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler", _fail_if_called
+    )
+    entries = [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(entries)
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="collect_stats"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_unknown_dataset_hash(tmp_path, monkeypatch):
+    """(d): current config has a dataset hash the table doesn't know about."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    write_uid_table(
+        shape_dir,
+        [DatasetUidEntry("deadbeef", "train_old", 3, {"data_src": "dummy/old"})],
+    )
+    current = [DatasetUidEntry("a1b2c3d4", "train_new", 3, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_new"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_stale_dataset_in_table(tmp_path, monkeypatch):
+    """(d): the table has an entry the current config no longer has."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    entries = [
+        DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/a"}),
+        DatasetUidEntry("deadbeef", "train_b", 2, {"data_src": "dummy/b"}),
+    ]
+    write_uid_table(shape_dir, entries)
+    current = [entries[0]]  # train_b no longer configured
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_b"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_changed_num_items(tmp_path, monkeypatch):
+    """(d): same dataset hash, but its item count changed since collect_stats."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    write_uid_table(
+        shape_dir,
+        [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})],
+    )
+    current = [DatasetUidEntry("a1b2c3d4", "train_a", 5, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_a"):
+        builder.build("train")
+
+
+def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
+    """A directly-constructed dataset without uid_entries (backward
+    compatibility) skips the training-side validation entirely."""
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: [[0, 1]],
+    )
+    organizer = build_organizer(DUMMY_DATASET_TARGET)
+    config = _make_shape_file_iter_factory_config("/nonexistent/mel_shape")
+    builder = build_builder(
+        organizer.train, config, collate_fn=None, num_device=1, epoch=0
+    )
+    iterator = builder.build("train")
+    assert list(iterator) == [[0, 1]]
