@@ -107,12 +107,10 @@ class DummyOrganizer:
 
 
 class _StableUidRecipeDataset:
-    """Recipe-style dataset opting into CombinedDataset's stable UID protocol.
+    """Recipe-style dataset with a legacy opt-in ``get_utt_id``.
 
-    Implements ``get_utt_id`` only (the real opt-in contract); ``get_uid``,
-    ``uids()`` and ``has_stable_uids`` are then provided by the real
-    ``CombinedDataset`` that wraps it (see ``StableIdDataset`` below), not
-    reimplemented here.
+    Implements ``get_utt_id`` only; under the dataset-hash UID scheme it is
+    ignored (see the test at L640) rather than used for UID identity.
     """
 
     def __init__(self, n=6, base_len=3, dim=4, uid_offset=0):
