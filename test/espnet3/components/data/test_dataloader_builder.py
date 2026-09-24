@@ -211,9 +211,18 @@ def make_standard_dataloader_config(sampler=None, batch_sampler=None, collate_fn
 
 
 def make_dataset_config(dataset_target, dataset_kwargs=None):
+    """Build a DataOrganizer config matching real recipe configs.
+
+    ``_recursive_: false`` is required here (matching every shipped recipe's
+    ``dataset:`` block): without it, Hydra's default recursive instantiate
+    would eagerly instantiate each entry's nested ``dataset: {_target_: ...}``
+    into a live object before ``DataOrganizer`` (and, once landed, its
+    dataset-hash UID computation) ever sees the raw config dict.
+    """
     dataset_kwargs = dataset_kwargs or {}
     config = {
         "_target_": "espnet3.components.data.data_organizer.DataOrganizer",
+        "_recursive_": False,
         "train": [
             {
                 "name": "train_dummy",
