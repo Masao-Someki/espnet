@@ -40,12 +40,17 @@ def test_recipe_dataset_modules_use_absolute_imports():
     recipe's ``dataset/__init__.py``: when ``data_src`` is omitted, the
     module is loaded from an absolute-path-derived synthetic module name, so
     a relatively-imported class ends up nested under that synthetic name and
-    its class path changes with the checkout location. The espnet3 recipe
-    convention (see ``egs3/CLAUDE.md``) is to always address dataset modules
-    absolutely, e.g. ``from egs3.<dataset>.<task>.dataset.builder import
-    Foo``, which resolves to a stable class path regardless of checkout
-    location.
+    its class path changes with the checkout location. Dataset modules must
+    instead always be addressed absolutely, e.g. ``from
+    egs3.<dataset>.<task>.dataset.builder import Foo``, which resolves to a
+    stable class path regardless of checkout location.
     """
+    scanned = sorted(EGS3_ROOT.glob("**/dataset/**/*.py"))
+    assert scanned, (
+        f"No recipe dataset modules found under {EGS3_ROOT}; "
+        "the check would pass vacuously."
+    )
+
     violations = find_relative_imports_in_recipe_datasets(EGS3_ROOT)
     assert (
         not violations
