@@ -75,7 +75,7 @@ def strip_dir_keys(obj: Any) -> Any:
 
 
 def _json_default(value: Any) -> Any:
-    """Support the surrounding workflow.
+    """Convert Path / Enum values for canonical JSON; reject everything else.
 
     Raises:
         TypeError: For any value that is not a ``pathlib.Path`` or
@@ -219,8 +219,12 @@ def write_uid_table(
     }
     target = split_dir / UID_TABLE_FILENAME
     tmp_path = split_dir / f".{UID_TABLE_FILENAME}.tmp.{os.getpid()}"
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
+    try:
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, sort_keys=True, default=_json_default)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
     os.replace(tmp_path, target)
     return target
 
@@ -317,7 +321,7 @@ def check_entry_hashes(entries: Sequence[Tuple[str, str, str]]) -> None:
 def _diff_config_paths(
     old: Any, new: Any, max_items: int = _MAX_DIFF_ITEMS
 ) -> List[str]:
-    """Support the surrounding workflow.
+    """Return up to max_items dotted-path differences between two config values.
 
     Recursively compares two (already ``strip_dir_keys``-filtered) config
     values and returns up to ``max_items`` ``"dotted.path: old -> new"``
@@ -350,7 +354,7 @@ def _diff_config_paths(
 def _find_matching_stale_entry(
     missing: DatasetUidEntry, stale: Sequence[DatasetUidEntry]
 ) -> Optional[DatasetUidEntry]:
-    """Support the surrounding workflow."""
+    """Return the stale table entry most likely to be a changed entry's old version."""
     for candidate in stale:
         if candidate.label == missing.label:
             return candidate
@@ -367,7 +371,7 @@ def _build_changed_message(
     missing: Sequence[DatasetUidEntry],
     stale: Sequence[DatasetUidEntry],
 ) -> str:
-    """Support the surrounding workflow."""
+    """Build the RuntimeError message describing changed/new and stale datasets."""
     lines = [
         "The dataset configuration no longer matches the one collect_stats "
         f"used for {split_dir}."

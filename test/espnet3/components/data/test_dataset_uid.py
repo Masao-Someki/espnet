@@ -204,6 +204,25 @@ def test_write_uid_table_content_matches_format(tmp_path):
     ]
 
 
+def test_write_uid_table_serializes_path_config_values(tmp_path):
+    entry = _entry(config={"data_src_args": {"manifest": Path("/tmp/m.tsv")}})
+    write_uid_table(tmp_path, [entry])
+
+    loaded = load_uid_table(tmp_path)
+    assert loaded[0].config == {"data_src_args": {"manifest": "/tmp/m.tsv"}}
+
+
+def test_write_uid_table_removes_tmp_file_on_failure(tmp_path):
+    class Unhashable:
+        pass
+
+    entry = _entry(config={"bad": Unhashable()})
+    with pytest.raises(TypeError, match="cannot be hashed"):
+        write_uid_table(tmp_path, [entry])
+
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_load_uid_table_returns_none_when_missing(tmp_path):
     assert load_uid_table(tmp_path) is None
 
