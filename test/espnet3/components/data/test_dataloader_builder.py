@@ -8,7 +8,8 @@ from torch.utils.data import BatchSampler, Sampler
 from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.data.data_organizer import DataOrganizer, do_nothing
 from espnet3.components.data.dataloader import DataLoaderBuilder
-from espnet3.components.data.dataset import ShardedDataset
+from espnet3.components.data.dataset import CombinedDataset, ShardedDataset
+from espnet3.components.data.dataset_uid import write_uid_table
 from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.config_utils import load_config_with_defaults
 
@@ -368,6 +369,13 @@ def test_sampler_and_batch_sampler_conflict():
 
 
 def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
+    """iter_factory + a real DataOrganizer-built dataset, whose entries now
+    always get dataset-hash UIDs (§1). The shape file and its
+    dataset_uids.json are generated per-test from the dataset's own
+    get_uid() (not the fixed legacy "0".."9" keys, which no longer match a
+    hash-UID dataset) so this test stays a real regression check under the
+    new scheme instead of hand-waving the UID format.
+    """
     config = {
         "train": [
             {
@@ -382,7 +390,19 @@ def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
         valid=config["train"],
         preprocessor=do_nothing,
     )
-    yaml_text = """
+
+    shape_dir = tmp_path / "stats" / "train"
+    shape_dir.mkdir(parents=True)
+    shape_file = shape_dir / "stats_dummy"
+    shape_file.write_text(
+        "\n".join(
+            f"{organizer.train.get_uid(i)} 16000" for i in range(len(organizer.train))
+        )
+        + "\n"
+    )
+    _write_uid_table_if_present(shape_dir, organizer.train)
+
+    yaml_text = f"""
 dataloader:
   train:
     iter_factory:
@@ -393,7 +413,7 @@ dataloader:
         int_pad_value: -1
       batches:
         shape_files:
-          - test_utils/espnet3/stats/stats_dummy
+          - {shape_file}
         type: unsorted
         batch_size: 2
         batch_bins: 4000000
@@ -420,6 +440,9 @@ dataloader:
 def test_iter_factory_with_collate_fn(tmp_path):
     # For this case the collate_fn in configuration is used.
     # The collate_fn in DataloaderBuilder.__init__ is only used in standard dataloader.
+    # Shape file / dataset_uids.json are generated per-test from the
+    # dataset's real get_uid() -- see
+    # test_iter_factory_from_default_yaml_with_organizer's docstring for why.
     config = {
         "train": [
             {
@@ -434,7 +457,19 @@ def test_iter_factory_with_collate_fn(tmp_path):
         valid=config["train"],
         preprocessor=do_nothing,
     )
-    yaml_text = """
+
+    shape_dir = tmp_path / "stats" / "train"
+    shape_dir.mkdir(parents=True)
+    shape_file = shape_dir / "stats_dummy"
+    shape_file.write_text(
+        "\n".join(
+            f"{organizer.train.get_uid(i)} 16000" for i in range(len(organizer.train))
+        )
+        + "\n"
+    )
+    _write_uid_table_if_present(shape_dir, organizer.train)
+
+    yaml_text = f"""
 dataloader:
   train:
     iter_factory:
@@ -445,7 +480,7 @@ dataloader:
         int_pad_value: -1
       batches:
         shape_files:
-          - test_utils/espnet3/stats/stats_dummy
+          - {shape_file}
         type: unsorted
         batch_size: 2
         batch_bins: 4000000
@@ -1184,11 +1219,20 @@ def test_world_info_defaults_to_single_process():
 def test_iter_factory_resolves_shape_file_uids_to_same_sample(tmp_path):
     """T2 (iter_factory side): a shape file keyed by stable utterance IDs makes
     SequenceIterFactory batches resolve to the same sample the dataset itself
-    returns for that UID."""
+    returns for that UID.
+
+    This exercises the string-index-mode lookup path (a Mapping-keyed
+    dataset addressed by its own string keys), which is independent of the
+    dataset-hash UID scheme (§2.5) -- but any DataOrganizer-built dataset now
+    always has uid_entries, so the shape file's directory still needs a
+    matching dataset_uids.json for the training-side validation (§4) to
+    pass.
+    """
     shape_file = tmp_path / "uid_shape"
     shape_file.write_text("utt_a 1\nutt_b 1\nutt_c 1\n")
 
     organizer = build_organizer(STRING_UID_DATASET_TARGET)
+    _write_uid_table_if_present(shape_file.parent, organizer.train)
     organizer.train.use_espnet_collator = True
     config = OmegaConf.create(
         {
@@ -1267,6 +1311,22 @@ class _DummyUidTableDataset:
     def __init__(self, uid_entries):
         self.uid_entries = uid_entries
         self.datasets = [self]
+
+
+def _write_uid_table_if_present(shape_dir, dataset):
+    """Write dataset_uids.json for ``dataset`` into ``shape_dir`` iff it has
+    uid_entries.
+
+    ``CombinedDataset.uid_entries`` (owned by ashigaru_b in the parallel work
+    split) is not yet present on every branch this test file is developed
+    against, so this stays a no-op (matching the pre-dataset-hash-UID
+    backward-compat behavior validate_against_uid_table itself falls back
+    to) until that support lands -- at which point it starts writing a real,
+    matching table so these tests keep passing without modification.
+    """
+    uid_entries = getattr(dataset, "uid_entries", None)
+    if uid_entries is not None:
+        write_uid_table(shape_dir, uid_entries)
 
 
 def _make_shape_file_iter_factory_config(shape_file):
@@ -1413,16 +1473,24 @@ def test_iter_factory_rejects_changed_num_items(tmp_path, monkeypatch):
 
 
 def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
-    """A directly-constructed dataset without uid_entries (backward
-    compatibility) skips the training-side validation entirely."""
+    """A directly-constructed CombinedDataset (bypassing DataOrganizer, so
+    uid_prefixes/uid_entries stay None -- backward compatibility) skips the
+    training-side validation entirely.
+
+    Note: any dataset built *through* DataOrganizer always gets uid_entries
+    now (§1), so this "no uid_entries" case can only arise from constructing
+    CombinedDataset directly, not from build_organizer(...).
+    """
     monkeypatch.setattr(
         "espnet3.components.data.dataloader.build_batch_sampler",
         lambda **kw: [[0, 1]],
     )
-    organizer = build_organizer(DUMMY_DATASET_TARGET)
+    dataset = CombinedDataset([DummyDataset()], [(do_nothing, do_nothing)])
+    # getattr, not a direct attribute access: CombinedDataset.uid_entries
+    # (owned by ashigaru_b) is not yet present on every branch this file is
+    # developed against; it will exist and return None here once it lands.
+    assert getattr(dataset, "uid_entries", None) is None
     config = _make_shape_file_iter_factory_config("/nonexistent/mel_shape")
-    builder = build_builder(
-        organizer.train, config, collate_fn=None, num_device=1, epoch=0
-    )
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
     iterator = builder.build("train")
     assert list(iterator) == [[0, 1]]

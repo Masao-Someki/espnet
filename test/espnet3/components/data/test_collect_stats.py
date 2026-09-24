@@ -637,12 +637,18 @@ def test_collect_stats_rejects_multiple_iterator(tmp_path: Path, flag):
 
 
 def test_resolve_uid_and_sample_uses_get_uid_for_plain_sample():
-    dataset = StableIdDataset(n=2)
+    """Integration note: get_utt_id is ignored under the dataset-hash UID
+    scheme (§7 compatibility -- an opt-in get_utt_id no longer changes the
+    UID), so this uses the dataset-hash-UID dummy (known prefix) rather than
+    the get_utt_id-based StableIdDataset fixture, which now resolves to a
+    hash:pos UID too, not its own "stableNNN" value.
+    """
+    dataset = _DummyHashUidDataset(n=2, uid_prefix="cafe1234")
 
     uid, sample = _resolve_uid_and_sample(dataset, 1)
     expected = dataset[1]
 
-    assert uid == "stable001"
+    assert uid == "cafe1234:1"
     assert sample["length"] == expected["length"]
     assert torch.equal(sample["x"], expected["x"])
 
