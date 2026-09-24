@@ -116,19 +116,3 @@ class MiniAn4Dataset(TorchDataset):
             "speech": np.asarray(array, dtype=np.float32),
             "text": entry.text,
         }
-
-    def get_utt_id(self, idx: int) -> str:
-        """Return the manifest utterance ID for ``idx``.
-
-        Opts this dataset into ``CombinedDataset``'s stable UID protocol
-        (``espnet3.components.data.dataset.CombinedDataset.get_uid``), so
-        shape-file keys and batch UIDs stay tied to the manifest's own
-        utterance ID instead of the dataset's positional index.
-
-        Args:
-            idx (int): Index into this split's entries.
-
-        Returns:
-            str: The utterance ID recorded in the manifest for this entry.
-        """
-        return self._entries[int(idx)].utt_id

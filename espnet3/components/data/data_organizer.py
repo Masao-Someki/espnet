@@ -15,6 +15,13 @@ from espnet3.components.data.dataset import (
     do_nothing,
 )
 from espnet3.components.data.dataset_module import instantiate_dataset_reference
+from espnet3.components.data.dataset_uid import (
+    DatasetUidEntry,
+    canonicalize_entry,
+    check_entry_hashes,
+    compute_entry_hash,
+    strip_dir_keys,
+)
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
 
 logger = logging.getLogger(__name__)
@@ -431,10 +438,25 @@ class DataOrganizer:
         config_list,
         preprocessor,
     ):
-        """Build a combined dataset from config entries."""
+        """Build a combined dataset from config entries.
+
+        Each entry's raw config (after resolving any ``DictConfig`` to a
+        plain dict) is hashed into an 8-hex-char dataset UID prefix, ignoring
+        any key ending in ``_dir`` (see
+        ``espnet3.components.data.dataset_uid``). The prefixes are checked
+        for duplicates/collisions, then passed to ``CombinedDataset`` as
+        ``uid_prefixes``/``uid_entries`` so ``get_uid`` returns stable,
+        entry-identity-based UIDs instead of position-based ones.
+
+        Raises:
+            ValueError: If two entries in ``config_list`` hash to the same
+                UID prefix (identical configuration, or a 32-bit collision).
+        """
         datasets = []
         transforms = []
-        for config in config_list:
+        hash_checks = []
+        uid_entries = []
+        for i, config in enumerate(config_list):
             if isinstance(config, DictConfig):
                 raw_config = OmegaConf.to_container(config, resolve=True)
             else:
@@ -451,10 +473,29 @@ class DataOrganizer:
             datasets.append(dataset)
             transforms.append((transform, preprocessor))
 
+            label = (
+                raw_config.get("name") or raw_config.get("data_src") or f"entry #{i}"
+            )
+            canonical = canonicalize_entry(raw_config)
+            prefix = compute_entry_hash(raw_config)
+            hash_checks.append((prefix, canonical, label))
+            uid_entries.append(
+                DatasetUidEntry(
+                    uid_prefix=prefix,
+                    label=label,
+                    num_items=len(dataset),
+                    config=strip_dir_keys(raw_config),
+                )
+            )
+
+        check_entry_hashes(hash_checks)
+
         return CombinedDataset(
             datasets,
             transforms,
             use_espnet_preprocessor=isinstance(preprocessor, AbsPreprocessor),
+            uid_prefixes=[entry.uid_prefix for entry in uid_entries],
+            uid_entries=uid_entries,
         )
 
     @property
