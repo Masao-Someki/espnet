@@ -1,5 +1,7 @@
 # tests/test_collect_stats.py
+import json
 import multiprocessing as mp
+import re
 from pathlib import Path
 
 import numpy as np
@@ -163,6 +165,66 @@ class StableIdOrganizer:
         )
 
 
+class _DatasetUidEntryStub:
+    """Local stand-in for ``espnet3.components.data.dataset_uid.DatasetUidEntry``.
+
+    Used only to exercise this file's owned code (fingerprint, uid-table
+    writing) against the dataset-hash UID contract before
+    ``CombinedDataset``/``DataOrganizer`` (owned separately) expose it for
+    real; see the API contract fixed in this task.
+    """
+
+    def __init__(self, uid_prefix: str, label: str, num_items: int, config: dict):
+        self.uid_prefix = uid_prefix
+        self.label = label
+        self.num_items = num_items
+        self.config = config
+
+
+class _DummyHashUidDataset:
+    """Minimal dataset exposing the dataset-hash UID contract (get_uid/
+    uid_entries), decoupled from ``CombinedDataset`` so this file's tests do
+    not depend on ashigaru_b's dataset.py changes landing first."""
+
+    def __init__(self, n=4, base_len=2, dim=3, uid_prefix="a1b2c3d4"):
+        self.n = n
+        self.base_len = base_len
+        self.dim = dim
+        self.lengths = [self.base_len + (i % 3) for i in range(self.n)]
+        self.uid_prefix = uid_prefix
+        self.uid_entries = [
+            _DatasetUidEntryStub(
+                uid_prefix=uid_prefix,
+                label="dummy_hash_uid",
+                num_items=n,
+                config={"data_src": "dummy/hash_uid"},
+            )
+        ]
+
+    def __len__(self):
+        return self.n
+
+    def get_uid(self, idx: int) -> str:
+        return f"{self.uid_prefix}:{idx}"
+
+    def __getitem__(self, idx):
+        T = self.lengths[idx]
+        x = torch.full((T, self.dim), float(idx), dtype=torch.float32)
+        return {"x": x, "length": T}
+
+
+class DummyHashUidOrganizer:
+    """Hydra-instantiable organizer exposing .train as a ``_DummyHashUidDataset``."""
+
+    def __init__(self, n_train=4, n_valid=0, base_len=2, dim=3, uid_prefix="a1b2c3d4"):
+        self.train = _DummyHashUidDataset(
+            n=n_train, base_len=base_len, dim=dim, uid_prefix=uid_prefix
+        )
+        self.valid = _DummyHashUidDataset(
+            n=n_valid, base_len=base_len, dim=dim, uid_prefix=uid_prefix + "v"
+        )
+
+
 class DummyCollate:
     """Collate that pads to max length and returns:
 
@@ -265,6 +327,27 @@ def make_stable_dataset_cfg(n_train=6, n_valid=0, base_len=3, dim=4, uid_offset=
             "base_len": base_len,
             "dim": dim,
             "uid_offset": uid_offset,
+        }
+    )
+
+
+TEST_HASH_UID_ORGANIZER_TARGET = (
+    "test.espnet3.components.data.test_collect_stats.DummyHashUidOrganizer"
+)
+
+
+def make_hash_uid_dataset_cfg(
+    n_train=4, n_valid=0, base_len=2, dim=3, uid_prefix="a1b2c3d4"
+):
+    """Build a dataset_config for the dataset-hash-UID dummy organizer."""
+    return OmegaConf.create(
+        {
+            "_target_": TEST_HASH_UID_ORGANIZER_TARGET,
+            "n_train": n_train,
+            "n_valid": n_valid,
+            "base_len": base_len,
+            "dim": dim,
+            "uid_prefix": uid_prefix,
         }
     )
 
@@ -627,8 +710,9 @@ def test_collect_stats_batch_all_collator_preprocessor_combinations(
 
 
 def test_collect_stats_batch_uid_matches_dataset_get_uid():
-    """T2 (collect_stats side): shape_info keys equal dataset.get_uid(i)."""
-    dataset = StableIdDataset(n=4, base_len=2, dim=3)
+    """T2 (collect_stats side): shape_info keys equal dataset.get_uid(i) and
+    follow the dataset-hash UID format '<8-hex-prefix>:<position>'."""
+    dataset = _DummyHashUidDataset(n=4, base_len=2, dim=3, uid_prefix="a1b2c3d4")
     model = DummyModel(scale=1.0)
     collate = DummyCollate()
     idxs = [0, 2, 3]
@@ -642,6 +726,8 @@ def test_collect_stats_batch_uid_matches_dataset_get_uid():
     )
 
     assert set(shape_info["mel"].keys()) == {dataset.get_uid(i) for i in idxs}
+    for uid in shape_info["mel"]:
+        assert re.fullmatch(r"[0-9a-f]{8}:[0-9]+", uid), uid
 
 
 def test_collect_stats_batch_rejects_uid_mismatch():
@@ -663,13 +749,17 @@ def test_collect_stats_batch_rejects_uid_mismatch():
 
 
 @pytest.mark.execution_timeout(30)
-def test_collect_stats_writes_stable_uids_to_shape_file(tmp_path: Path):
-    """T2 (collect_stats side): shape file keys == dataset.uids()."""
+def test_collect_stats_writes_hash_uids_and_uid_table(tmp_path: Path):
+    """T2/(f) (collect_stats side): shape file keys follow the dataset-hash
+    UID format '<8-hex-prefix>:<position>' and merge() writes
+    dataset_uids.json into the same split directory (§3), sourced from
+    ``dataset.uid_entries`` -- without ever hashing a per-utterance list.
+    """
     model_cfg = make_model_cfg(scale=1.0)
-    ds_cfg = make_stable_dataset_cfg(n_train=5, n_valid=0, base_len=2, dim=3)
+    ds_cfg = make_hash_uid_dataset_cfg(n_train=5, n_valid=0, base_len=2, dim=3)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
 
-    out_dir = tmp_path / "out_stable"
+    out_dir = tmp_path / "out_hash_uid"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     collect_stats(
@@ -685,12 +775,24 @@ def test_collect_stats_writes_stable_uids_to_shape_file(tmp_path: Path):
     )
 
     dataset = instantiate(ds_cfg).train
-    shape_path = out_dir / "train" / "mel_shape"
+    mode_dir = out_dir / "train"
+    shape_path = mode_dir / "mel_shape"
     lines = shape_path.read_text(encoding="utf-8").splitlines()
     written_uids = {line.split(" ", 1)[0] for line in lines}
 
-    assert written_uids == set(dataset.uids())
+    assert written_uids == {dataset.get_uid(i) for i in range(len(dataset))}
     assert len(lines) == len(dataset)
+    for uid in written_uids:
+        assert re.fullmatch(r"[0-9a-f]{8}:[0-9]+", uid), uid
+
+    uid_table_path = mode_dir / "dataset_uids.json"
+    assert uid_table_path.is_file()
+    table = json.loads(uid_table_path.read_text(encoding="utf-8"))
+    assert table["format"] == 1
+    assert [d["uid_prefix"] for d in table["datasets"]] == [
+        e.uid_prefix for e in dataset.uid_entries
+    ]
+    assert [d["num_items"] for d in table["datasets"]] == [len(dataset)]
 
 
 # =====================================================================
@@ -699,9 +801,9 @@ def test_collect_stats_writes_stable_uids_to_shape_file(tmp_path: Path):
 
 
 def test_build_fingerprint_is_deterministic():
-    dataset = StableIdDataset(n=3)
+    dataset = _DummyHashUidDataset(n=3)
     model_cfg = make_model_cfg(scale=1.0)
-    ds_cfg = make_stable_dataset_cfg(n_train=3)
+    ds_cfg = make_hash_uid_dataset_cfg(n_train=3)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
 
     fp1 = _build_fingerprint(
@@ -724,13 +826,13 @@ def test_build_fingerprint_is_deterministic():
     )
 
     assert fp1 == fp2
-    assert fp1["stable_uids"] is True
+    assert fp1["dataset_uids"] == [["a1b2c3d4", 3]]
     assert fp1["num_items"] == 3
 
 
 def test_build_fingerprint_changes_with_model_config():
-    dataset = StableIdDataset(n=3)
-    ds_cfg = make_stable_dataset_cfg(n_train=3)
+    dataset = _DummyHashUidDataset(n=3)
+    ds_cfg = make_hash_uid_dataset_cfg(n_train=3)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
 
     fp_a = _build_fingerprint(
@@ -755,12 +857,16 @@ def test_build_fingerprint_changes_with_model_config():
     assert fp_a["sha256"] != fp_b["sha256"]
 
 
-def test_build_fingerprint_uses_uids_hash_for_stable_dataset():
-    ds_cfg = make_stable_dataset_cfg(n_train=3)
+def test_build_fingerprint_includes_dataset_uids_for_hash_uid_dataset():
+    """§6: fingerprint's ``dataset_uids`` is the (uid_prefix, num_items) list
+    from ``dataset.uid_entries`` (never a per-utterance list), and is
+    ``None`` for a dataset without ``uid_entries`` (directly constructed,
+    outside ``DataOrganizer``)."""
+    ds_cfg = make_hash_uid_dataset_cfg(n_train=3)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
     model_cfg = make_model_cfg(scale=1.0)
 
-    fp_no_stable = _build_fingerprint(
+    fp_no_uid_entries = _build_fingerprint(
         model_config=model_cfg,
         dataset_config=make_dataset_cfg(n_train=3, n_valid=0),
         dataloader_config=dl_cfg,
@@ -769,18 +875,18 @@ def test_build_fingerprint_uses_uids_hash_for_stable_dataset():
         write_collected_feats=False,
         dataset=DummyDataset(n=3),
     )
-    fp_stable = _build_fingerprint(
+    fp_with_uid_entries = _build_fingerprint(
         model_config=model_cfg,
         dataset_config=ds_cfg,
         dataloader_config=dl_cfg,
         mode="train",
         batch_size=2,
         write_collected_feats=False,
-        dataset=StableIdDataset(n=3),
+        dataset=_DummyHashUidDataset(n=3),
     )
 
-    assert fp_no_stable["stable_uids"] is False
-    assert fp_stable["stable_uids"] is True
+    assert fp_no_uid_entries["dataset_uids"] is None
+    assert fp_with_uid_entries["dataset_uids"] == [["a1b2c3d4", 3]]
 
 
 @pytest.mark.execution_timeout(30)
@@ -853,10 +959,12 @@ def test_collect_stats_rerun_with_changed_dataset_raises(tmp_path: Path):
 def test_collect_stats_rerun_with_same_length_but_different_uids_raises(
     tmp_path: Path,
 ):
-    """T5 (optional improvement): same num_items, but the dataset's stable
-    uid content changed (e.g. a source file reorder) -- the uids_sha256 in
-    the fingerprint must still catch this even though num_items and every
-    other config field are identical."""
+    """T5: same num_items, but a config field that isn't ``num_items`` itself
+    changed (``uid_offset``, standing in for e.g. a source file reorder) --
+    the fingerprint's hashed ``dataset_config`` payload must still catch this
+    even though ``num_items`` alone would not (the dataset-hash UID scheme
+    intentionally does not hash per-utterance content; only the config that
+    produced the dataset, plus its size, are covered -- see §6)."""
     model_cfg = make_model_cfg(scale=1.0)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
     out_dir = tmp_path / "out_resume_same_len_diff_uids"

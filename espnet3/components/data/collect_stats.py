@@ -15,6 +15,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from espnet2.fileio.npy_scp import NpyScpWriter
 from espnet2.train.collate_fn import CommonCollateFn
+from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
 from espnet3.parallel.base_runner import BaseRunner, concatenate_shard_files
 from espnet3.parallel.env_provider import EnvironmentProvider
 from espnet3.parallel.parallel import set_parallel
@@ -232,9 +233,11 @@ def _build_fingerprint(
         batch_size: Number of dataset items processed per batch.
         write_collected_feats: Whether raw features are persisted.
         dataset: The already-instantiated dataset for ``mode``, used to derive
-            ``num_items`` and, when the dataset exposes stable uids (see
-            ``CombinedDataset.has_stable_uids``), a hash of its full uid list so
-            that reordering/adding entries invalidates a resumed run too.
+            ``num_items`` and, when the dataset exposes ``uid_entries`` (the
+            ``CombinedDataset`` dataset-hash UID contract), the per-dataset
+            ``(uid_prefix, num_items)`` pairs so that reordering, adding, or
+            resizing an entry invalidates a resumed run too -- without ever
+            building a per-utterance list.
 
     Notes:
         The hashed payload is built with ``json.dumps(..., default=str)``:
@@ -244,7 +247,12 @@ def _build_fingerprint(
         fingerprint rather than crashing ``collect_stats``.
 
     Returns:
-        Dict[str, Any]: ``{"sha256": str, "num_items": int, "stable_uids": bool}``.
+        Dict[str, Any]: ``{"sha256": str, "num_items": int,
+        "dataset_uids": Optional[List[List]]}``, where ``dataset_uids`` is a
+        list of ``[uid_prefix, num_items]`` pairs (one per sub-dataset, in
+        ``CombinedDataset`` order) or ``None`` when the dataset does not
+        expose ``uid_entries`` (a directly-constructed ``CombinedDataset``
+        without dataset-hash UIDs).
     """
     if not isinstance(model_config, DictConfig):
         model_config = OmegaConf.create(model_config)
@@ -257,16 +265,16 @@ def _build_fingerprint(
             else OmegaConf.create({})
         )
 
-    has_stable_uids = bool(getattr(dataset, "has_stable_uids", False))
-    uids_sha256 = None
-    if has_stable_uids:
-        uids_sha256 = hashlib.sha256(
-            "\n".join(dataset.uids()).encode("utf-8")
-        ).hexdigest()
+    uid_entries: Optional[List[DatasetUidEntry]] = getattr(dataset, "uid_entries", None)
+    dataset_uids = (
+        [[e.uid_prefix, e.num_items] for e in uid_entries]
+        if uid_entries is not None
+        else None
+    )
 
     dataloader_container = OmegaConf.to_container(dataloader_config, resolve=True)
     payload = {
-        "format": 1,
+        "format": 2,
         "model_config": OmegaConf.to_container(model_config, resolve=True),
         "dataset_config": OmegaConf.to_container(dataset_config, resolve=True),
         "collate_fn": dataloader_container.get("collate_fn"),
@@ -274,12 +282,12 @@ def _build_fingerprint(
         "batch_size": batch_size,
         "write_collected_feats": write_collected_feats,
         "num_items": len(dataset),
-        "uids_sha256": uids_sha256,
+        "datasets": dataset_uids,
     }
     sha256 = hashlib.sha256(
         json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
-    return {"sha256": sha256, "num_items": len(dataset), "stable_uids": has_stable_uids}
+    return {"sha256": sha256, "num_items": len(dataset), "dataset_uids": dataset_uids}
 
 
 def _persist_feats_for_key(
@@ -394,9 +402,26 @@ class CollectStatsRunner(BaseRunner):
         output_dir: str | Path,
         mode: str,
         write_collected_feats: bool = False,
+        uid_entries: Optional[List[DatasetUidEntry]] = None,
         **kwargs,
     ):
-        """Initialize CollectStatsRunner object."""
+        """Initialize CollectStatsRunner object.
+
+        Args:
+            provider: The ``EnvironmentProvider`` building the per-worker
+                dataset/model/collate_fn.
+            output_dir: Root directory shard outputs and the merged split
+                directory are written under.
+            mode: The dataset split being processed (``train``/``valid``).
+            write_collected_feats: Whether raw features are persisted.
+            uid_entries: The dataset's ``uid_entries`` (dataset-hash UID
+                contract), one per sub-dataset in ``CombinedDataset`` order.
+                When not ``None``, :meth:`merge` writes the corresponding
+                ``dataset_uids.json`` table into the merged split directory
+                so training-time batch building can validate its own dataset
+                configuration against it. ``None`` (a directly-constructed
+                dataset without dataset-hash UIDs) skips writing the table.
+        """
         super().__init__(
             provider,
             output_dir=output_dir,
@@ -405,6 +430,7 @@ class CollectStatsRunner(BaseRunner):
         )
         self.mode = mode
         self.write_collected_feats = write_collected_feats
+        self.uid_entries = uid_entries
 
     @staticmethod
     def forward(
@@ -567,6 +593,10 @@ class CollectStatsRunner(BaseRunner):
                     f"collect_feats/{feat_key}.scp",
                     feat_dir / f"{feat_key}.scp",
                 )
+
+        if self.uid_entries is not None:
+            write_uid_table(mode_dir, self.uid_entries)
+
         return {
             "sum": dict(sum_dict),
             "sq": dict(sq_dict),
@@ -615,6 +645,7 @@ def _collect_stats_common(
         output_dir=output_dir,
         mode=mode,
         write_collected_feats=write_collected_feats,
+        uid_entries=getattr(dataset, "uid_entries", None),
         resume=resume,
         fingerprint=fingerprint,
     )

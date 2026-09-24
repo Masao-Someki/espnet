@@ -3,12 +3,14 @@
 import copy
 import logging
 from functools import partial
+from pathlib import Path
 
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.samplers.build_batch_sampler import build_batch_sampler
+from espnet3.components.data.dataset_uid import validate_against_uid_table
 from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.logging_utils import _dump_attrs, build_qualified_name
 
@@ -292,10 +294,38 @@ class DataLoaderBuilder:
         return loader
 
     def _build_iter_factory(self, factory_config, dataset=None, mode="train"):
+        """Build an ESPnet-style iterator factory from ``iter_factory`` config.
+
+        Before building the batch sampler, validates every referenced
+        shape-file directory's ``dataset_uids.json`` (written by
+        ``collect_stats``) against ``dataset.uid_entries``, so a dataset
+        configuration change since ``collect_stats`` was last run raises a
+        clear error instead of resolving shape-file UIDs to the wrong
+        utterances. Datasets without ``uid_entries`` (directly constructed,
+        outside ``DataOrganizer``) skip this check.
+
+        Args:
+            factory_config: The resolved ``iter_factory`` config (already
+                ``OmegaConf.to_container``-ed by :meth:`build`), including a
+                ``"batches"`` key with the batch-sampler config.
+            dataset: Dataset to build batches over; defaults to
+                ``self.dataset`` when omitted.
+            mode: One of ``"train"``/``"valid"``, used for logging only.
+        """
         if dataset is None:
             dataset = self.dataset
 
-        batches = build_batch_sampler(**factory_config.pop("batches"))
+        batches_config = factory_config.pop("batches")
+        uid_entries = getattr(dataset, "uid_entries", None)
+        validated_dirs = set()
+        for shape_file in batches_config.get("shape_files") or []:
+            split_dir = Path(shape_file).resolve().parent
+            if split_dir in validated_dirs:
+                continue
+            validated_dirs.add(split_dir)
+            validate_against_uid_table(split_dir, uid_entries)
+
+        batches = build_batch_sampler(**batches_config)
 
         if self.num_device > 1:
             batches = list(batches)
