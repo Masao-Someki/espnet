@@ -64,34 +64,55 @@ long, the batch it lands in may have only one sample.
 
 ## Sharding for multi-GPU and multi-node
 
-Each GPU needs a non-overlapping slice of the training data.
-Set `total_shards` and `dist_world_size` to activate this:
+Each GPU needs a non-overlapping slice of the training data. This is a
+**dataset-level** attribute, not a dataloader key: `total_shards`/
+`dist_world_size` are read off a `ShardedDataset` instance
+(`getattr(dataset, "total_shards", ...)`), so set them through `data_src_args`
+in the `dataset:` block -- **not** under `dataloader:`. Those keys are not
+read by `DataLoaderBuilder`; with the standard-DataLoader path
+(`iter_factory: null`) leaving them under `dataloader:` raises a `TypeError`
+from `torch.utils.data.DataLoader`, and with `iter_factory` set they are
+silently ignored.
 
 ```yaml
-dataloader:
+dataset:
   train:
-    total_shards: 16
-    dist_world_size: 16
+    - data_src: my_recipe/asr
+      data_src_args:
+        split: train
+        total_shards: 16
+        dist_world_size: 16
 ```
 
-`dist_world_size` must equal `num_nodes × num_device`.
+`dist_world_size` must equal `num_nodes` times `num_device` (write the product
+as a literal -- OmegaConf has no multiply operator).
 `total_shards` must be divisible by `dist_world_size`.
 
-For single-GPU runs, keep both at `1` (the default).
+For single-GPU runs, either skip `ShardedDataset` entirely or set both to `1`.
 
-See [Multi-node training](./multi-node.html#dataloader-sharding) for the
-full sharding rules and shard rotation formula.
+::: warning
+`iter_factory` cannot be combined with `total_shards > 1`: shape-file
+batches are keyed by the *unsharded* dataset's index, which no longer
+matches after sharding, so ESPnet3 raises a `RuntimeError` at startup
+instead of silently training on the wrong utterances. Either keep
+`total_shards: 1` with `iter_factory`, or shard through the standard
+`DataLoader` path (`iter_factory: null`) — on that path ESPnet3 disables
+Lightning's `DistributedSampler` automatically. See
+[Dataset sharding](./dataset-sharding.html#common-mistakes) for details.
+:::
+
+See [Dataset sharding](./dataset-sharding.html) for the full rules and shard
+rotation formula.
 
 ## Validation dataloader
 
-The validation dataloader does not need shuffle, but it should mirror the
-training sharding settings to ensure each GPU only validates its own slice:
+The validation dataloader does not need shuffle. Give the `valid` dataset
+entry the same `total_shards`/`dist_world_size` as `train` (again via
+`data_src_args`) so each GPU validates only its own slice:
 
 ```yaml
 dataloader:
   valid:
-    total_shards: ${dataloader.train.total_shards}
-    dist_world_size: ${dataloader.train.dist_world_size}
     iter_factory:
       _target_: espnet2.iterators.sequence_iter_factory.SequenceIterFactory
       shuffle: false
@@ -103,8 +124,9 @@ dataloader:
         batch_bins: ${dataloader.train.iter_factory.batches.batch_bins}
 ```
 
-Using interpolation keeps the validation config in sync with training
-automatically.
+Validation shards rotate every epoch exactly like training (both use the same
+`epoch` value), so `valid/loss` is not drawn from a fixed slice across epochs
+when sharding is on.
 
 ## Standard DataLoader path
 
@@ -165,6 +187,19 @@ parallel:
 `n_workers` here controls how many Dask workers run stats collection
 concurrently — it is independent from `trainer.devices`.
 
+**Keying and resume.** Shape/stats files are keyed by
+`CombinedDataset.get_uid(idx)`. If your recipe `Dataset` implements
+`get_utt_id(idx) -> str`, that stable utterance ID is used and survives
+reordering or adding entries; otherwise the global integer position
+(`str(idx)`) is used and ESPnet3 logs a warning at startup, because a
+reordered `dataset:` block would then re-map shape entries to different
+utterances. `collect_stats` resumes per shard (`split.N/done`) and records a
+fingerprint of the model/dataset/dataloader config and dataset contents in
+`manifest.json`; a rerun whose fingerprint differs (or an old `stats_dir`
+without one) fails with a `RuntimeError` instead of merging stale stats.
+Delete `${stats_dir}` (or point to a fresh one) to recompute, or set
+`collect_stats.resume: false` in `training.yaml` to force recomputation.
+
 ## Common mistakes
 
 **Leaving `dist_world_size: 1` for a multi-GPU run.**
@@ -205,6 +240,6 @@ becomes a bottleneck.
     title="Stats collection"
     desc="See how collect_stats writes the shape files used by batch_bins."
     icon="tabler:gauge"
-    href="../../core/stats-collection.html"
+    href="../../stages/collect-stats.html"
   />
 </DocCards>

@@ -7,148 +7,50 @@ date: 2026-05-26
 
 # ESPnet3 Provider And Runner
 
-This page is for people who want to implement or modify a parallel workload.
+This page is for people who want to implement or modify a parallel workload
+built on `espnet3/parallel/`.
 
-Start with [ESPnet3 Parallel](./index.html) for the high-level flow.
-This page focuses on:
-
-- subclass contracts
-- writer hooks
-- shard-local files
-- implementation snippets
-
-## What this page covers
-
-[`EnvironmentProvider`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-and [`BaseRunner`](../../../guide/espnet3/parallel/BaseRunner.html) are the two
-main extension points.
-
-- [`EnvironmentProvider`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-  decides how runtime objects are built
-- [`BaseRunner`](../../../guide/espnet3/parallel/BaseRunner.html) decides how one
-  shard is processed and how outputs are written
-
-Use this page when you are:
-
-- adding a new parallel inference-like task
-- changing shard output formats
-- debugging writer / merge behavior
-- deciding which hook to override
-
-## Read the real contracts first
+Start with [ESPnet3 Parallel](./index.html) for the high-level flow. This page
+covers the subclass contracts, the writer hooks, shard-local files, config
+knobs, and resume/locking semantics.
 
 Read the generated API docs before changing these classes:
 
-- [`espnet3/parallel/env_provider.py`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-- [`espnet3/parallel/base_runner.py`](../../../guide/espnet3/parallel/BaseRunner.html)
+- [`EnvironmentProvider`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
+  (`espnet3/parallel/env_provider.py`) — decides how runtime objects
+  (dataset/model/etc.) are built.
+- [`BaseRunner`](../../../guide/espnet3/parallel/BaseRunner.html)
+  (`espnet3/parallel/base_runner.py`) — decides how one shard is processed,
+  how outputs are written, shard planning, locking, and dispatch.
 
 Useful concrete examples:
 
-- [`espnet3/parallel/inference_provider.py`](../../../guide/espnet3/parallel/InferenceProvider.html)
-- [`espnet3/systems/base/inference_runner.py`](../../../guide/espnet3/systems/InferenceRunner.html)
+- [`InferenceProvider`](../../../guide/espnet3/systems/InferenceProvider.html) /
+  [`InferenceRunner`](../../../guide/espnet3/systems/InferenceRunner.html)
+  (`espnet3/systems/base/`) — the stage-facing pair used by `infer()`; see
+  [Inference Provider](./inference_provider.html).
+- [`CollectStatsInferenceProvider`](../../../guide/espnet3/components/CollectStatsInferenceProvider.html) /
+  [`CollectStatsRunner`](../../../guide/espnet3/components/CollectStatsRunner.html)
+  (`espnet3/components/data/collect_stats.py`).
 
-## EnvironmentProvider
-
-[`EnvironmentProvider`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-has exactly two required methods:
-
-- [`build_env_local()`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-- [`build_worker_setup_fn()`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-
-<div class='custom-h3'><p>build_env_local<span class="small-bracket">()</span></p></div>
-
-
-Use this for local execution.
-
-It should build one env dict on the driver and return it directly.
+## Minimal example
 
 ```python
 from espnet3.parallel.env_provider import EnvironmentProvider
+from espnet3.parallel.base_runner import BaseRunner
 
 
 class MyProvider(EnvironmentProvider):
     def build_env_local(self):
-        return {
-            "dataset": build_dataset(self.config),
-            "model": build_model(self.config),
-            "tokenizer": build_tokenizer(self.config),
-        }
-```
+        return {"dataset": build_dataset(self.config), "model": build_model(self.config)}
 
-<div class='custom-h3'><p>build_worker_setup_fn<span class="small-bracket">()</span></p></div>
-
-
-Use this for distributed execution.
-
-It must return a zero-argument function.
-That returned function runs once per worker.
-
-```python
-class MyProvider(EnvironmentProvider):
     def build_worker_setup_fn(self):
-        config = self.config
+        config = self.config  # capture only picklable, plain values -- not self
 
         def setup():
-            return {
-                "dataset": build_dataset(config),
-                "model": build_model(config),
-                "tokenizer": build_tokenizer(config),
-            }
+            return {"dataset": build_dataset(config), "model": build_model(config)}
 
         return setup
-```
-
-<div class='custom-h3'><p>Local vs worker timing</p></div>
-
-
-Keep this rule in mind:
-
-- local mode: build once on the driver
-- Dask / SLURM mode: build once per worker
-
-Do not build large objects inside `forward()`.
-
-## InferenceProvider
-
-If your task is inference-like, check
-[`espnet3/parallel/inference_provider.py`](../../../guide/espnet3/parallel/InferenceProvider.html).
-
-It prebuilds the local env once:
-
-```python
-class InferenceProvider(EnvironmentProvider, ABC):
-    def __init__(self, config, params=None):
-        super().__init__(config)
-        self.params = params or {}
-        self._local_env = self.build_worker_setup_fn()()
-
-    def build_env_local(self):
-        return dict(self._local_env)
-```
-
-That pattern is useful when:
-
-- local mode should avoid repeated model loading
-- worker setup logic and local setup logic should stay identical
-
-## BaseRunner
-
-[`BaseRunner`](../../../guide/espnet3/parallel/BaseRunner.html) handles:
-
-- batching indices
-- shard planning
-- resume
-- local vs Dask dispatch
-- shard-local writer lifecycle
-- final merge
-
-The main method you must implement is
-[`forward(...)`](../../../guide/espnet3/parallel/BaseRunner.html).
-
-## Minimal runner
-
-```python
-from espnet3.parallel.base_runner import BaseRunner
 
 
 class MyRunner(BaseRunner):
@@ -156,105 +58,96 @@ class MyRunner(BaseRunner):
     def forward(idx, dataset, model, **env):
         sample = dataset[idx]
         return model(sample)
+
+
+provider = MyProvider(config)
+runner = MyRunner(provider, output_dir="exp/my_stage")
+runner(range(len(dataset)))
 ```
 
-Important constraints:
+Constraints:
 
-- keep `forward()` as `@staticmethod`
-- do not capture `self`
-- env keys are injected by name
+- `forward()` must stay a `@staticmethod` and must not capture `self` (it has
+  to be pickle-safe for Dask).
+- `build_worker_setup_fn()` must return a zero-argument **function**, not the
+  env dict itself; the function runs once per Dask worker.
+- env keys are injected into `forward(...)`/hooks purely by parameter-name
+  matching (`**env` catches whatever is left over).
 
-## Name-based env injection
+## EnvironmentProvider contract
 
-If the provider returns:
+| Method | Called when | Must return |
+|---|---|---|
+| `build_env_local()` | Once on the driver, only for `parallel.env: local` | `dict` of env objects (e.g. `dataset`, `model`) |
+| `build_worker_setup_fn()` | Once, on the driver, before dispatch; the returned callable then runs once **per Dask worker** | a zero-arg callable returning the same shape of `dict` |
 
-```python
-{
-    "dataset": dataset,
-    "model": model,
-    "device": device,
-}
-```
+[`InferenceProvider`](../../../guide/espnet3/parallel/InferenceProvider.html)
+(`espnet3/parallel/inference_provider.py`) is one concrete base: it declares
+`build_dataset(config)`/`build_model(config)` as abstract static methods and
+implements `build_env_local`/`build_worker_setup_fn` in terms of them,
+pre-building `self._local_env` once in `__init__` so local execution avoids
+rebuilding on every call. This is a **different class** from
+[`espnet3.systems.base.inference_provider.InferenceProvider`](../../../guide/espnet3/systems/InferenceProvider.html),
+which is the one actually used by `infer()` — see
+[Inference Provider](./inference_provider.html) for that one.
 
-then `forward()` can declare:
+## BaseRunner contract
 
-```python
-@staticmethod
-def forward(idx, dataset, model, device, **env):
-    ...
-```
+Constructor:
 
-The parameter names must match the env dict keys.
+| Arg | Default | Meaning |
+|---|---|---|
+| `provider` | required | An `EnvironmentProvider` instance. |
+| `batch_size` | `None` | If set, indices are chunked into lists before being passed to `forward`. |
+| `output_dir` | `None` | Root directory for shard subdirectories; **required** at call time (`__call__` raises `RuntimeError` if unset). |
+| `shard_subdir` | `""` | Optional subdirectory under `output_dir` (e.g. a test-set name) so multiple runs can share one `output_dir`. |
+| `resume` | `True` | Skip shards whose `done` marker already exists; see [Resume and locking](#resume-and-locking) below. |
 
-## Batch-aware forward()
+Hooks, in the order they run for one shard (`_run_one_shard`):
 
-If `batch_size` is set on the runner, `idx` may be a batch.
+| Hook | Signature | Default behavior |
+|---|---|---|
+| `forward` (abstract) | `forward(idx, dataset, model, **env) -> Any` (`@staticmethod`) | must be implemented; no default |
+| `open_writers` | `open_writers(shard_dir, **env) -> dict` (`@staticmethod`) | returns `{}` |
+| `write_record` | `write_record(writers, result, state, **env) -> None` (`@staticmethod`) | appends `result` to `state["records"]` |
+| `close_writers` | `close_writers(writers, state, **env) -> dict \| None` (`@staticmethod`) | closes any `.close()`-able values in `writers` |
+| `merge` | `merge(self, shard_dirs) -> Any` (instance method) | returns `None` |
 
-Write `forward()` so both forms are valid when needed.
-
-```python
-@staticmethod
-def forward(idx, dataset, model, **env):
-    if isinstance(idx, int):
-        return model(dataset[idx])
-
-    batch = [dataset[i] for i in idx]
-    return model(batch)
-```
-
-## Which hook should you override?
-
-Use this rule:
-
-- only compute one result in memory: override `forward()`
-- write shard-local files incrementally: override writer hooks
-- combine shard files on the driver: override `merge()`
-
-The main hooks are documented in the
-[`BaseRunner` API reference](../../../guide/espnet3/parallel/BaseRunner.html):
-
-- [`open_writers(shard_dir, **env)`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`write_record(writers, result, state, **env)`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`close_writers(writers)`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`merge(shard_dirs)`](../../../guide/espnet3/parallel/BaseRunner.html)
-
-Lower-level state hooks also exist:
-
-- [`init_state(...)`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`reduce_state(...)`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`finalize_state(...)`](../../../guide/espnet3/parallel/BaseRunner.html)
-
-Most subclasses should not override those lower-level methods first.
-
-## Writer lifecycle
-
-One shard roughly runs like this:
+Lower-level hooks (`init_state`, `reduce_state`, `finalize_state`) call the
+four hooks above; override them only if the state dict itself needs a
+different shape.
 
 ```python
-state = cls.init_state(shard_id=shard_id, **env)
-
+state = cls.init_state(shard_id=shard_id, **env)      # -> open_writers(...)
 for item in items:
     result = cls.forward(item, **env)
-    state = cls.reduce_state(state, result, shard_id=shard_id, **env)
-
-cls.finalize_state(state, shard_id=shard_id, **env)
+    state = cls.reduce_state(state, result, shard_id=shard_id, **env)  # -> write_record(...)
+cls.finalize_state(state, shard_id=shard_id, **env)    # -> close_writers(...)
 ```
 
-And by default:
+Choose a hook by what you need:
 
-- `init_state()` creates `split.N/`
-- `open_writers()` returns a writer dict
-- `write_record()` appends to `state["records"]`
-- `close_writers()` closes handles
-- a `done` file is written after successful completion
+- Only need one in-memory value per item → override `forward()` only (default
+  `write_record` accumulates results in `state["records"]`).
+- Need to stream results to shard-local files → override `open_writers()` /
+  `write_record()` / `close_writers()`.
+- Need to combine shard files into one final artifact → override `merge()`.
 
-## Minimal file-writing runner
+### Real example: InferenceRunner
 
-This is the smallest useful pattern when results should be streamed to disk.
+[`InferenceRunner`](../../../guide/espnet3/systems/InferenceRunner.html)
+(`espnet3/systems/base/inference_runner.py`) is the best in-tree reference for
+the writer-style pattern: `open_writers()` prepares shard-local SCP metadata,
+`write_record()` validates one result and appends to `<field>.scp`,
+`close_writers()` closes handles and writes `field_keys.txt`, and `merge()`
+uses [`concatenate_shard_files()`](../../../guide/espnet3/parallel/concatenate_shard_files.html)
+to concatenate each field's shard fragments, in shard-id order, into the final
+`<field>.scp` under `output_dir/shard_subdir`.
+
+### Writer-hook example (fixed)
 
 ```python
 from pathlib import Path
-
 from espnet3.parallel.base_runner import BaseRunner
 
 
@@ -262,21 +155,18 @@ class MyTextRunner(BaseRunner):
     @staticmethod
     def forward(idx, dataset, model, **env):
         sample = dataset[idx]
-        hyp = model(sample)
-        return {"utt_id": sample["utt_id"], "text": hyp}
+        return {"utt_id": sample["utt_id"], "text": model(sample)}
 
     @staticmethod
     def open_writers(shard_dir: Path, **env):
-        return {
-            "text": (shard_dir / "text").open("w", encoding="utf-8"),
-        }
+        return {"text": (shard_dir / "text").open("w", encoding="utf-8")}
 
     @staticmethod
     def write_record(writers, result, state, **env):
         writers["text"].write(f'{result["utt_id"]} {result["text"]}\n')
 
     @staticmethod
-    def close_writers(writers):
+    def close_writers(writers, state, **env):
         for handle in writers.values():
             handle.close()
         return None
@@ -286,257 +176,92 @@ class MyTextRunner(BaseRunner):
         out_dir.mkdir(parents=True, exist_ok=True)
         with (out_dir / "text").open("w", encoding="utf-8") as out_f:
             for shard_dir in sorted(shard_dirs):
-                shard_path = shard_dir / "text"
-                if not shard_path.exists():
-                    continue
-                out_f.write(shard_path.read_text(encoding="utf-8"))
+                part = shard_dir / "text"
+                if part.exists():
+                    out_f.write(part.read_text(encoding="utf-8"))
         return {}
 ```
 
-## State-accumulating runner
+`close_writers` (and every other hook) must accept the same positional/`**env`
+shape the base class calls it with — `close_writers(writers, state, **env)` —
+even if the override ignores `state`/`env`; dropping them raises `TypeError`
+at shard-finalize time.
 
-If outputs are small, you may not need writers.
+## Parallel config
 
-The default `write_record()` already appends each result into `state["records"]`.
+`set_parallel(config)` (called once per stage entrypoint, e.g. `infer()`)
+stores the active `parallel:` block; `BaseRunner` reads it back via
+`get_parallel_config()` on every `__call__`.
 
-```python
-class MyCollectRunner(BaseRunner):
-    @staticmethod
-    def forward(idx, dataset, model, **env):
-        return {"idx": idx, "score": float(model(dataset[idx]))}
+| Key | Default | Meaning |
+|---|---|---|
+| `env` | `"local"` | `local`, `local_gpu`, `kube`, or a `dask_jobqueue` cluster name (`slurm`, `sge`, `pbs`, `lsf`, `htcondor`, `moab`, `oar`, `ssh`). |
+| `n_workers` | `1` | Number of Dask workers to request. **Only consulted when `env != "local"`** — with `env: local`, `_plan_shards` always creates exactly one shard and it runs sequentially on the driver via `_run_local`, no matter what `n_workers` is set to. To use more than one local shard, set `env: local_gpu`/a real cluster backend, or drive the recipe's own multiprocessing. |
+| `options` | `{}` | Extra kwargs forwarded to the cluster constructor (`LocalCluster`, `SLURMCluster`, ...). |
 
-    def merge(self, shard_dirs):
-        # read shard-local state or ignore merge if caller only needs side effects
-        return None
+```yaml
+parallel:
+  env: local
+  n_workers: 1
 ```
 
-If you keep everything in memory, check carefully whether that still scales for
-your dataset size.
+**Dask cluster lifetime.** For any non-local `env`, `_run_parallel_dask` opens
+the cluster with `get_client(...)` as a context manager and tears it down
+(`client.close()` plus the cluster's `close()`/`shutdown()`) as soon as that
+one `BaseRunner.__call__` returns. A cluster is not kept alive across calls —
+a stage that calls a runner once per test set (e.g. `infer()` looping over
+`config.dataset.test`) spins up and tears down a fresh cluster **per test
+set**, not once for the whole stage.
 
-## Real example: InferenceRunner
+## Resume and locking
 
-[`espnet3/systems/base/inference_runner.py`](../../../guide/espnet3/systems/InferenceRunner.html)
-is the best reference for writer-style parallel output.
-
-Key ideas from that implementation:
-
-- [`open_writers()`](../../../guide/espnet3/systems/InferenceRunner.html)
-  prepares shard-local SCP metadata
-- [`write_record()`](../../../guide/espnet3/systems/InferenceRunner.html)
-  validates one result and writes `<field>.scp`
-- [`close_writers()`](../../../guide/espnet3/systems/InferenceRunner.html)
-  closes handles and writes `field_keys.txt`
-- [`merge()`](../../../guide/espnet3/systems/InferenceRunner.html)
-  concatenates shard-local SCP fragments into final outputs
-
-The write path looks like this:
-
-```python
-@staticmethod
-def open_writers(shard_dir, output_artifacts=None, **env):
-    return {
-        "shard_dir": shard_dir,
-        "artifact_configs": output_artifacts or {},
-        "scp_handles": {},
-        "field_keys": set(),
-    }
-```
-
-```python
-@staticmethod
-def write_record(writers, result, state, idx_key="utt_id", **env):
-    for output in _iter_outputs(result):
-        idx_value = output[idx_key]
-        for field_key in field_keys:
-            handle = writers["scp_handles"].get(field_key)
-            if handle is None:
-                handle = (writers["shard_dir"] / f"{field_key}.scp").open(
-                    "w", encoding="utf-8"
-                )
-                writers["scp_handles"][field_key] = handle
-            handle.write(f"{idx_value} {value}\n")
-```
-
-And merge is just ordered shard-file concatenation:
-
-```python
-for field_key in field_keys:
-    concatenate_shard_files(
-        ordered_shard_dirs,
-        f"{field_key}.scp",
-        base_dir / f"{field_key}.scp",
-    )
-```
-
-See
-[`concatenate_shard_files()`](../../../guide/espnet3/parallel/concatenate_shard_files.html)
-for the exact file merge behavior.
-
-That pattern is the right choice when:
-
-- each result becomes one or more output files
-- per-shard streaming is cheaper than large Python lists
-- final outputs should look like normal ESPnet artifacts
-
-## Output directory behavior
-
-If `output_dir` is set, shard-local work is written under:
+Shard planning and locking live under `output_dir/shard_subdir/`:
 
 ```text
 output_dir/
   shard_subdir/
-    manifest.json
+    manifest.json      # shard plan: {shard_id, items} list
     split.0/
+      lock              # present while a process owns this shard
+      done               # written only after a full, successful pass
     split.1/
     ...
 ```
 
-The done marker is:
+- On first run, the shard plan is written to `manifest.json`. On a resumed
+  run (`resume=True`, the default), the newly computed plan must match the
+  stored one (same number of shards, same items/order); otherwise
+  `BaseRunner` raises rather than silently reprocessing different shards.
+- A shard whose `done` file already exists is skipped when `resume=True`.
+  Otherwise the shard directory is locked (an atomic `O_CREAT|O_EXCL` file
+  create) before it runs, and unlocked in a `finally` once it finishes.
 
-```text
-split.N/done
-```
+Two current caveats worth knowing before relying on resume:
 
-Resume behavior depends on that file.
-
-If `resume=True`, completed shards are skipped.
-
-## Common implementation patterns
-
-<div class='custom-h3'><p>Pattern 1: plain local computation</p></div>
-
-
-Use:
-
-- simple provider
-- [`forward()`](../../../guide/espnet3/parallel/BaseRunner.html) only
-- no writer hooks
-
-Good for:
-
-- debugging
-- small outputs
-- tests
-
-<div class='custom-h3'><p>Pattern 2: inference output writing</p></div>
-
-
-Use:
-
-- provider that builds dataset/model
-- [`forward()`](../../../guide/espnet3/parallel/BaseRunner.html) returning normalized dicts
-- [`open_writers()`](../../../guide/espnet3/parallel/BaseRunner.html) /
-  [`write_record()`](../../../guide/espnet3/parallel/BaseRunner.html) /
-  [`close_writers()`](../../../guide/espnet3/parallel/BaseRunner.html)
-- [`merge()`](../../../guide/espnet3/parallel/BaseRunner.html) that assembles final files
-
-Good for:
-
-- SCP outputs
-- JSONL fragments
-- per-utterance artifacts
-
-<div class='custom-h3'><p>Pattern 3: worker-local initialization</p></div>
-
-
-Use:
-
-- [`build_worker_setup_fn()`](../../../guide/espnet3/parallel/EnvironmentProvider.html)
-  to construct heavy objects on each worker
-- env injection by name into `forward()`
-
-Good for:
-
-- GPU models
-- datasets with file handles
-- large tokenizer/model objects
+- **Resume does not fingerprint the provider/model config** — only the shard
+  *plan* (item indices/batching) is compared. Changing the checkpoint, beam
+  size, or any other inference/provider setting and re-running with
+  `resume=True` (default) will skip shards that are already marked `done` and
+  silently keep the previous run's outputs. Pass `resume=False`, or remove the
+  stale `output_dir`, whenever a config change should invalidate old shard
+  outputs.
+- **Lock acquisition is not transactional across shards.** If a shard is
+  already locked by another process, `BaseRunner` raises immediately without
+  releasing the locks it already acquired on other shards earlier in the same
+  call. If a run is interrupted mid-lock-acquisition or crashes, you may need
+  to manually remove leftover `split.N/lock` files (once you've confirmed no
+  other process actually holds them) before retrying.
 
 ## Common mistakes
 
-<div class='custom-h3'><p>Capturing self in forward<span class="small-bracket">()</span></p></div>
-
-
-Do not do this:
-
-```python
-class BadRunner(BaseRunner):
-    def forward(self, idx):  # wrong
-        ...
-```
-
-Use:
-
-```python
-class GoodRunner(BaseRunner):
-    @staticmethod
-    def forward(idx, dataset, model, **env):
-        ...
-```
-
-<div class='custom-h3'><p>Rebuilding the model inside forward<span class="small-bracket">()</span></p></div>
-
-
-Do not load a checkpoint per item.
-
-Build it in the provider.
-
-<div class='custom-h3'><p>Returning the env instead of a setup function</p></div>
-
-
-Wrong:
-
-```python
-def build_worker_setup_fn(self):
-    return {"dataset": ..., "model": ...}
-```
-
-Correct:
-
-```python
-def build_worker_setup_fn(self):
-    def setup():
-        return {"dataset": ..., "model": ...}
-    return setup
-```
-
-<div class='custom-h3'><p>Using mismatched env names</p></div>
-
-
-Wrong:
-
-```python
-return {"ds": dataset, "net": model}
-```
-
-with
-
-```python
-def forward(idx, dataset, model, **env):
-    ...
-```
-
-Correct the names or read from `**env` explicitly.
-
-<div class='custom-h3'><p>Forgetting shard merge semantics</p></div>
-
-
-If your subclass writes shard-local files, but `merge()` does nothing, the
-final outputs stay split across `split.N/`.
-
-That may be fine for debugging.
-It is usually wrong for stage-facing outputs.
-
-## Practical debugging checklist
-
-When a new runner does not behave correctly, check these first:
-
-1. `forward()` is `@staticmethod`
-2. provider env keys match `forward()` parameter names
-3. `output_dir` is set when using writer hooks
-4. shard directories contain expected files
-5. `done` is written only after successful completion
-6. `merge()` reads shards in stable order
-7. `resume=True` is not hiding stale shard outputs during debugging
+| Mistake | Fix |
+|---|---|
+| `def forward(self, idx): ...` | Keep `forward` a `@staticmethod`; never capture `self`. |
+| `def build_worker_setup_fn(self): return {"model": ...}` | Return a zero-arg **function**, not the dict — otherwise setup runs on the driver, not the worker. |
+| Loading the model/checkpoint inside `forward()` | Build it once in the provider (`build_env_local`/worker setup), not per item. |
+| Provider env keys don't match `forward()` parameter names | Injection is by name; mismatched keys are silently dropped unless caught by `**env`, or raise `TypeError: missing required argument`. |
+| Writing shard-local files but leaving `merge()` as the no-op default | Final outputs stay split across `split.N/`; override `merge()` whenever shard outputs must become one final artifact. |
+| Debugging with `resume=True` after changing code/config | See [Resume and locking](#resume-and-locking) — clear `output_dir` or pass `resume=False`. |
 
 ## See also
 
@@ -554,10 +279,10 @@ When a new runner does not behave correctly, check these first:
     href="./inference_provider.html"
   />
   <DocCard
-    title="Parallel Config"
-    desc="Review local, local GPU, and cluster backend settings."
-    icon="tabler:settings"
-    href="../config/parallel.html"
+    title="Data Preparation"
+    desc="Using runners for collect_stats and other data-side jobs."
+    icon="tabler:database"
+    href="./data_preparation.html"
   />
   <DocCard
     title="EnvironmentProvider API"

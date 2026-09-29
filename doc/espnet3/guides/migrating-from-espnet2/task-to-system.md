@@ -197,7 +197,7 @@ So the level of abstraction is simply different.
     title="System and stages"
     desc="Read the overview of `run.py`, stage dispatch, and config mapping."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Stages"

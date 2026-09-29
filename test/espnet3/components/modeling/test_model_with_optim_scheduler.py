@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pytest
 import torch
@@ -335,7 +337,9 @@ def test_multi_path_rejects_top_level_scheduler_metadata():
     module = ESPnetLightningModule(
         DummyMultiModel(["generator", "discriminator"]), config
     )
-    with pytest.raises(AssertionError, match="Top-level `scheduler_interval`"):
+    with pytest.raises(
+        AssertionError, match=re.escape("Top-level ``scheduler_interval``")
+    ):
         module.configure_optimizers()
 
 
@@ -645,7 +649,12 @@ def test_multiple_optimizers_require_optimization_step():
     """
     module = ESPnetLightningModule(DummyTensorLossMultiModel(), make_multi_config())
     module.configure_optimizers()
-    with pytest.raises(AssertionError, match="must be `OptimizationStep`"):
+    with pytest.raises(
+        AssertionError,
+        match=re.escape(
+            "``loss`` must be ``OptimizationStep`` or ``list[OptimizationStep]``"
+        ),
+    ):
         module.training_step(make_train_batch(module), 0)
 
 

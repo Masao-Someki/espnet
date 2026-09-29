@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 
 import numpy as np
@@ -283,7 +284,8 @@ def test_mixed_optim_scheduler_raises(tmp_path, dummy_model, dummy_dataset_confi
     )
     model = ESPnetLightningModule(dummy_model, config)
     with pytest.raises(
-        AssertionError, match="Mixture of `optimizer` and `optimizers` is not allowed."
+        AssertionError,
+        match=re.escape("Mixture of ``optimizer`` and ``optimizers`` is not allowed."),
     ):
         model.configure_optimizers()
 
@@ -303,8 +305,10 @@ def test_missing_optimizer_and_scheduler_raises(
     model = ESPnetLightningModule(dummy_model, config)
     with pytest.raises(
         ValueError,
-        match="Must specify either `optimizer` or `optimizers` and `scheduler` or"
-        "`schedulers`",
+        match=re.escape(
+            "Must specify either ``optimizer`` or ``optimizers`` and "
+            "``scheduler`` or``schedulers``"
+        ),
     ):
         model.configure_optimizers()
 
@@ -339,7 +343,9 @@ def test_validate_multi_loss_steps_rejects_non_step_items(
     )
     model = ESPnetLightningModule(dummy_model, config)
 
-    with pytest.raises(AssertionError, match="must be an `OptimizationStep`"):
+    with pytest.raises(
+        AssertionError, match=re.escape("must be an ``OptimizationStep``")
+    ):
         model._validate_multi_loss_steps([object()])
 
 
@@ -354,7 +360,9 @@ def test_log_stats_rejects_non_dict_stats(tmp_path, dummy_model, dummy_dataset_c
     )
     model = ESPnetLightningModule(dummy_model, config)
 
-    with pytest.raises(AssertionError, match="Model output `stats` must be a dict"):
+    with pytest.raises(
+        AssertionError, match=re.escape("Model output ``stats`` must be a dict")
+    ):
         model._log_stats("train", "bad", None)
 
 
@@ -409,7 +417,9 @@ def test_configure_optimizers_rejects_top_level_interval_with_multi_optimizers(
     )
     model = ESPnetLightningModule(dummy_model, config)
 
-    with pytest.raises(AssertionError, match="Top-level `scheduler_interval`"):
+    with pytest.raises(
+        AssertionError, match=re.escape("Top-level ``scheduler_interval``")
+    ):
         model.configure_optimizers()
 
 
@@ -441,7 +451,9 @@ def test_configure_optimizers_rejects_top_level_monitor_with_multi_optimizers(
     )
     model = ESPnetLightningModule(dummy_model, config)
 
-    with pytest.raises(AssertionError, match="Top-level `scheduler_monitor`"):
+    with pytest.raises(
+        AssertionError, match=re.escape("Top-level ``scheduler_monitor``")
+    ):
         model.configure_optimizers()
 
 

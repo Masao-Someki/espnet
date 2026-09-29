@@ -51,7 +51,7 @@ Optional:
 | `parallel.env` | `local` |
 | `parallel.n_workers` | `1` |
 | `input_key` | `speech` |
-| `output_fn` | `src.inference.build_output` |
+| `output_fn` | unset (model output must already be a dict, or a list of dicts in batched mode) |
 | `provider._target_` | `espnet3.systems.base.inference_provider.InferenceProvider` |
 | `runner._target_` | `espnet3.systems.base.inference_runner.InferenceRunner` |
 
@@ -95,7 +95,7 @@ When you use a custom inference stack, provide your own `_target_` and
 arguments. The instantiated object should accept the inputs named by
 `input_key`, and `output_fn` should know how to interpret the return value.
 
-See [Model](../core/components/model.md) for model implementation details.
+See [Model](../core/components/model.html) for model implementation details.
 
 ## Output directory layout
 
@@ -142,7 +142,7 @@ Supported artifact types:
 | `pickle` | `.pkl` | fallback for custom Python objects |
 | `writer` | custom path | uses a user-defined function via `_target_` |
 
-See [Inference stage](../stages/inference.md) for:
+See [Inference stage](../stages/inference.html) for:
 
 - WAV output example
 - custom writer example
@@ -216,10 +216,11 @@ parallel:
 
 Parallel execution details are documented here:
 
-- [Provider / Runner](../core/parallel/provider_runner.md)
-- [Multi-GPU / multi-node](../core/parallel/multiple_gpu.md)
+- [Provider / Runner](../core/parallel/provider_runner.html)
+- [Multi-GPU / multi-node](../guides/scaling/multi-node.html)
 
 ## Related pages
 
-- [Inference stage](../stages/inference.md)
-- [Dataset references and builders](../core/components/datasets.md)
+- [Inference stage](../stages/inference.html)
+- [Dataset references and builders](../core/components/data-organizer.html)
+- [Training configuration](./train_config.html) — see its Resolvers section for `${self_name:}` and friends

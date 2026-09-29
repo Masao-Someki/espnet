@@ -30,7 +30,31 @@ def replace_escaped_tags(content):
 
     def replace_tag(match):
         tag_name = match.group(1)
-        return f"&lt;{tag_name}&gt;"
+        if len(tag_name) > 50:
+            # heuristics to ignore tags with too long names
+            # This might occur with image tags, since they have image data
+            # in base64 format.
+            return match.group(0)
+
+        first_part = tag_name.split()[0]
+
+        # Handle closing tags like </a>, </div>, etc.
+        if first_part.startswith("/"):
+            base_tag = first_part[1:]
+            if base_tag in ALL_HTML_TAGS:
+                return match.group(0)
+            return f"&lt;{tag_name}&gt;"
+
+        if first_part not in ALL_HTML_TAGS or (
+            len(tag_name.split()) > 1 and "=" not in tag_name
+        ):
+            return f"&lt;{tag_name}&gt;"
+
+        end_tag_pattern = re.compile(f"</{first_part}>")
+        end_tag_match = end_tag_pattern.search(content, match.end())
+        if not end_tag_match:
+            return f"&lt;{tag_name}&gt;"
+        return match.group(0)
 
     return tag_pattern.sub(replace_tag, content)
 

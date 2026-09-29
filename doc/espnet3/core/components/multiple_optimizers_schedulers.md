@@ -160,6 +160,12 @@ Rules:
 - epoch schedulers run at epoch end
 - monitored schedulers use `monitor`
 
+**Prefer `valid/*` monitors.** Training stats are logged once per step and are
+not aggregated over the epoch, so a `monitor` such as `train/generator/loss`
+reflects only the last training batch when read at `on_train_epoch_end`, not
+an epoch average. Use `valid/<name>/loss` (or another `valid/*` key) for
+monitored epoch schedulers.
+
 ## Parameter selection
 
 Each `optimizers.<name>.params` selector is matched against trainable parameter
@@ -177,14 +183,14 @@ ESPnet3 validates:
 - no parameter is assigned twice
 - no trainable parameter is left uncovered
 
-## GAN example
+## GAN-style example
 
-The clearest reference is the TTS GAN path:
-
-- `espnet3.systems.tts.models.gan_model.GANTTSLightningModule`
-
-It produces named `OptimizationStep` objects and can control whether generator
-or discriminator runs first.
+No recipe currently ships a GAN model out of the box. To write one, follow the
+`OptimizationStep` contract shown above: return one `OptimizationStep` per
+loss (or a list, when more than one optimizer should update in the same
+batch), name each step to match the corresponding `optimizers.<name>` /
+`schedulers.<name>` key, and order the list to control update order (e.g.
+discriminator first, generator second).
 
 ## Practical rules
 
@@ -213,6 +219,6 @@ or discriminator runs first.
     title="Training configuration"
     desc="See where the optimizer mappings are defined in YAML."
     icon="tabler:settings-2"
-    href="../../config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>

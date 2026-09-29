@@ -26,6 +26,14 @@ model:
   # ...ESPnet2-style config...
 ```
 
+When `task` is set, `model:` is not instantiated by Hydra directly. Instead
+`espnet3.utils.task_utils.get_espnet_model(task, model_config)` resolves the
+ESPnet2 task class, fills in the task's default config, overlays your `model:`
+block on top, and calls the task's own `build_model(...)`. This is the bridge
+that lets ESPnet3 reuse an ESPnet2 task's model construction logic verbatim.
+When `task` is omitted, `model:` must carry its own `_target_` and is
+instantiated directly via Hydra instead.
+
 Tip: you can start from existing ESPnet2 configs under `egs2/*/*/conf/*.yaml`.
 See the [ESPnet2 task reference](#espnet2-task-reference) for task names and
 links to the corresponding recipe docs.
@@ -197,8 +205,8 @@ and per-optimizer gradient clipping.
 If you want to use `collect_stats`, your model should implement `collect_feats()`.
 See:
 
-- Stage doc: `doc/vuepress/src/espnet3/stages/collect-stats.html`
-- Config doc: `doc/vuepress/src/espnet3/core/config/training.html`
+- [Collect-stats stage](../../stages/collect-stats.html)
+- [Training configuration](../../config/train_config.html)
 
 ## Related pages
 
@@ -219,6 +227,6 @@ See:
     title="Training configuration"
     desc="See where model selection and normalization live in YAML."
     icon="tabler:settings-2"
-    href="../../config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>

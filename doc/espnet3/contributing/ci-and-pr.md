@@ -38,12 +38,16 @@ For formatting and style checks, run:
 black espnet3/ test/espnet3/ ci/
 isort espnet3/ test/espnet3/ ci/
 pycodestyle espnet3/ test/espnet3/ ci/
-bash ci/test_flake8.sh espnet3/ ci/
+bash ci/test_flake8.sh espnet3
+pytest -q test/espnet3/
 ```
 
-Some formatting is fixed automatically in CI, but not everything is.
-In practice, many CI failures come from style checks, shell checks, or docstring
-formatting. Running these locally first saves review time.
+`ci/test_flake8.sh` takes exactly one directory argument (the strict,
+docstring-checked target); `ci/test_python_espnet3.sh` calls it as
+`test_flake8.sh espnet3`. Some formatting is fixed automatically in CI, but
+not everything is. In practice, many CI failures come from style checks,
+shell checks, or docstring formatting. Running these locally first saves
+review time.
 
 ## Test what you change
 

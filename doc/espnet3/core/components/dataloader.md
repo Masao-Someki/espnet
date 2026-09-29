@@ -10,7 +10,7 @@ date: 2025-11-26
 This page summarizes how `dataloader` and `collate_fn` work in ESPnet3. It
 supports both the ESPnet iterator setup and the standard PyTorch DataLoader; we
 explain the ESPnet flow first. For full configuration options, see
-[training config reference](../../config/train_config.md).
+[training config reference](../../config/train_config.html).
 
 The same dataloader block is reused by both `collect_stats` and `train`.
 
@@ -174,6 +174,14 @@ dataloader:
 ```
 
 `multiple_iterator` is not supported in current ESPnet3.
+
+::: tip
+Sharding (`total_shards`/`dist_world_size`) is a **dataset-level** concept, not
+a `dataloader:` key — `DataLoaderBuilder` reads those two attributes off the
+dataset instance, not off this config block. See
+[Dataset sharding](../../guides/scaling/dataset-sharding.html) for the actual
+wiring and its constraints.
+:::
 
 ### Iterator factories (ESPnet2)
 

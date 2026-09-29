@@ -146,13 +146,13 @@ So the old and new knobs are related, but not identical.
     title="Parallel Config"
     desc="See how n_workers and backend settings are expressed in YAML."
     icon="tabler:settings-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Parallel Runtime"
     desc="See how ESPnet3 maps work locally or through Dask."
     icon="tabler:binary-tree-2"
-    href="../../core/parallel/"
+    href="../../core/parallel/index.html"
   />
   <DocCard
     title="Config Diff"
@@ -198,7 +198,7 @@ keep the Python execution path the same.
     title="Parallel Config"
     desc="See local, local GPU, and cluster backend examples."
     icon="tabler:server"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Provider and Runner"
@@ -210,7 +210,7 @@ keep the Python execution path the same.
     title="System and Stages"
     desc="See how stage code receives config and launches stage behavior."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
 </DocCards>
 
@@ -247,7 +247,7 @@ The closest current examples are:
     title="Stats Collection"
     desc="See how collect_stats uses dataloader and runner-style execution."
     icon="tabler:gauge"
-    href="../../core/stats-collection.html"
+    href="../../stages/collect-stats.html"
   />
 </DocCards>
 
@@ -290,7 +290,7 @@ So the mapping is roughly:
     title="Dataset Config"
     desc="See how prepared data becomes train, valid, and test config."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
 </DocCards>
 
@@ -341,7 +341,7 @@ Use provider/runner when the work is actually parallel-shaped:
     title="Parallel overview"
     desc="Read the developer-facing provider and runner architecture."
     icon="tabler:binary-tree-2"
-    href="../../core/parallel/"
+    href="../../core/parallel/index.html"
   />
   <DocCard
     title="Provider / Runner"
@@ -353,7 +353,7 @@ Use provider/runner when the work is actually parallel-shaped:
     title="Parallel config"
     desc="See how local, local GPU, and HPC backends are configured in YAML."
     icon="tabler:settings-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Task to system"

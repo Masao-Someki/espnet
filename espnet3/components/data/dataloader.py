@@ -2,12 +2,14 @@
 
 import copy
 import logging
+from functools import partial
 
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.samplers.build_batch_sampler import build_batch_sampler
+from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.logging_utils import _dump_attrs, build_qualified_name
 
 logger = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ def log_dataloader(logger: logging.Logger, loader, label: str) -> None:
         seen=set(),
     )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,14 +66,16 @@ class DataLoaderBuilder:
         epoch (int): Current epoch number. Used to reseed samplers deterministically.
 
     Example:
-        builder = DataLoaderBuilder(
-            dataset=train_dataset,
-            config=config,
-            collate_fn=collate_fn,
-            num_device=4,
-            epoch=3
-        )
-        train_loader = builder.build(mode="train")
+        .. code-block:: python
+
+            builder = DataLoaderBuilder(
+                dataset=train_dataset,
+                config=config,
+                collate_fn=collate_fn,
+                num_device=4,
+                epoch=3,
+            )
+            train_loader = builder.build(mode="train")
     """
 
     def __init__(self, dataset, config, collate_fn, num_device: int, epoch: int):
@@ -82,7 +87,16 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def _get_world_info(self):
-        if self.num_device > 1:
+        """Return world info.
+
+        ``num_device > 1`` alone misses the multi-node, one-GPU-per-node case
+        (world_size > 1 but num_device == 1 on each node), so this also treats
+        an already-initialized ``torch.distributed`` process group as
+        distributed.
+        """
+        if self.num_device > 1 or (
+            torch.distributed.is_available() and torch.distributed.is_initialized()
+        ):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
         else:
@@ -191,10 +205,37 @@ class DataLoaderBuilder:
 
         Raises:
             ValueError: If the provided mode is neither "train" nor "valid".
+            RuntimeError: If ``iter_factory`` is configured together with
+                ``total_shards > 1`` on the dataset. Shape-file batches are
+                keyed by the unsharded dataset's index space, so after
+                ``dataset.shard()`` they would resolve to different
+                utterances (or go out of range) instead of raising -- this
+                combination is unsupported and rejected before any batch
+                sampler is built. Set ``data_src_args.total_shards: 1``, or
+                use the standard DataLoader path
+                (``dataloader.<mode>.iter_factory: null``) together with
+                ``trainer.use_distributed_sampler: false``.
         """
         mode_config = getattr(self.config.dataloader, mode, DictConfig({}))
 
         config = copy.copy(mode_config)
+
+        total_shards = getattr(self.dataset.datasets[0], "total_shards", None)
+        if (
+            config.iter_factory is not None
+            and total_shards is not None
+            and total_shards > 1
+        ):
+            raise RuntimeError(
+                "iter_factory cannot be combined with total_shards > 1: "
+                "shape-file batches are keyed by the unsharded dataset and "
+                "would resolve to different utterances after "
+                "dataset.shard(). Set data_src_args.total_shards: 1, or use "
+                "the standard DataLoader path "
+                "(dataloader.<mode>.iter_factory: null) and set "
+                "trainer.use_distributed_sampler: false."
+            )
+
         dataset = self._maybe_shard_dataset(self.dataset)
         if hasattr(config, "multiple_iterator"):
             raise RuntimeError(
@@ -220,6 +261,7 @@ class DataLoaderBuilder:
         return self._build_standard_dataloader(config, dataset)
 
     def _build_standard_dataloader(self, dataloader_config, dataset=None, mode="train"):
+        """Build standard dataloader."""
         if dataset is None:
             dataset = self.dataset
 
@@ -253,6 +295,7 @@ class DataLoaderBuilder:
         return loader
 
     def _build_iter_factory(self, factory_config, dataset=None, mode="train"):
+        """Build iter factory."""
         if dataset is None:
             dataset = self.dataset
 
@@ -279,12 +322,15 @@ class DataLoaderBuilder:
                 )
                 batches = batches[:keep]
                 total_batches = len(batches)
-            for batch in batches:
-                if len(batch) < world_size:
-                    raise RuntimeError(
-                        "The batch-size must be equal or more than world_size:"
-                        f"{len(batch)} < {world_size}"
-                    )
+            # Each rank takes every world_size-th whole batch, so per-rank
+            # batch size equals the configured batch size and batches of any
+            # size shard correctly - including the mandatory single-utterance
+            # batches of espnet2's ChunkIterFactory. A `len(batch) >=
+            # world_size` check would only apply to espnet2's element-wise
+            # split (`[batch[rank::world_size] for batch in batches]`,
+            # espnet2/tasks/abs_task.py build_sequence_iter_factory); its own
+            # chunk path (build_chunk_iter_factory) strides whole batches
+            # like this without any such check.
             batches = batches[rank::world_size]
             if mode not in _LOGGED_DISTRIBUTED_BATCHES:
                 logger.info(
@@ -299,10 +345,14 @@ class DataLoaderBuilder:
                 _LOGGED_DISTRIBUTED_BATCHES.add(mode)
 
         iter_factory = instantiate(factory_config, dataset, batches=batches)
-        iterator = iter_factory.build_iter(self.epoch, shuffle=False)
+        # espnet2 iter factories count epochs from 1 (their RNGs seed with
+        # epoch - 1), while self.epoch is Lightning's 0-based current_epoch;
+        # _maybe_shard_dataset keeps the 0-based convention.
+        espnet2_epoch = self.epoch + 1
+        loader = EpochSyncIterator(partial(iter_factory.build_iter, espnet2_epoch))
         log_dataloader(
             logger,
-            iterator,
+            loader,
             label=mode,
         )
-        return iterator
+        return loader

@@ -15,8 +15,8 @@ from espnet3.publication.demo.packing import upload_demo as _upload_demo
 from espnet3.systems.base.inference import infer
 from espnet3.systems.base.metric import measure
 from espnet3.systems.base.training import collect_stats, train
-from espnet3.utils.publish_utils import pack_model as _pack_model
-from espnet3.utils.publish_utils import upload_model as _upload_model
+from espnet3.utils.publication_utils import pack_model as _pack_model
+from espnet3.utils.publication_utils import upload_model as _upload_model
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class BaseSystem:
             datasets directly.
 
     **Expected stage methods.**
+
       - create_dataset()
       - train()
       - infer()
@@ -52,18 +53,25 @@ class BaseSystem:
             paths (e.g., ``"training_config.exp_dir"``) or lists/tuples of such
             paths (first non-empty value wins).
 
-    Stage log mapping (base defaults):
-        | Stage          | Path reference                              |
-        |---             |---                                          |
-        | create_dataset | ``training_config.data_dir``            |
-        | collect_stats  | ``training_config.stats_dir``           |
-        | train          | ``training_config.exp_dir``             |
-        | infer          | ``inference_config.inference_dir``      |
-        | measure        | ``metrics_config.inference_dir``        |
-        | pack_model     | ``training_config.exp_dir``             |
-        | upload_model   | ``training_config.exp_dir``             |
-        | pack_demo      | ``demo_config.pack.out_dir``            |
-        | upload_demo    | ``demo_config.pack.out_dir``            |
+    Default stage-log mappings:
+
+    .. list-table::
+       :header-rows: 1
+
+       * - Stage
+         - Path reference
+       * - ``create_dataset``
+         - ``training_config.data_dir``
+       * - ``collect_stats``
+         - ``training_config.stats_dir``
+       * - ``train``, ``pack_model``, ``upload_model``
+         - ``training_config.exp_dir``
+       * - ``infer``
+         - ``inference_config.inference_dir``
+       * - ``measure``
+         - ``metrics_config.inference_dir``
+       * - ``pack_demo``, ``upload_demo``
+         - ``demo_config.pack.out_dir``
 
     Any stage missing from the mapping (or resolving to ``None``) falls back
     to the default log directory: ``training_config.exp_dir`` when available,
@@ -72,17 +80,17 @@ class BaseSystem:
     Examples:
         **Override a subset of stage log paths.**
 
-            .. code-block:: python
+        .. code-block:: python
 
-                system = BaseSystem(
-                    training_config=train_cfg,
-                    inference_config=infer_cfg,
-                    metrics_config=measure_cfg,
-                    stage_log_mapping={
-                        "infer": "training_config.exp_dir",
-                        "measure": "training_config.exp_dir",
-                    },
-                )
+            system = BaseSystem(
+                training_config=train_cfg,
+                inference_config=infer_cfg,
+                metrics_config=measure_cfg,
+                stage_log_mapping={
+                    "infer": "training_config.exp_dir",
+                    "measure": "training_config.exp_dir",
+                },
+            )
     """
 
     DATASET_BUILDER_CLASS_NAME = "DatasetBuilder"
@@ -196,6 +204,29 @@ class BaseSystem:
                 f"Stage '{stage}' does not accept arguments. "
                 "Put all settings in the YAML config."
             )
+
+    @staticmethod
+    def _get_required_config(config, key: str, error_message: str):
+        """Return ``config[key]``, raising ``RuntimeError`` when missing.
+
+        Args:
+            config: Dict-like config (e.g. ``DictConfig``) to read from.
+                ``None`` is treated the same as a missing key.
+            key: Field name to extract.
+            error_message: Message for the ``RuntimeError`` raised when the
+                field is absent or ``None``.
+
+        Returns:
+            The value stored under ``key``.
+
+        Raises:
+            RuntimeError: If ``config`` is ``None`` or ``config[key]`` is
+                missing or ``None``.
+        """
+        value = config.get(key, None) if config is not None else None
+        if value is None:
+            raise RuntimeError(error_message)
+        return value
 
     # ---------------------------------------------------------
     # Stage stubs (override in subclasses if needed)

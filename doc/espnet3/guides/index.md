@@ -10,8 +10,8 @@ Guides are goal-oriented. Pick the track that matches what you want to do.
     href="./scaling/index.html"
   />
   <DocCard
-    title="Finetuning"
-    desc="Load a checkpoint, adapt configs, freeze layers, and evaluate a finetuned model."
+    title="Customize"
+    desc="Adapt a dataset, model, or training loop for your ESPnet3 experiment."
     icon="tabler:adjustments"
     href="./finetuning/index.html"
   />
@@ -34,21 +34,9 @@ Guides are goal-oriented. Pick the track that matches what you want to do.
     href="./coming-from-other-toolkits/index.html"
   />
   <DocCard
-    title="Running a baseline"
-    desc="Run inference, evaluate metrics, and execute a recipe on a cluster."
-    icon="tabler:player-play"
-    href="./running-a-baseline/index.html"
-  />
-  <DocCard
     title="Production deployment"
     desc="Connect research workflows to an optional production ASR serving backend."
     icon="tabler:server"
     href="./deployment/funasr.html"
-  />
-  <DocCard
-    title="Customize ESPnet3"
-    desc="Add system-specific stages and extend the pipeline beyond the defaults."
-    icon="tabler:tool"
-    href="./customize/index.html"
   />
 </DocCards>

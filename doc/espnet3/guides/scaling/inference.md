@@ -302,13 +302,13 @@ outputs stay in shard-local `split.N/` directories and are never combined.
     title="Parallel Config"
     desc="All env values, n_workers, and backend-specific options."
     icon="tabler:settings-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Inference Config"
     desc="Full schema for provider, runner, dataset, output_fn, and artifacts."
     icon="tabler:wave-sine"
-    href="../../core/config/inference.html"
+    href="../../config/infer_config.html"
   />
   <DocCard
     title="Provider and Runner"

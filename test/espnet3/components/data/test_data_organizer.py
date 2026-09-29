@@ -1,4 +1,6 @@
 # test_data_organizer.py
+import logging
+
 import numpy as np
 import pytest
 from hydra.utils import instantiate
@@ -81,6 +83,12 @@ DUMMY_SHARDED_DATA_SRC = "dummy/sharded"
 DUMMY_PREPROCESSOR_TARGET = (
     "test.espnet3.components.data.test_data_organizer.DummyPreprocessor"
 )
+SPLIT_RECORDING_PREPROCESSOR_TARGET = (
+    "test.espnet3.components.data.test_data_organizer.SplitRecordingPreprocessor"
+)
+ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET = (
+    "test.espnet3.components.data." "test_data_organizer.TrainFlagRecordingPreprocessor"
+)
 
 
 # Dummy classes
@@ -97,6 +105,17 @@ class DummyPreprocessor:
         return {
             "audio": sample["audio"],
             "text": f"[dummy] {sample['text']}",
+        }
+
+
+class SplitRecordingPreprocessor:
+    def __init__(self, tag: str):
+        self.tag = tag
+
+    def __call__(self, sample):
+        return {
+            "audio": sample["audio"],
+            "text": f"[{self.tag}] {sample['text']}",
         }
 
 
@@ -122,6 +141,16 @@ class RecordingESPnetPreprocessor(AbsPreprocessor):
             "audio": sample["audio"],
             "text": f"[espnet:{uid}] {sample['text']}",
         }
+
+
+class TrainFlagRecordingPreprocessor(AbsPreprocessor):
+    """Records the train flag value at call time so tests can assert it."""
+
+    def __init__(self, train: bool = False):
+        super().__init__(train=train)
+
+    def __call__(self, uid, sample):
+        return {**sample, "was_train": self.train}
 
 
 class DummyDataset:
@@ -208,6 +237,49 @@ class DummyOverrideDataset(DummyDataset):
             {"audio": np.random.random(16000), "text": "override"},
             {"audio": np.random.random(16000), "text": "winner"},
         ]
+
+
+class StableIdDataset:
+    """Int-addressable dataset that opts into the stable UID protocol."""
+
+    def __init__(self, items):
+        # items: list[(utt_id, text)]
+        self.items = list(items)
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        _utt_id, text = self.items[idx]
+        return {"audio": np.random.random(16000), "text": text}
+
+    def get_utt_id(self, idx: int) -> str:
+        return self.items[idx][0]
+
+
+class StableIdShardedDataset(ShardedDataset):
+    """ShardedDataset whose shard() returns a torch Subset (recommended shape)."""
+
+    def __init__(self, items, total_shards: int = 2, dist_world_size: int = 1):
+        self.items = list(items)
+        self.total_shards = total_shards
+        self.dist_world_size = dist_world_size
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        _utt_id, text = self.items[idx]
+        return {"audio": np.random.random(16000), "text": text}
+
+    def get_utt_id(self, idx: int) -> str:
+        return self.items[idx][0]
+
+    def shard(self, idx):
+        from torch.utils.data import Subset
+
+        indices = [i for i in range(len(self.items)) if i % self.total_shards == idx]
+        return Subset(self, indices)
 
 
 def _entry(name: str, *, transform: bool = False, data_src: str = DUMMY_DATA_SRC):
@@ -604,6 +676,101 @@ def test_data_organizer_accepts_raw_configs():
     assert organizer.valid[0]["text"] == "[dummy] hello"
 
 
+def test_data_organizer_split_preprocessor_uses_shared_fallback(caplog):
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+        "test": [_entry("test_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+            "tag": "shared",
+            "train": {"tag": "train"},
+        }
+    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.data_organizer",
+    ):
+        organizer = DataOrganizer(
+            train=config["train"],
+            valid=config["valid"],
+            test=config["test"],
+            preprocessor=preprocessor_cfg,
+        )
+    assert organizer.train[0]["text"] == "[train] hello"
+    assert organizer.valid[0]["text"] == "[train] hello"
+    assert organizer.test["test_dummy"][0]["text"] == "[train] hello"
+    assert any("missing 'valid'" in r.message for r in caplog.records)
+    assert any("missing 'test'" in r.message for r in caplog.records)
+
+
+def test_data_organizer_split_preprocessor_uses_valid_for_test_by_default(caplog):
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+        "test": [_entry("test_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "train": {
+                "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+                "tag": "train",
+            },
+            "valid": {
+                "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+                "tag": "valid",
+            },
+        }
+    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.data_organizer",
+    ):
+        organizer = DataOrganizer(
+            train=config["train"],
+            valid=config["valid"],
+            test=config["test"],
+            preprocessor=preprocessor_cfg,
+        )
+    assert organizer.train[0]["text"] == "[train] hello"
+    assert organizer.valid[0]["text"] == "[valid] hello"
+    assert organizer.test["test_dummy"][0]["text"] == "[valid] hello"
+    assert any("missing 'test'" in r.message for r in caplog.records)
+
+
+def test_data_organizer_split_preprocessor_allows_test_override():
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+        "test": [_entry("test_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "train": {
+                "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+                "tag": "train",
+            },
+            "valid": {
+                "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+                "tag": "valid",
+            },
+            "test": {
+                "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+                "tag": "test",
+            },
+        }
+    )
+    organizer = DataOrganizer(
+        train=config["train"],
+        valid=config["valid"],
+        test=config["test"],
+        preprocessor=preprocessor_cfg,
+    )
+    assert organizer.test["test_dummy"][0]["text"] == "[test] hello"
+
+
 def test_data_organizer_passes_recipe_dir_to_ref_less_entries(monkeypatch):
     captured = []
 
@@ -652,6 +819,25 @@ def test_data_organizer_train_only_assertion():
     }
     with pytest.raises(RuntimeError):
         DataOrganizer(train=config["train"])
+
+
+def test_data_organizer_valid_only_assertion():
+    config = {
+        "valid": [_entry("valid_dummy")]
+        # train is missing
+    }
+    with pytest.raises(RuntimeError):
+        DataOrganizer(valid=config["valid"])
+
+
+def test_data_organizer_train_and_test_without_valid_assertion():
+    config = {
+        "train": [_entry("train_dummy")],
+        "test": [_entry("test_dummy")],
+        # valid is missing
+    }
+    with pytest.raises(RuntimeError):
+        DataOrganizer(train=config["train"], test=config["test"])
 
 
 def test_data_organizer_empty_train_valid_ok():
@@ -824,3 +1010,326 @@ def test_combined_dataset_sharded_metadata_mismatch():
             transforms=[(DummyTransform(), DummyPreprocessor())] * 2,
             use_espnet_preprocessor=False,
         )
+
+
+# -----------------------------------------------------------------------
+# ESPnet preprocessor train-flag auto-setting
+# -----------------------------------------------------------------------
+
+
+def test_espnet_preprocessor_train_flag_auto_set_from_dictconfig():
+    """Config-based AbsPreprocessor: train split gets train=True, valid gets False."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {"_target_": ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET}
+    )
+    organizer = DataOrganizer(
+        train=config["train"],
+        valid=config["valid"],
+        preprocessor=preprocessor_cfg,
+    )
+    assert organizer.train[0]["was_train"] is True
+    assert organizer.valid[0]["was_train"] is False
+
+
+def test_espnet_preprocessor_train_flag_auto_set_from_plain_dict():
+    """Plain-dict config for AbsPreprocessor: same auto-setting as DictConfig."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    preprocessor_cfg = {"_target_": ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET}
+    organizer = DataOrganizer(
+        train=config["train"],
+        valid=config["valid"],
+        preprocessor=preprocessor_cfg,
+    )
+    assert organizer.train[0]["was_train"] is True
+    assert organizer.valid[0]["was_train"] is False
+
+
+def test_espnet_preprocessor_train_flag_auto_set_from_instance():
+    """Already-instantiated AbsPreprocessor: deepcopy for train, original for valid."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    pp = TrainFlagRecordingPreprocessor(train=False)
+    organizer = DataOrganizer(
+        train=config["train"],
+        valid=config["valid"],
+        preprocessor=pp,
+    )
+    assert organizer.train[0]["was_train"] is True
+    assert organizer.valid[0]["was_train"] is False
+
+
+def test_espnet_preprocessor_test_split_uses_train_false():
+    """Test-only setup: AbsPreprocessor is called with train=False."""
+    preprocessor_cfg = OmegaConf.create(
+        {"_target_": ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET}
+    )
+    organizer = DataOrganizer(
+        test=[_entry("test_dummy")],
+        preprocessor=preprocessor_cfg,
+    )
+    assert organizer.test["test_dummy"][0]["was_train"] is False
+
+
+def test_espnet_preprocessor_instance_test_split_uses_train_false():
+    """Test-only instance setup uses train=False."""
+    pp = TrainFlagRecordingPreprocessor(train=True)
+    organizer = DataOrganizer(
+        test=[_entry("test_dummy")],
+        preprocessor=pp,
+    )
+    assert organizer.test["test_dummy"][0]["was_train"] is False
+
+
+def test_espnet_preprocessor_split_config_allows_missing_valid(caplog):
+    """Missing valid/test configs fall back to no-op with ESPnet call shape."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+        "test": [_entry("test_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "train": {"_target_": ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET},
+        }
+    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.data_organizer",
+    ):
+        organizer = DataOrganizer(
+            train=config["train"],
+            valid=config["valid"],
+            test=config["test"],
+            preprocessor=preprocessor_cfg,
+        )
+    assert organizer.train[0]["was_train"] is True
+    assert organizer.valid[0]["was_train"] is False
+    assert organizer.test["test_dummy"][0]["was_train"] is False
+    assert any("missing 'valid'" in r.message for r in caplog.records)
+    assert any("missing 'test'" in r.message for r in caplog.records)
+
+
+def test_data_organizer_split_preprocessor_missing_train_warns(caplog):
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "_target_": SPLIT_RECORDING_PREPROCESSOR_TARGET,
+            "tag": "shared",
+            "valid": {
+                "tag": "valid",
+            },
+        }
+    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.data_organizer",
+    ):
+        organizer = DataOrganizer(
+            train=config["train"],
+            valid=config["valid"],
+            preprocessor=preprocessor_cfg,
+        )
+    assert organizer.train[0]["text"] == "hello"
+    assert organizer.valid[0]["text"] == "[valid] hello"
+    assert any("missing 'train'" in r.message for r in caplog.records)
+    assert any("missing 'test'" in r.message for r in caplog.records)
+
+
+def test_custom_preprocessor_same_instance_for_all_splits():
+    """Non-AbsPreprocessor: the exact same callable is used for train and valid."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    pp = DummyPreprocessor()
+    organizer = DataOrganizer(
+        train=config["train"],
+        valid=config["valid"],
+        preprocessor=pp,
+    )
+    _, (_, train_pp) = next(
+        (d, t) for d, t in zip(organizer.train.datasets, organizer.train.transforms)
+    )
+    _, (_, valid_pp) = next(
+        (d, t) for d, t in zip(organizer.valid.datasets, organizer.valid.transforms)
+    )
+    assert train_pp is pp
+    assert valid_pp is pp
+
+
+def test_espnet_preprocessor_explicit_train_in_config_warns(caplog):
+    """Explicit 'train' key in ESPnet preprocessor config emits a warning."""
+    config = {
+        "train": [_entry("train_dummy")],
+        "valid": [_entry("valid_dummy")],
+    }
+    preprocessor_cfg = OmegaConf.create(
+        {
+            "_target_": ESPNET_TRAIN_FLAG_PREPROCESSOR_TARGET,
+            "train": False,
+        }
+    )
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.data_organizer",
+    ):
+        organizer = DataOrganizer(
+            train=config["train"],
+            valid=config["valid"],
+            preprocessor=preprocessor_cfg,
+        )
+    assert any("train" in r.message.lower() for r in caplog.records)
+    # Flag is still auto-set correctly despite the explicit config value.
+    assert organizer.train[0]["was_train"] is True
+    assert organizer.valid[0]["was_train"] is False
+
+
+# -----------------------------------------------------------------------
+# T1: stable UID protocol (get_uid / uids / has_stable_uids)
+# -----------------------------------------------------------------------
+
+
+def test_combined_dataset_get_uid_uses_get_utt_id():
+    items = [("utt_a", "hello"), ("utt_b", "world")]
+    ds = StableIdDataset(items)
+    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+
+    assert combined.has_stable_uids is True
+    assert [combined.get_uid(i) for i in range(len(combined))] == ["utt_a", "utt_b"]
+    assert combined.uids() == ["utt_a", "utt_b"]
+
+
+def test_combined_dataset_stable_uid_survives_reorder():
+    items = [("utt_a", "hello"), ("utt_b", "world")]
+    combined_a = CombinedDataset([StableIdDataset(items)], [(do_nothing, do_nothing)])
+    combined_b = CombinedDataset(
+        [StableIdDataset(list(reversed(items)))], [(do_nothing, do_nothing)]
+    )
+
+    # Same UID resolves to the same underlying text regardless of dataset order.
+    assert combined_a["utt_b"]["text"] == combined_b["utt_b"]["text"] == "world"
+    # But positional (int) access differs since the order was reversed.
+    assert combined_a[0]["text"] != combined_b[0]["text"]
+
+
+def test_combined_dataset_uid_falls_back_to_index_without_get_utt_id(caplog):
+    ds = DummyDataset()
+    with caplog.at_level(
+        logging.WARNING,
+        logger="espnet3.components.data.dataset",
+    ):
+        combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+
+    assert combined.has_stable_uids is False
+    assert combined.get_uid(0) == "0"
+    assert combined.get_uid(1) == "1"
+    assert any("position" in r.message for r in caplog.records)
+
+
+def test_combined_dataset_duplicate_stable_uid_raises():
+    ds1 = StableIdDataset([("utt_a", "hello")])
+    ds2 = StableIdDataset([("utt_a", "world")])
+    with pytest.raises(ValueError, match="Duplicate utterance ID 'utt_a'"):
+        CombinedDataset(
+            [ds1, ds2],
+            [(do_nothing, do_nothing), (do_nothing, do_nothing)],
+        )
+
+
+def test_combined_dataset_numeric_utt_id_not_confused_with_index():
+    # utt_id "3" lives at position 0; combined["3"] must resolve via get_utt_id,
+    # not via int("3") == 3 (out of range for this 1-item dataset anyway).
+    ds = StableIdDataset([("3", "target")])
+    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+
+    assert combined["3"]["text"] == "target"
+    assert combined[0]["text"] == "target"
+
+
+# -----------------------------------------------------------------------
+# T4 (shard flag, F-A): shard() preserves use_espnet_collator and stable UIDs
+# -----------------------------------------------------------------------
+
+
+def test_sharded_combined_dataset_keeps_collator_flag():
+    ds1 = DummyShardedDataset(shard_id=0)
+    ds2 = DummyShardedDataset(shard_id=0)
+    combined = CombinedDataset(
+        [ds1, ds2],
+        [(DummyTransform(), do_nothing), (DummyTransform(), do_nothing)],
+    )
+    combined.use_espnet_collator = True
+
+    sharded = combined.shard(1)
+
+    assert sharded.use_espnet_collator is True
+    item = sharded[0]
+    assert isinstance(item, tuple)
+    uid, sample = item
+    assert isinstance(uid, str)
+    assert sample["text"] == "SHARD1_HELLO"
+
+
+def test_sharded_combined_dataset_preserves_stable_uid_via_shard_view():
+    items = [("utt_a", "a"), ("utt_b", "b"), ("utt_c", "c"), ("utt_d", "d")]
+    ds = StableIdShardedDataset(items, total_shards=2, dist_world_size=1)
+    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+
+    shard0 = combined.shard(0)
+    shard1 = combined.shard(1)
+
+    # Shard 0 keeps items at original indices 0, 2 -> utt_a, utt_c.
+    assert shard0.has_stable_uids is True
+    assert set(shard0.uids()) == {"utt_a", "utt_c"}
+    assert shard0["utt_a"]["text"] == "a"
+    # Shard 1 keeps items at original indices 1, 3 -> utt_b, utt_d.
+    assert set(shard1.uids()) == {"utt_b", "utt_d"}
+    assert shard1["utt_d"]["text"] == "d"
+
+
+def test_sharded_combined_dataset_shard_view_rejects_non_subset_without_get_utt_id():
+    class BrokenShardStableDataset(ShardedDataset):
+        def __init__(self):
+            self.items = [("utt_a", "a")]
+            self.total_shards = 1
+            self.dist_world_size = 1
+
+        def __len__(self):
+            return len(self.items)
+
+        def __getitem__(self, idx):
+            return {"audio": np.random.random(16000), "text": self.items[idx][1]}
+
+        def get_utt_id(self, idx):
+            return self.items[idx][0]
+
+        def shard(self, idx):
+            # Neither a Subset nor an object exposing get_utt_id.
+            return list(self.items)
+
+    combined = CombinedDataset([BrokenShardStableDataset()], [(do_nothing, do_nothing)])
+    with pytest.raises(
+        RuntimeError, match="must return a Subset or an object exposing get_utt_id"
+    ):
+        combined.shard(0)
+
+
+def test_combined_dataset_negative_index_raises_index_error():
+    ds = DummyDataset()
+    combined = CombinedDataset([ds], [(do_nothing, do_nothing)])
+    with pytest.raises(IndexError, match="Index out of range"):
+        combined[-1]
+    with pytest.raises(IndexError, match="Index out of range"):
+        combined.get_uid(-1)

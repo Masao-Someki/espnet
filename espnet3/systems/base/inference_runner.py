@@ -3,18 +3,34 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+import numpy as np
+import torch
 from omegaconf import ListConfig
+
+try:
+    from espnet2.torch_utils.device_funcs import is_out_of_memory_error
+except ImportError:
+
+    def is_out_of_memory_error(error: BaseException) -> bool:
+        """Recognize common OOM errors on ESPnet2 versions without the helper."""
+        return "out of memory" in str(error).lower()
+
 
 from espnet3.parallel.base_runner import BaseRunner, concatenate_shard_files
 from espnet3.parallel.env_provider import EnvironmentProvider
 from espnet3.utils.writer_utils import write_artifact
 
 logger = logging.getLogger(__name__)
+
+# models already reported as not taking a batch, so that a long test set
+# does not repeat the warning once per batch
+_WARNED_UNBATCHED: set = set()
 
 
 def _normalize_key_list(keys) -> List[str]:
@@ -23,6 +39,17 @@ def _normalize_key_list(keys) -> List[str]:
     if isinstance(keys, (list, tuple, ListConfig)):
         return list(keys)
     return [keys]
+
+
+def _input_lengths(inputs_dict: Dict[str, List[Any]]) -> Dict[str, List[Any]]:
+    """Length of every array-like input, per key, for an error message."""
+    lengths = {}
+    for key, values in inputs_dict.items():
+        lengths[key] = [
+            (v.shape[0] if hasattr(v, "shape") and len(v.shape) > 0 else None)
+            for v in values
+        ]
+    return lengths
 
 
 def _iter_outputs(result: Any) -> List[Dict[str, Any]]:
@@ -44,39 +71,29 @@ def _materialize_output_value(
     if isinstance(value, (str, int, float, bool)):
         return value
 
-    try:
-        import numpy as np
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        if value.ndim == 0:
+            return value.item()
+        artifact_dir = output_dir / field_key
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        return write_artifact(
+            value,
+            artifact_dir / str(idx_value),
+            field_config=artifact_config,
+        ).as_posix()
 
-        if isinstance(value, np.generic):
-            return value
-        if isinstance(value, np.ndarray):
-            if value.ndim == 0:
-                return value.item()
-            artifact_dir = output_dir / field_key
-            artifact_dir.mkdir(parents=True, exist_ok=True)
-            return write_artifact(
-                value,
-                artifact_dir / str(idx_value),
-                field_config=artifact_config,
-            ).as_posix()
-    except ImportError:
-        pass
-
-    try:
-        import torch
-
-        if isinstance(value, torch.Tensor):
-            if value.dim() == 0:
-                return value.item()
-            artifact_dir = output_dir / field_key
-            artifact_dir.mkdir(parents=True, exist_ok=True)
-            return write_artifact(
-                value,
-                artifact_dir / str(idx_value),
-                field_config=artifact_config,
-            ).as_posix()
-    except ImportError:
-        pass
+    if isinstance(value, torch.Tensor):
+        if value.dim() == 0:
+            return value.item()
+        artifact_dir = output_dir / field_key
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        return write_artifact(
+            value,
+            artifact_dir / str(idx_value),
+            field_config=artifact_config,
+        ).as_posix()
 
     if isinstance(value, (list, tuple)):
         raise TypeError(
@@ -85,17 +102,13 @@ def _materialize_output_value(
             "dict so it can be saved as JSON."
         )
 
-    logger.warning(
-        "Unsupported output type '%s' for field '%s'. "
-        "Supported: str, int, float, bool, np.ndarray, torch.Tensor.",
-        type(value).__name__,
-        field_key,
-    )
-    raise TypeError(
-        f"Unsupported output type '{type(value).__name__}' for field "
-        f"'{field_key}'. Supported: str, int, float, bool, "
-        "np.ndarray, torch.Tensor."
-    )
+    artifact_dir = output_dir / field_key
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    return write_artifact(
+        value,
+        artifact_dir / str(idx_value),
+        field_config=artifact_config,
+    ).as_posix()
 
 
 class InferenceRunner(BaseRunner):
@@ -108,7 +121,7 @@ class InferenceRunner(BaseRunner):
     fields. ``idx_key`` is the key used to map each inference result to
     its source dataset index when writing SCP files.
 
-    **Output format requirements.**
+    Output format requirements:
         - The result is a dict with the configured keys plus any extra fields.
         - A sample identifier key must exist under ``idx_key`` so SCP outputs
           can map each result back to the corresponding dataset sample.
@@ -116,31 +129,6 @@ class InferenceRunner(BaseRunner):
         - ``hyp_key`` and ``ref_key`` values may be scalars or lists/tuples.
           If lists are returned, each entry is written to its own SCP file
           (e.g., ``hyp0.scp``, ``hyp1.scp``).
-
-    Args:
-        provider (EnvironmentProvider): Provider that supplies dataset/model/env.
-        idx_key (str): Output dict key used as the sample identifier in SCP
-            files. Defaults to ``"utt_id"``.
-        hyp_key (str | Sequence[str]): Hypothesis key(s) expected in output.
-        ref_key (str | Sequence[str]): Reference key(s) expected in output.
-        **kwargs: Forwarded to ``BaseRunner`` (e.g., ``output_dir``,
-            ``batch_size``, ``resume``).
-
-    Example:
-        >>> from espnet3.parallel.inference_provider import InferenceProvider
-        >>> class MyProvider(InferenceProvider):
-        ...     @staticmethod
-        ...     def build_dataset(config): return load_dataset(config)
-        ...     @staticmethod
-        ...     def build_model(config): return load_model(config)
-        >>> runner = InferenceRunner(
-        ...     MyProvider(config),
-        ...     output_dir="/exp/decode",
-        ...     idx_key="utt_id",
-        ...     hyp_key="hyp",
-        ...     ref_key="ref",
-        ... )
-        >>> runner(range(len(test_dataset)))
     """
 
     def __init__(
@@ -172,17 +160,7 @@ class InferenceRunner(BaseRunner):
         )
 
     def resolve_idx_key(self, output: Dict[str, Any]) -> str:
-        """Validate that the configured sample-identifier key exists in output.
-
-        Args:
-            output: A single inference result dict.
-
-        Returns:
-            str: The ``idx_key`` attribute when present in ``output``.
-
-        Raises:
-            ValueError: If ``idx_key`` is not found in ``output``.
-        """
+        """Validate that the configured sample-identifier key exists in output."""
         if self.idx_key not in output:
             raise ValueError(
                 "Inference output must include the configured sample identifier "
@@ -234,14 +212,6 @@ class InferenceRunner(BaseRunner):
         if keys:
             return keys
         return [key for key in output.keys() if key != idx_key]
-
-    def _validate_output(self, output: Dict[str, Any]) -> None:
-        self._validate_output_with_keys(
-            output,
-            idx_key=self.idx_key,
-            hyp_key=self.hyp_key,
-            ref_key=self.ref_key,
-        )
 
     @staticmethod
     def forward(idx, dataset=None, model=None, **kwargs):
@@ -328,10 +298,42 @@ class InferenceRunner(BaseRunner):
                 return model_output
             return output_fn(data=data_batch, model_output=model_output, idx=indices)
         except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(
-                "Batched inference failed. If your model/output_fn does not "
-                "support batched inputs, set batch_size to None. "
-            ) from exc
+            if is_out_of_memory_error(exc):
+                # the generic advice below would be wrong here: the model does
+                # support batches, the batch was too large
+                raise RuntimeError(
+                    f"Batched inference ran out of memory on {len(indices)} "
+                    f"items (dataset indices {indices}, input lengths "
+                    f"{_input_lengths(inputs_dict)}). Lower `batch_size` in the "
+                    f"inference config (this batch had {len(indices)} items), "
+                    "or sort the test set by length so that long utterances "
+                    "are not padded to each other."
+                ) from exc
+            # Not every model or output_fn takes a list. Before giving up, run
+            # the same items one at a time: that keeps `batch_size` safe to set
+            # for every model, and only the speed differs.
+            try:
+                outputs = [
+                    InferenceRunner.forward(i, dataset=dataset, model=model, **kwargs)
+                    for i in indices
+                ]
+            except Exception:  # noqa: BLE001
+                raise RuntimeError(
+                    "Batched inference failed, and so did running the same items "
+                    "one at a time; the second traceback is the one to read."
+                ) from exc
+            name = type(model).__name__
+            if name not in _WARNED_UNBATCHED:
+                _WARNED_UNBATCHED.add(name)
+                logger.warning(
+                    f"{name} or the output_fn did not accept a batch of "
+                    f"{len(indices)} items ({type(exc).__name__}: {str(exc)[:200]}); "
+                    "the items were run one at a time instead. Set `batch_size` "
+                    "to null in the inference config to skip the failed attempt, "
+                    "or make the model and output_fn accept lists to decode in "
+                    "batches."
+                )
+            return outputs
 
     @staticmethod
     def open_writers(
@@ -400,7 +402,11 @@ class InferenceRunner(BaseRunner):
                 handle.write(f"{idx_value} {value}\n")
 
     @staticmethod
-    def close_writers(writers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def close_writers(
+        writers: Dict[str, Any],
+        state: Dict[str, Any],
+        **env,
+    ) -> Optional[Dict[str, Any]]:
         """Close shard-local SCP files and report which output keys were written."""
         for handle in writers.get("scp_handles", {}).values():
             handle.close()
@@ -412,7 +418,7 @@ class InferenceRunner(BaseRunner):
         )
         return None
 
-    def merge(self, shard_dirs: List[Path]) -> Optional[Dict[str, Any]]:
+    def merge(self, shard_dirs: List[Path]) -> None:
         """Merge per-shard SCP files into the test-set output directory.
 
         Reads ``field_keys.txt`` from each shard to discover output field
@@ -421,9 +427,6 @@ class InferenceRunner(BaseRunner):
 
         Args:
             shard_dirs: Completed shard directories in shard-id order.
-
-        Returns:
-            Dict[str, Any]: Empty dict on success (outputs are on disk).
 
         Raises:
             RuntimeError: If no output keys are found across all shards.
@@ -457,18 +460,15 @@ class InferenceRunner(BaseRunner):
                 f"{field_key}.scp",
                 base_dir / f"{field_key}.scp",
             )
-        return {}
 
-    def __call__(self, indices: Iterable[int]) -> Any:
+    def __call__(self, indices: Iterable[int]) -> bool:
         """Run inference, write SCP outputs, and validate output formats.
 
         Args:
             indices (Iterable[int]): Dataset indices to run inference on.
 
         Returns:
-            Any: ``None`` when all results are written to SCP files on disk
-            (the normal case), or a flat list of validated output dicts if
-            the base ``merge`` returns a list.
+            bool: True when all results are written to SCP files on disk.
 
         Raises:
             RuntimeError: If ``output_dir`` was not set on construction.
@@ -479,25 +479,11 @@ class InferenceRunner(BaseRunner):
             ...     provider, output_dir="/exp/decode", idx_key="utt_id"
             ... )
             >>> runner(range(len(test_dataset)))
+            True
             >>> # hyp.scp and ref.scp are written under /exp/decode
         """
-        results = super().__call__(indices)
-        if results is None:
-            return None
-        if not isinstance(results, list):
-            return results
-
-        flat_results: List[Any] = []
-        for item in results:
-            if isinstance(item, list):
-                flat_results.extend(item)
-            else:
-                flat_results.append(item)
-
-        for item in flat_results:
-            self._validate_output(item)
-
-        return flat_results
+        super().__call__(indices)
+        return True
 
 
 @lru_cache(maxsize=None)

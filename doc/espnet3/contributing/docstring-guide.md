@@ -102,34 +102,35 @@ If the API accepts a special form, show that form in an example.
 ### Public function
 
 ```python
-def load_dataset_module(module_name: str, recipe_dir: Path) -> type:
-    """Load a dataset module from a recipe-local import path.
+def load_dataset_module(
+    data_src: str | None = None, recipe_dir: str | Path | None = None
+):
+    """Load a dataset module from a dataset source or local recipe path.
 
-    This helper resolves recipe-local dataset modules used by ESPnet3 recipes.
-    Use it when a config or runner needs to import a dataset implementation
-    from `egs3/...` without hardcoding repository-relative paths.
+    Resolves the `dataset:` entries' `data_src` field into an importable
+    module. Use it when a config or runner needs to import a recipe's
+    `Dataset`/`DatasetBuilder` implementation without hardcoding
+    repository-relative paths.
 
     Args:
-        module_name: Absolute Python module path such as
-            `egs3.mini_an4.asr.dataset.builder`.
-        recipe_dir: Root directory of the active recipe.
+        data_src: Dataset source reference. Supported forms:
+            - `None`: load the local `recipe_dir/dataset` module.
+            - tag form: `"mini_an4/asr"` (resolves to
+              `egs3.mini_an4.asr.dataset`).
+            - module path form: `"egs3.mini_an4.asr.dataset"`.
+        recipe_dir: Recipe root directory, used only for local
+            (`data_src=None`) module loading.
 
     Returns:
-        The imported module object.
+        The imported dataset module object.
 
     Raises:
-        ModuleNotFoundError: If the module path cannot be imported.
-        ValueError: If `module_name` is not an absolute import path.
-
-    Notes:
-        Relative imports under `egs3/` should be avoided. Prefer explicit
-        absolute import paths.
+        ModuleNotFoundError: If the resolved module cannot be imported, or
+            `recipe_dir/dataset/__init__.py` is missing for local loading.
 
     Examples:
-        >>> load_dataset_module(
-        ...     "egs3.mini_an4.asr.dataset.builder",
-        ...     Path("egs3/mini_an4/asr"),
-        ... )
+        >>> load_dataset_module("mini_an4/asr")
+        >>> load_dataset_module(recipe_dir="egs3/mini_an4/asr")
     """
 ```
 

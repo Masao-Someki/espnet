@@ -48,6 +48,8 @@ In ESPnet3, the canonical recipe layout is closer to this:
 ```text
 egs3/<recipe>/<task>/
   run.py
+  path.sh
+  readme.md
   conf/
     training.yaml
     inference.yaml
@@ -61,11 +63,13 @@ egs3/<recipe>/<task>/
     config.yaml
   src/
     inference.py
+    tokenizer.py
+    preprocessor.py
     app.py
-  readme.html
 ```
 
-This layout is much more Python-centered.
+This layout is much more Python-centered (see `egs3/mini_an4/asr/` or
+`egs3/librispeech_100/asr/` for the real tree).
 
 The main organizing files are usually:
 

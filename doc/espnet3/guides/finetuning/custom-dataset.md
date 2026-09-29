@@ -164,10 +164,6 @@ Yes.
 In the standard ESPnet3 recipe flow, `create_dataset` expects a
 `DatasetBuilder`.
 
-The builder lifecycle looks like this:
-
-![DatasetBuilder lifecycle](../../core/images/data_builder.png)
-
 `create_dataset` runs these checks in order:
 
 1. `is_source_prepared()`
@@ -334,13 +330,13 @@ If you want to add a new dataset quickly, do this:
     title="Datasets"
     desc="See the high-level dataset internals and recipe-local module layout."
     icon="tabler:folder-code"
-    href="../../core/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Dataset references"
     desc="See how `Dataset` and `DatasetBuilder` are resolved from recipe modules."
     icon="tabler:stack-2"
-    href="../../core/components/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer"
@@ -358,6 +354,6 @@ If you want to add a new dataset quickly, do this:
     title="Dataset Config"
     desc="See the YAML format used to point training and inference at your dataset."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
 </DocCards>

@@ -68,13 +68,13 @@ ESPnet3 lets you split that work across:
     title="System and stages"
     desc="See the main architectural unit behind ESPnet3 recipe execution."
     icon="tabler:route"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Config overview"
     desc="See the stage-specific config split used across ESPnet3."
     icon="tabler:settings-2"
-    href="../../core/config/index.html"
+    href="../../config/index.html"
   />
   <DocCard
     title="Custom dataset"

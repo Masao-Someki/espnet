@@ -9,9 +9,9 @@ date: 2026-05-15
 # ESPnet3 Training Configuration
 
 This page describes the current `training.yaml` used to configure the following stages:
-- [`create_dataset`](../stages/create-dataset.md)
-- [`collect_stats`](../stages/collect-stats.md)
-- [`train`](../stages/train.md)
+- [`create_dataset`](../stages/create-dataset.html)
+- [`collect_stats`](../stages/collect-stats.html)
+- [`train`](../stages/train.html)
 
 
 ## Overview 
@@ -30,8 +30,7 @@ This page describes the current `training.yaml` used to configure the following 
 | `trainer`                                          | ✅              | Lightning trainer arguments                                     |
 | `fit`                                              |                | Lightning fit-time options                                      |
 | `parallel`                                         |                | parallel processing settings                                    |
-
-- `best_model_criterion`
+| `best_model_criterion`                             |                | checkpoint-selection criteria for callbacks                     |
 
 
 ## Path Scaffold
@@ -67,7 +66,7 @@ exp_tag: training_e_branchformer
 ```
 
 
-See [Resolvers](./resolvers.md) for `self_name`.
+See [Resolvers](#resolvers) below for `self_name` and other custom resolvers.
 
 ### Example
 ```yaml
@@ -168,29 +167,35 @@ model directly through Hydra.
 
 ## `create_dataset`
 
-`create_dataset` is the config block for the `create_dataset` stage.
-
-The values in this block are forwarded to `DatasetBuilder` methods.
+`create_dataset` is the config block for the `create_dataset` stage. For each
+unique dataset source referenced under `dataset.train` / `dataset.valid` /
+`dataset.test`, `BaseSystem.create_dataset()` loads the recipe's
+`dataset/__init__.py:DatasetBuilder` class and calls, in order,
+`is_source_prepared`, `prepare_source`, `is_built`, and `build` — all keyword
+arguments in this block are forwarded to every one of those calls.
 
 See these pages for details:
 
-- [Create dataset stage](../stages/create-dataset.md)
-- [Dataset references and builders](../core/components/datasets.md)
+- [Create dataset stage](../stages/create-dataset.html)
+- [Dataset references and builders](../core/components/data-organizer.html)
 
 ### Settings
 
-| Key          | Description                                                              |
-| ------------ | ------------------------------------------------------------------------ |
-| `recipe_dir` | Path to the recipe directory                                             |
-| `source_dir` | Path to the directory containing the code for the `create_dataset` stage |
+| Key           | Description                                          |
+| ------------- | ----------------------------------------------------- |
+| `recipe_dir`  | Recipe directory, forwarded as a builder kwarg         |
+| `dataset_dir` | Dataset directory, forwarded as a builder kwarg        |
 
+Note: the TEMPLATE header comment also shows a `create_dataset.func` key. It is
+not read by the current stage implementation — the stage always resolves the
+builder class from `dataset/__init__.py`, so leave `func` unset.
 
 ### Example
 
 ```yaml
 create_dataset:
   recipe_dir: ${recipe_dir}
-  source_dir: ${dataset_dir}
+  dataset_dir: ${dataset_dir}
 ```
 
 ## `dataset`
@@ -206,7 +211,7 @@ Each dataset entry may resolve by:
 
 Only `data_src_args` is passed to `Dataset(...)`.
 
-See [Dataset references and builders](../core/components/datasets.md) for
+See [Dataset references and builders](../core/components/data-organizer.html) for
 `data_src` details.
 
 ### Example
@@ -231,7 +236,7 @@ Two common modes:
 1. ESPnet iterator mode through `iter_factory`
 2. plain PyTorch DataLoader mode with `iter_factory: null`
 
-See [Dataloader and Collate](../stages/train/dataloader.md) for `iter_factory`
+See [Dataloader and Collate](../core/components/dataloader.html) for `iter_factory`
 details, supported iterator factories, and full config examples.
 
 ### Examples
@@ -276,6 +281,16 @@ dataloader:
     shuffle: false
 ```
 
+### Sharding keys
+
+The TEMPLATE also shows `total_shards` and `dist_world_size` under
+`dataloader.train` / `dataloader.valid`. These are not read from the dataloader
+config — `DataLoaderBuilder._maybe_shard_dataset()` reads `total_shards` /
+`dist_world_size` as attributes of the underlying dataset object instead. Set
+them on the dataset (e.g. via `data_src_args`) as described in
+[Dataset Sharding](../guides/scaling/dataset-sharding.html); leave the
+dataloader-level copies at `1` for a single-shard, non-distributed setup.
+
 ## `optimizer` / `scheduler`
 
 
@@ -296,7 +311,7 @@ Notes:
 
 Named multi-optimizer path:
 
-See [Multiple optimizers and schedulers](../core/components/multiple_optimizers_schedulers.md)
+See [Multiple optimizers and schedulers](../core/components/multiple_optimizers_schedulers.html)
 for the full behavior.
 
 ### Default Values
@@ -305,6 +320,7 @@ for the full behavior.
 | ------------------------ | --------------------------------------- |
 | `optimizer._target_`     | `torch.optim.Adam`                      |
 | `optimizer.lr`           | `0.002`                                 |
+| `optimizer.weight_decay` | `0.000001`                              |
 | `scheduler._target_`     | `espnet2.schedulers.warmup_lr.WarmupLR` |
 | `scheduler.warmup_steps` | `15000`                                 |
 | `scheduler_interval`     | `step`                                  |
@@ -378,15 +394,15 @@ trainer:
 ```
 
 In multi-optimizer mode, trainer-level gradient clipping should not be used.
-See [Multiple optimizers and schedulers](../core/components/multiple_optimizers_schedulers.md)
+See [Multiple optimizers and schedulers](../core/components/multiple_optimizers_schedulers.html)
 for details.
 
 ## `parallel`
 
 This section configures parallel execution. Details are documented here:
 
-- [Provider / Runner](../core/parallel/provider_runner.md)
-- [Multi-GPU / multi-node](../core/parallel/multiple_gpu.md)
+- [Provider / Runner](../core/parallel/provider_runner.html)
+- [Multi-GPU / multi-node](../guides/scaling/multi-node.html)
 
 ### Default Values
 
@@ -445,7 +461,15 @@ fit:
 | Key                    | Description                                |
 | ---------------------- | ------------------------------------------ |
 | `init`                 | Weight initialization strategy             |
+| `seed`                 | Optional random seed for `collect_stats`/`train` |
 | `best_model_criterion` | Criteria used to compare model performance |
+
+`init` is forwarded to ESPnet's `initialize()` helper (e.g. `xavier_uniform`) by
+`ESPnet3LightningTrainer`, which only receives `training_config.trainer` as its
+config object. As shipped, `init` is written at the top level (a sibling of
+`trainer:`), so it is currently **not** applied — verify against
+[`trainer.py`](https://github.com/espnet/espnet/blob/master/espnet3/components/trainers/trainer.py)
+before relying on it for reproducing a specific initialization.
 
 ### Example
 ```yaml
@@ -457,9 +481,26 @@ best_model_criterion:
     - min
 ```
 
+## Resolvers
+
+ESPnet3 registers a few custom OmegaConf resolvers (see
+[`config_utils.py`](https://github.com/espnet/espnet/blob/master/espnet3/utils/config_utils.py)).
+They are rewritten to plain values while a config is loaded, before any
+`${...}` interpolation is resolved, so they only work through
+`load_and_merge_config`/`load_config_with_defaults` (i.e. through `run.py`),
+not through a bare `OmegaConf.load(...)`.
+
+| Resolver | Usage | Resolves to |
+| --- | --- | --- |
+| `${self_name:}` | `exp_tag: ${self_name:}` | stem of the config file being loaded, e.g. `training` for `training.yaml`, or `training_e_branchformer` for `training_e_branchformer.yaml` |
+| `${config_path:relpath}` | `readme: ${config_path:../src/hf_model_readme.md}` | absolute path, resolved relative to the directory containing the config that references it |
+| `${set_corpus_and_system:}` | `hf_repo: espnet/${set_corpus_and_system:}_${exp_tag}` | `<corpus>_<system>` derived from the `egs3/<corpus>/<system>/conf/...` path of the loaded config, e.g. `mini_an4_asr` |
+| `${load_line:relpath}` | `vocab: ${load_line:conf/tokens.txt}` | list of stripped lines read from the given text file |
+
 ## Related pages
 
-- [Train stage](../stages/train.md)
-- [Create dataset stage](../stages/create-dataset.md)
-- [Dataset references and builders](../core/components/datasets.md)
-- [Optimizer configuration](../core/components/optimizer_configuration.md)
+- [Train stage](../stages/train.html)
+- [Create dataset stage](../stages/create-dataset.html)
+- [Dataset references and builders](../core/components/data-organizer.html)
+- [Optimizer configuration](../core/components/optimizer_configuration.html)
+- [Dataset Sharding](../guides/scaling/dataset-sharding.html)

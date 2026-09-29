@@ -37,6 +37,7 @@ _BASE_RECORD_FACTORY = logging.getLogRecordFactory()
 
 
 def _record_factory(*args, **kwargs):
+    """Support the surrounding workflow."""
     record = _BASE_RECORD_FACTORY(*args, **kwargs)
     record.stage = _LOG_STAGE.get()
     record.hostname = socket.gethostname()
@@ -44,6 +45,7 @@ def _record_factory(*args, **kwargs):
 
 
 def _ensure_log_record_factory() -> None:
+    """Ensure log record factory."""
     if logging.getLogRecordFactory() is not _record_factory:
         logging.setLogRecordFactory(_record_factory)
 
@@ -53,6 +55,7 @@ _ensure_log_record_factory()
 
 @contextmanager
 def log_stage(name: str):
+    """Log metadata and status for a pipeline stage."""
     token = _LOG_STAGE.set(name)
     try:
         yield
@@ -62,6 +65,7 @@ def log_stage(name: str):
 
 def _build_record(*args, **kwargs):
     # Inject custom fields used by LOG_FORMAT (stage/hostname) into each LogRecord.
+    """Build record."""
     record = _BASE_RECORD_FACTORY(*args, **kwargs)
     record.stage = _LOG_STAGE.get()
     record.hostname = socket.gethostname()
@@ -362,6 +366,7 @@ def get_git_metadata(cwd: Path | None = None) -> dict[str, str]:
             - "short_commit": Abbreviated commit hash.
             - "branch": Current branch name.
             - "worktree": "clean", "dirty", or "unknown".
+            - "origin_url": URL of the `origin` remote, if set.
     """
     cwd = cwd or Path.cwd()
     status = _run_git_command(["git", "status", "--short"], cwd)
@@ -376,6 +381,7 @@ def get_git_metadata(cwd: Path | None = None) -> dict[str, str]:
         "commit": _run_git_command(["git", "rev-parse", "HEAD"], cwd),
         "short_commit": _run_git_command(["git", "rev-parse", "--short", "HEAD"], cwd),
         "branch": _run_git_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd),
+        "origin_url": _run_git_command(["git", "remote", "get-url", "origin"], cwd),
     }
     meta["worktree"] = dirty
     return meta
@@ -484,13 +490,13 @@ def log_run_metadata(
             [hostname] 2026-02-11 03:57:16 EST (run.py:244) INFO: [train] \
                 Python: 3.10.18 (main, Aug 18 2025, 19:18:25) [Clang 20.1.4 ]
             [hostname] 2026-02-11 03:57:16 EST (run.py:244) INFO: [train] \
-                Working directory: /path/to/espnet3/egs3/librispeech_100/asr
+                Working directory: /path/to/espnet3/egs3/librispeech_100/esp2_asr
             [hostname] 2026-02-11 03:57:16 EST (run.py:244) INFO: [train] \
-                train config: /path/to/espnet3/egs3/librispeech_100/asr/conf/train.yaml
+                train config: /path/to/espnet3/egs3/librispeech_100/esp2_asr/conf/train.yaml
             [hostname] 2026-02-11 03:57:16 EST (run.py:244) INFO: [train] \
-                infer config: /path/to/espnet3/egs3/librispeech_100/asr/conf/inference.yaml
+                infer config: /path/to/espnet3/egs3/librispeech_100/esp2_asr/conf/inference.yaml
             [hostname] 2026-02-11 03:57:16 EST (run.py:244) INFO: [train] \
-                measure config: /path/to/espnet3/egs3/librispeech_100/asr/conf/measure.yaml
+                measure config: /path/to/espnet3/egs3/librispeech_100/esp2_asr/conf/measure.yaml
             [hostname] 2026-02-11 03:57:17 EST (run.py:244) INFO: [train] \
                 Git: commit=..., short_commit=..., branch=master, worktree=clean
 
@@ -558,7 +564,7 @@ def _collect_env(
     """Collect environment variables matching prefixes or explicit keys.
 
     Args:
-        prefixes (Iterable[str] | None): Prefixes to match (e.g., "CUDA_").
+        prefixes (Iterable[str] | None): Prefixes to match (e.g., ``"CUDA_"``).
         keys (Iterable[str] | None): Exact variable names to include.
 
     Returns:
@@ -711,6 +717,7 @@ def build_qualified_name(obj) -> str:
     """Return a compact, fully-qualified name for objects or classes.
 
     **Description.**
+
         Produces a stable, human-readable identifier for logging and debugging.
         For objects, it prefers the object's class path. For builtins without a
         module path, it falls back to a truncated string, and includes length
@@ -793,6 +800,7 @@ def build_callable_name(func) -> str:
 
 
 def _iter_attrs(obj) -> Iterable[tuple[str, object]]:
+    """Iterate over attrs."""
     if not hasattr(obj, "__dict__"):
         return []
     return sorted(
@@ -802,6 +810,7 @@ def _iter_attrs(obj) -> Iterable[tuple[str, object]]:
 
 
 def _truncate_text(text: str, max_len: int = 200) -> str:
+    """Truncate text."""
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
@@ -932,7 +941,8 @@ def log_component(
 
             log_component(logger, "Custom", "example", CustomThing("demo", 7), 1)
 
-        **Example log output.**
+    **Example log output.**
+
         .. code-block:: text
 
             Custom[example] class: my_module.CustomThing

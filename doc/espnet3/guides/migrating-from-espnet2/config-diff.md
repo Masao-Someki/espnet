@@ -159,7 +159,7 @@ already need a custom model wrapper.
     title="Training Config"
     desc="See where model, optimizer, scheduler, dataloader, and trainer settings live."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Model Components"
@@ -237,7 +237,7 @@ Use this mapping:
     title="Stats Collection"
     desc="See where feats_shape files come from before folded batching uses them."
     icon="tabler:gauge"
-    href="../../core/stats-collection.html"
+    href="../../stages/collect-stats.html"
   />
   <DocCard
     title="Train Stage"
@@ -288,13 +288,13 @@ ESPnet3 prefers making them visible in config.
     title="Config Overview"
     desc="See how config files, defaults, and path resolvers fit together."
     icon="tabler:settings-code"
-    href="../../core/config/index.html"
+    href="../../config/index.html"
   />
   <DocCard
     title="System and Stages"
     desc="See which config object each stage receives."
     icon="tabler:hierarchy-2"
-    href="../../core/system-and-stages.html"
+    href="../../stages/index.html"
   />
   <DocCard
     title="Recipe Structure"
@@ -357,7 +357,7 @@ usually becomes:
     title="Dataset Config"
     desc="See the YAML format for train, valid, test, data_src, and data_src_args."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer"
@@ -405,7 +405,7 @@ the Dask `parallel` block.
     title="Training Config"
     desc="See the trainer block inside the full training.yaml schema."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>
 
@@ -447,13 +447,13 @@ Do not confuse it with Lightning DDP settings under `trainer`.
     title="Parallel Config"
     desc="See env, n_workers, and backend options for local, GPU, and cluster execution."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Parallel Runtime"
     desc="See provider/runner execution for collect_stats, inference, and fan-out work."
     icon="tabler:arrows-split-2"
-    href="../../core/parallel/"
+    href="../../core/parallel/index.html"
   />
   <DocCard
     title="Cluster Migration"
@@ -568,7 +568,7 @@ inference config by themselves.
     title="Inference Config"
     desc="See how dataset, provider, runner, model, and outputs fit in inference.yaml."
     icon="tabler:wave-sine"
-    href="../../core/config/inference.html"
+    href="../../config/infer_config.html"
   />
   <DocCard
     title="Inference Stage"
@@ -623,7 +623,7 @@ So scoring is no longer just a shell postprocess step.
     title="Metrics Config"
     desc="See the metrics.yaml shape for metric classes and keys."
     icon="tabler:gauge"
-    href="../../core/config/metrics.html"
+    href="../../stages/metrics.html"
   />
   <DocCard
     title="Metrics Stage"
@@ -661,7 +661,7 @@ as normal named stages with explicit config.
     title="Publication Config"
     desc="See how model packing and upload settings are configured."
     icon="tabler:package"
-    href="../../core/config/publication.html"
+    href="../../config/publish_config.html"
   />
   <DocCard
     title="Publish Stage"
@@ -673,7 +673,7 @@ as normal named stages with explicit config.
     title="Demo Config"
     desc="See the config surface for demo packaging and upload."
     icon="tabler:app-window"
-    href="../../core/config/demo.html"
+    href="../../config/demo_config.html"
   />
 </DocCards>
 
@@ -696,31 +696,31 @@ as normal named stages with explicit config.
     title="Training Config"
     desc="See the full `training.yaml` structure used by create_dataset, stats, and train."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Inference Config"
     desc="See how ESPnet3 inference combines dataset, provider, runner, and outputs."
     icon="tabler:wave-sine"
-    href="../../core/config/inference.html"
+    href="../../config/infer_config.html"
   />
   <DocCard
     title="Metrics Config"
     desc="See how scoring moves into `metrics.yaml`."
     icon="tabler:gauge"
-    href="../../core/config/metrics.html"
+    href="../../stages/metrics.html"
   />
   <DocCard
     title="Dataset Config"
     desc="See the dataset reference format used by training and inference."
     icon="tabler:database"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Parallel Config"
     desc="See the Dask-backed parallel config surface."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Recipe structure"

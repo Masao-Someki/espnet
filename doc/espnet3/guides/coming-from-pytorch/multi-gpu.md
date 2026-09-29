@@ -50,7 +50,7 @@ If you know raw PyTorch, this replaces a lot of manual work such as:
     title="Training Config"
     desc="See trainer.devices, num_nodes, strategy, precision, and accelerator settings."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Trainer"
@@ -96,7 +96,7 @@ This means:
     title="Parallel Config"
     desc="See local_gpu, n_workers, and backend options."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Provider and Runner"
@@ -232,7 +232,7 @@ That is one of the main benefits.
     title="Parallel Runtime"
     desc="See how local and Dask execution share the same runner path."
     icon="tabler:binary-tree-2"
-    href="../../core/parallel/"
+    href="../../core/parallel/index.html"
   />
   <DocCard
     title="Parallel Data Prep"
@@ -263,13 +263,13 @@ These are related to parallelism, but they do not control the same mechanism.
     title="Training Config"
     desc="See where multi-GPU training is configured through Lightning."
     icon="tabler:settings-2"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
   <DocCard
     title="Parallel Config"
     desc="See how `local`, `local_gpu`, and HPC backends are configured."
     icon="tabler:binary-tree-2"
-    href="../../core/config/parallel.html"
+    href="../../core/parallel/provider_runner.html"
   />
   <DocCard
     title="Provider / Runner"

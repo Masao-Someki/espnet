@@ -233,6 +233,21 @@ def forward(idx, dataset, model, beam_size, return_attention, **env):
 Use `params` for lightweight runtime flags.
 Do not use them to smuggle large driver-side objects into workers.
 
+## How output fields are actually chosen
+
+The [`infer()`](../../stages/inference.html) entrypoint puts `idx_key` and
+`output_keys` into the **provider's** `params` (so they arrive in the worker
+env dict), and separately passes `idx_key`/`hyp_key`/`ref_key` to the
+[`InferenceRunner`](../../../guide/espnet3/systems/InferenceRunner.html)
+constructor. Only the provider-supplied env values reach
+`InferenceRunner.write_record(...)` (it receives `**env`, not `self`), so in
+the shipped pipeline it is `output_keys` — not the runner's own `hyp_key`/
+`ref_key` attributes — that determines which `<field>.scp` files get written.
+If you instantiate `InferenceRunner` directly instead of going through
+`infer()`, make sure `hyp_key`/`ref_key` (or `output_keys`) are also part of
+what your provider merges into the env, or they will not affect validation or
+output at all.
+
 ## Local vs worker behavior
 
 In local mode:
@@ -286,13 +301,13 @@ Subclass it when:
     title="Parallel Config"
     desc="Configure `local`, `local_gpu`, SSH, or HPC backends."
     icon="tabler:settings-2"
-    href="../config/parallel.html"
+    href="./provider_runner.html"
   />
   <DocCard
     title="Inference Config"
     desc="See how `provider`, `runner`, `dataset`, and `model` are written in YAML."
     icon="tabler:wave-sine"
-    href="../config/inference.html"
+    href="../../config/infer_config.html"
   />
   <DocCard
     title="Inference Stage"

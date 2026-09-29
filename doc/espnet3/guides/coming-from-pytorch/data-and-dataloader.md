@@ -83,7 +83,7 @@ So the simple rule is:
     title="Dataset References"
     desc="See the recipe-local Dataset and DatasetBuilder module contract."
     icon="tabler:folder-code"
-    href="../../core/components/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Create Dataset Stage"
@@ -137,7 +137,7 @@ If `data_src` is omitted, ESPnet3 loads the local recipe dataset module.
     title="Dataset Config"
     desc="See the train, valid, test, data_src, and data_src_args format."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="DataOrganizer"
@@ -149,7 +149,7 @@ If `data_src` is omitted, ESPnet3 loads the local recipe dataset module.
     title="Training Config"
     desc="See where dataset config sits in training.yaml."
     icon="tabler:player-play"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>
 
@@ -203,7 +203,7 @@ dataloader:
     title="Stats Collection"
     desc="See how batch shapes and stats interact with dataloader behavior."
     icon="tabler:gauge"
-    href="../../core/stats-collection.html"
+    href="../../stages/collect-stats.html"
   />
   <DocCard
     title="Train Stage"
@@ -272,18 +272,18 @@ Start simple:
     title="Dataset references"
     desc="See how recipe-local dataset modules and builders are resolved."
     icon="tabler:folder-code"
-    href="../../core/components/datasets.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Dataset Config"
     desc="See the YAML dataset format used by training and inference."
     icon="tabler:settings-2"
-    href="../../core/config/dataset.html"
+    href="../../core/components/data-organizer.html"
   />
   <DocCard
     title="Training Config"
     desc="See where the dataloader and trainer config actually live."
     icon="tabler:player-play"
-    href="../../core/config/training.html"
+    href="../../config/train_config.html"
   />
 </DocCards>
