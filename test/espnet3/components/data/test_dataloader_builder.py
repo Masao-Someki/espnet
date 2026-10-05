@@ -370,7 +370,7 @@ def test_sampler_and_batch_sampler_conflict():
 
 def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
     """iter_factory + a real DataOrganizer-built dataset, whose entries now
-    always get dataset-hash UIDs (§1). The shape file and its
+    always get dataset-hash UIDs. The shape file and its
     dataset_uids.json are generated per-test from the dataset's own
     get_uid() (not the fixed legacy "0".."9" keys, which no longer match a
     hash-UID dataset) so this test stays a real regression check under the
@@ -1223,10 +1223,9 @@ def test_iter_factory_resolves_shape_file_uids_to_same_sample(tmp_path):
 
     This exercises the string-index-mode lookup path (a Mapping-keyed
     dataset addressed by its own string keys), which is independent of the
-    dataset-hash UID scheme (§2.5) -- but any DataOrganizer-built dataset now
+    dataset-hash UID scheme -- but any DataOrganizer-built dataset now
     always has uid_entries, so the shape file's directory still needs a
-    matching dataset_uids.json for the training-side validation (§4) to
-    pass.
+    matching dataset_uids.json for the training-side validation to pass.
     """
     shape_file = tmp_path / "uid_shape"
     shape_file.write_text("utt_a 1\nutt_b 1\nutt_c 1\n")
@@ -1300,13 +1299,13 @@ def test_build_iter_factory_defaults_to_the_builder_dataset(monkeypatch):
     assert list(loader) == [[0], [1]]
 
 
-# --- §4/(d): training-side validation against collect_stats' uid table ---
+# --- training-side validation against collect_stats' uid table ---
 
 
 class _DummyUidTableDataset:
     """Minimal dataset exposing only ``uid_entries``/``datasets`` for the
     DataLoaderBuilder training-side validation tests -- decoupled from the
-    real ``CombinedDataset`` (owned separately in the parallel work split)."""
+    real ``CombinedDataset``."""
 
     def __init__(self, uid_entries):
         self.uid_entries = uid_entries
@@ -1317,12 +1316,12 @@ def _write_uid_table_if_present(shape_dir, dataset):
     """Write dataset_uids.json for ``dataset`` into ``shape_dir`` iff it has
     uid_entries.
 
-    ``CombinedDataset.uid_entries`` (owned by ashigaru_b in the parallel work
-    split) is not yet present on every branch this test file is developed
-    against, so this stays a no-op (matching the pre-dataset-hash-UID
-    backward-compat behavior validate_against_uid_table itself falls back
-    to) until that support lands -- at which point it starts writing a real,
-    matching table so these tests keep passing without modification.
+    ``CombinedDataset.uid_entries`` is not yet present on every branch this
+    test file is developed against, so this stays a no-op (matching the
+    pre-dataset-hash-UID backward-compat behavior validate_against_uid_table
+    itself falls back to) until that support lands -- at which point it
+    starts writing a real, matching table so these tests keep passing
+    without modification.
     """
     uid_entries = getattr(dataset, "uid_entries", None)
     if uid_entries is not None:
@@ -1478,7 +1477,7 @@ def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
     training-side validation entirely.
 
     Note: any dataset built *through* DataOrganizer always gets uid_entries
-    now (§1), so this "no uid_entries" case can only arise from constructing
+    now, so this "no uid_entries" case can only arise from constructing
     CombinedDataset directly, not from build_organizer(...).
     """
     monkeypatch.setattr(
@@ -1486,9 +1485,9 @@ def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
         lambda **kw: [[0, 1]],
     )
     dataset = CombinedDataset([DummyDataset()], [(do_nothing, do_nothing)])
-    # getattr, not a direct attribute access: CombinedDataset.uid_entries
-    # (owned by ashigaru_b) is not yet present on every branch this file is
-    # developed against; it will exist and return None here once it lands.
+    # getattr, not a direct attribute access: CombinedDataset.uid_entries is
+    # not yet present on every branch this file is developed against; it
+    # will exist and return None here once it lands.
     assert getattr(dataset, "uid_entries", None) is None
     config = _make_shape_file_iter_factory_config("/nonexistent/mel_shape")
     builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)

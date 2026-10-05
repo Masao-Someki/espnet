@@ -138,8 +138,7 @@ def StableIdDataset(n=6, base_len=3, dim=4, uid_offset=0):
 
     Used wherever a test needs to exercise the stable uid path (invariants
     3/5) through the actual ``CombinedDataset.get_uid``/``uids``/
-    ``has_stable_uids`` implementation (owned by ashigaru1), not a dummy that
-    only mimics its API.
+    ``has_stable_uids`` implementation, not a dummy that only mimics its API.
     """
     return CombinedDataset(
         [
@@ -182,7 +181,7 @@ class _DatasetUidEntryStub:
 class _DummyHashUidDataset:
     """Minimal dataset exposing the dataset-hash UID contract (get_uid/
     uid_entries), decoupled from ``CombinedDataset`` so this file's tests do
-    not depend on ashigaru_b's dataset.py changes landing first."""
+    not depend on the real dataset.py changes landing first."""
 
     def __init__(self, n=4, base_len=2, dim=3, uid_prefix="a1b2c3d4"):
         self.n = n
@@ -636,8 +635,9 @@ def test_collect_stats_rejects_multiple_iterator(tmp_path: Path, flag):
 
 def test_resolve_uid_and_sample_uses_get_uid_for_plain_sample():
     """Integration note: get_utt_id is ignored under the dataset-hash UID
-    scheme (§7 compatibility -- an opt-in get_utt_id no longer changes the
-    UID), so this uses the dataset-hash-UID dummy (known prefix) rather than
+    scheme for backward compatibility -- an opt-in get_utt_id no longer
+    changes the UID -- so this uses the dataset-hash-UID dummy (known
+    prefix) rather than
     the get_utt_id-based StableIdDataset fixture, which now resolves to a
     hash:pos UID too, not its own "stableNNN" value.
     """
@@ -756,7 +756,7 @@ def test_collect_stats_batch_rejects_uid_mismatch():
 def test_collect_stats_writes_hash_uids_and_uid_table(tmp_path: Path):
     """T2/(f) (collect_stats side): shape file keys follow the dataset-hash
     UID format '<8-hex-prefix>:<position>' and merge() writes
-    dataset_uids.json into the same split directory (§3), sourced from
+    dataset_uids.json into the same split directory, sourced from
     ``dataset.uid_entries`` -- without ever hashing a per-utterance list.
     """
     model_cfg = make_model_cfg(scale=1.0)
@@ -862,7 +862,7 @@ def test_build_fingerprint_changes_with_model_config():
 
 
 def test_build_fingerprint_includes_dataset_uids_for_hash_uid_dataset():
-    """§6: fingerprint's ``dataset_uids`` is the (uid_prefix, num_items) list
+    """The fingerprint's ``dataset_uids`` is the (uid_prefix, num_items) list
     from ``dataset.uid_entries`` (never a per-utterance list), and is
     ``None`` for a dataset without ``uid_entries`` (directly constructed,
     outside ``DataOrganizer``)."""
@@ -968,7 +968,7 @@ def test_collect_stats_rerun_with_same_length_but_different_uids_raises(
     the fingerprint's hashed ``dataset_config`` payload must still catch this
     even though ``num_items`` alone would not (the dataset-hash UID scheme
     intentionally does not hash per-utterance content; only the config that
-    produced the dataset, plus its size, are covered -- see §6)."""
+    produced the dataset, plus its size, are covered)."""
     model_cfg = make_model_cfg(scale=1.0)
     dl_cfg = make_dataloader_cfg(use_custom_collate=True)
     out_dir = tmp_path / "out_resume_same_len_diff_uids"
