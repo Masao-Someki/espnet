@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from omegaconf import OmegaConf
 
-from espnet3.autoresearch import study
+from espnet3.autoresearch import study, workspace
 from espnet3.autoresearch.agent import AgentRequest, AgentResponseError
 from espnet3.autoresearch.config import AutoResearchConfig, render
 from espnet3.autoresearch.metrics import MetricNotFoundError, read_metric
@@ -284,6 +284,15 @@ def run_trial_once(
         "metrics_config": str(metrics_path),
     }
 
+    try:
+        ws_state = workspace.begin(
+            config.edit.mode, config.edit.allowlist, recipe_dir, trial_dir
+        )
+    except workspace.WorkspaceError as e:
+        _finish_failed(study_dir, record, reason="workspace_error")
+        log.warning("=== [FAILED] %s: workspace_error: %s ===", trial_id, e)
+        return record
+
     result = run_trial(
         commands=config.trial.commands,
         workdir=config.trial.workdir,
@@ -292,7 +301,21 @@ def run_trial_once(
         placeholders=placeholders,
         trial_dir=trial_dir,
     )
+
+    ws_result = workspace.end(ws_state)
+    if ws_result.status == "failed":
+        workspace.finalize(ws_state, accepted=False)
+        _finish_failed(study_dir, record, reason=ws_result.reason or "edit_violation")
+        log.warning(
+            "=== [FAILED] %s: %s: paths=%s ===",
+            trial_id,
+            ws_result.reason,
+            ws_result.violation_paths,
+        )
+        return record
+
     if result.status != "success":
+        workspace.finalize(ws_state, accepted=False)
         _finish_failed(study_dir, record, reason=result.status)
         log.warning(
             "=== [FAILED] %s: %s: %s ===", trial_id, result.status, result.message
@@ -310,6 +333,7 @@ def run_trial_once(
     try:
         score = read_metric(metric_source)
     except MetricNotFoundError as e:
+        workspace.finalize(ws_state, accepted=False)
         _finish_failed(study_dir, record, reason="metric_not_found")
         log.warning("=== [FAILED] %s: metric_not_found: %s ===", trial_id, e)
         return record
@@ -326,6 +350,7 @@ def run_trial_once(
     if accepted:
         study.update_best(study_dir, record, mode=config.metric.mode)
     study.write_leaderboard(study_dir, mode=config.metric.mode)
+    workspace.finalize(ws_state, accepted=accepted)
     log.info("=== [%s] %s score=%s ===", record.status.upper(), trial_id, score)
     return record
 
