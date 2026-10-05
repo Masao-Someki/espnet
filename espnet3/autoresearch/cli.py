@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from espnet3.autoresearch.agent import CommandAgent
+from espnet3.autoresearch.agent import CommandAgent, FileAgent
 from espnet3.autoresearch.config import AutoResearchConfig, load_config
 from espnet3.autoresearch.loop import (
     ensure_objective_file,
@@ -19,7 +19,7 @@ from espnet3.autoresearch.study import init_study, load_all_trial_records, read_
 
 
 def build_agent(config: AutoResearchConfig) -> Any:
-    """Construct the agent `config.agent` describes (`CommandAgent` for now)."""
+    """Construct the agent `config.agent` describes (`CommandAgent` or `FileAgent`)."""
     if config.agent.type == "command":
         return CommandAgent(
             config.agent.command,
@@ -28,9 +28,9 @@ def build_agent(config: AutoResearchConfig) -> Any:
             timeout_sec=config.agent.timeout_sec,
             env=config.agent.env,
         )
-    raise ValueError(
-        f"Unsupported agent.type: {config.agent.type!r} ('file' is not available yet)"
-    )
+    if config.agent.type == "file":
+        return FileAgent()
+    raise ValueError(f"Unsupported agent.type: {config.agent.type!r}")
 
 
 def _default_recipe_dir(config_path: Path) -> Path:
