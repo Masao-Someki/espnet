@@ -8,7 +8,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from espnet3.autoresearch import cli
-from espnet3.autoresearch.agent import CommandAgent, FileAgent
+from espnet3.autoresearch.agent import CommandAgent
 from espnet3.autoresearch.config import AgentConfig, AutoResearchConfig
 
 _RECIPE_DIR = Path(__file__).resolve().parents[3] / "egs3" / "mini_an4" / "esp2_asr"
@@ -43,7 +43,7 @@ def test_build_agent_command_returns_command_agent():
     assert isinstance(agent, CommandAgent)
 
 
-def test_build_agent_file_returns_file_agent():
+def test_build_agent_file_not_yet_supported():
     config = AutoResearchConfig.from_dict(
         {
             "study_name": "x",
@@ -62,8 +62,8 @@ def test_build_agent_file_returns_file_agent():
             "agent": {"type": "file"},
         }
     )
-    agent = cli.build_agent(config)
-    assert isinstance(agent, FileAgent)
+    with pytest.raises(ValueError, match="not available yet"):
+        cli.build_agent(config)
 
 
 def _autoresearch_yaml(tmp_path, study_dir: Path, score: float) -> Path:
