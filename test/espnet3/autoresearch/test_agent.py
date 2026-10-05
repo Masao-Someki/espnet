@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import sys
+import threading
+import time
 
 import pytest
 
 from espnet3.autoresearch.agent import (
     AgentRequest,
     AgentResponseError,
+    AgentWaitingError,
     CommandAgent,
+    FileAgent,
     render_placeholders,
     render_prompt,
 )
@@ -230,3 +234,52 @@ def test_command_agent_rejects_empty_command():
 def test_command_agent_rejects_bad_prompt_via():
     with pytest.raises(ValueError):
         CommandAgent(command=["true"], prompt_via="carrier-pigeon")
+
+
+# ---------------------------------------------------------------------------
+# FileAgent
+# ---------------------------------------------------------------------------
+
+
+def test_file_agent_writes_request_file(tmp_path):
+    agent = FileAgent(wait=False)
+    with pytest.raises(AgentWaitingError):
+        agent.propose(_request(), artifact_dir=tmp_path)
+    text = (tmp_path / "agent_request.md").read_text()
+    assert "Lower dev_clean WER." in text
+
+
+def test_file_agent_returns_existing_response(tmp_path):
+    (tmp_path / "agent_response.yaml").write_text(
+        "rationale: human says so\nconfig_patch:\n  trainer.lr: 0.2\n"
+    )
+    agent = FileAgent(wait=False)
+    response = agent.propose(_request(), artifact_dir=tmp_path)
+    assert response.rationale == "human says so"
+    assert response.config_patch == {"trainer.lr": 0.2}
+
+
+def test_file_agent_waits_for_response(tmp_path):
+    def write_soon():
+        time.sleep(0.1)
+        (tmp_path / "agent_response.yaml").write_text(
+            "rationale: later\nconfig_patch: {}\n"
+        )
+
+    threading.Thread(target=write_soon).start()
+    agent = FileAgent(wait=True, poll_interval_sec=0.05, timeout_sec=5)
+    response = agent.propose(_request(), artifact_dir=tmp_path)
+    assert response.rationale == "later"
+
+
+def test_file_agent_wait_times_out(tmp_path):
+    agent = FileAgent(wait=True, poll_interval_sec=0.05, timeout_sec=0.2)
+    with pytest.raises(AgentResponseError):
+        agent.propose(_request(), artifact_dir=tmp_path)
+
+
+def test_file_agent_raises_on_malformed_response(tmp_path):
+    (tmp_path / "agent_response.yaml").write_text("not: [valid: yaml:")
+    agent = FileAgent(wait=False)
+    with pytest.raises(AgentResponseError):
+        agent.propose(_request(), artifact_dir=tmp_path)
