@@ -40,7 +40,8 @@ def resolve_study_dir(config: AutoResearchConfig, recipe_dir: Path) -> Path:
     return study_dir if study_dir.is_absolute() else recipe_dir / study_dir
 
 
-def _ensure_objective_file(recipe_dir: Path, objective_file: str) -> str:
+def ensure_objective_file(recipe_dir: Path, objective_file: str) -> str:
+    """Return `<recipe_dir>/objective_file`'s text, creating a stub if missing."""
     path = recipe_dir / objective_file
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -48,7 +49,8 @@ def _ensure_objective_file(recipe_dir: Path, objective_file: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _config_yaml_text(config: AutoResearchConfig) -> str:
+def render_config_yaml(config: AutoResearchConfig) -> str:
+    """Render `config` back to YAML text, for the study's `autoresearch.yaml` copy."""
     return OmegaConf.to_yaml(OmegaConf.create(asdict(config)))
 
 
@@ -356,10 +358,10 @@ def run_study(
     recipe_dir = Path(recipe_dir)
     study_dir = resolve_study_dir(config, recipe_dir)
 
-    objective_text = _ensure_objective_file(recipe_dir, config.objective_file)
+    objective_text = ensure_objective_file(recipe_dir, config.objective_file)
     study.init_study(
         study_dir,
-        config_yaml_text=_config_yaml_text(config),
+        config_yaml_text=render_config_yaml(config),
         objective_text=objective_text,
     )
     resumed = study.mark_interrupted_running_trials(study_dir)
