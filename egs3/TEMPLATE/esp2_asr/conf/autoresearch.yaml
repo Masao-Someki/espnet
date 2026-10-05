@@ -1,0 +1,87 @@
+##########################################################
+#              AUTORESEARCH (hyperparameter search)      #
+##########################################################
+# Quick usage:
+#   python -m espnet3.autoresearch run --config conf/autoresearch.yaml
+#   python -m espnet3.autoresearch status --config conf/autoresearch.yaml
+#
+# Each trial: an agent proposes a config patch (dotted keys, restricted to
+# search_space below) -> the patch is applied to training_config -> the
+# commands below run -> the metric is read back -> the trial is accepted if
+# it beats the best score so far. State lives under study_dir/trials/.
+
+autoresearch:
+  study_name: ls100_ebf
+  study_dir: exp/autoresearch/${autoresearch.study_name}
+  objective_file: program.md          # Read once at study start. A stub is
+                                       # written here (relative to the recipe
+                                       # directory) if it does not exist yet.
+
+  recipe:
+    training_config: conf/tuning/training_e_branchformer.yaml
+    inference_config: conf/inference.yaml
+    metrics_config: conf/metrics.yaml
+    # Dotted key -> `{placeholder}` template, applied to each role's config
+    # (pre-resolve) so each trial's run is isolated under its own trial_dir.
+    runtime_keys:
+      training: { exp_dir: "{trial_dir}/exp", stats_dir: "{trial_dir}/exp/stats" }
+      inference: { exp_dir: "{trial_dir}/exp", inference_dir: "{trial_dir}/exp/inference" }
+      metrics: { exp_dir: "{trial_dir}/exp", inference_dir: "{trial_dir}/exp/inference" }
+
+  trial:
+    workdir: "{recipe_dir}"
+    # Run in order; the first non-zero exit marks the trial failed and stops
+    # the remaining commands. {training_config}/{inference_config}/
+    # {metrics_config} are this trial's own resolved copies (written to
+    # trial_dir), not the paths above.
+    commands:
+      - [python, run.py, --stages, train, --training_config, "{training_config}"]
+      - [python, run.py, --stages, infer, measure,
+         --training_config, "{training_config}",
+         --inference_config, "{inference_config}",
+         --metrics_config, "{metrics_config}"]
+    timeout_sec: 50000                # Combined budget for all commands above.
+    env: { ESPNET_AR_TRIAL_DIR: "{trial_dir}" }
+
+  metric:
+    name: dev_clean_wer
+    mode: min                         # min | max
+    # Tried in order; the first entry whose file exists and whose key/pattern
+    # resolves wins.
+    source:
+      - { path: "{trial_dir}/exp/inference/metrics.json",
+          key: "espnet3.systems.esp2_asr.metrics.wer.WER.dev-clean.WER" }
+      - { path: "{trial_dir}/exp/score_wer/result.txt", pattern: "WER: {value}" }
+
+  budget:
+    max_trials: 50
+    max_failures: 5
+    no_improve_stop: 10              # Stop after this many trials in a row
+                                      # without a new best score.
+
+  search_space:
+    # The agent's config_patch is kept only where a dotted key matches
+    # allowed_keys and does not match denied_keys (denied wins on conflict).
+    allowed_keys: ["trainer.*", "optimizer.*", "scheduler.*", "model.specaug_conf.*"]
+    denied_keys: ["exp_dir", "stats_dir", "recipe_dir", "data_dir", "inference_dir", "dataset.*"]
+
+  agent:
+    type: command                    # command | file
+    # argv template; {prompt_file}/{response_file} are filled in by
+    # CommandAgent itself (do not add them to runtime_keys/placeholders).
+    command: [codex, exec, -C, "{recipe_dir}", --skip-git-repo-check,
+              --sandbox, workspace-write,
+              --output-last-message, "{response_file}", "-"]
+    prompt_via: stdin                 # stdin | file
+    response_format: json             # json | yaml
+    timeout_sec: 1800
+    env: {}
+
+  edit:
+    # How an agent may edit recipe files during a trial (beyond its config
+    # patch above). direct: no restriction, changes are only recorded.
+    # allowlist: only paths matching one of the globs below may be touched;
+    # anything else fails the trial and restores the offending path(s).
+    mode: direct                      # direct | allowlist
+    allowlist: ["conf/tuning/*.yaml", "src/**/*.py"]
+    on_violation: fail                # fail is the only supported value for now
