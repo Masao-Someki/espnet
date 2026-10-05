@@ -13,6 +13,22 @@ def test_base_system_rejects_args():
         system.create_dataset(1)
 
 
+def test_base_system_get_required_config_returns_value():
+    config = OmegaConf.create({"save_path": "data/out"})
+    assert BaseSystem._get_required_config(config, "save_path", "msg") == "data/out"
+
+
+def test_base_system_get_required_config_raises_on_missing_key():
+    config = OmegaConf.create({"other": 1})
+    with pytest.raises(RuntimeError, match="save_path must be set"):
+        BaseSystem._get_required_config(config, "save_path", "save_path must be set")
+
+
+def test_base_system_get_required_config_raises_on_none_config():
+    with pytest.raises(RuntimeError, match="section must be set"):
+        BaseSystem._get_required_config(None, "section", "section must be set")
+
+
 def test_base_system_resolves_stage_log_ref_fallback_list(tmp_path):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
     infer_cfg = OmegaConf.create({"inference_dir": str(tmp_path / "infer")})
@@ -142,9 +158,9 @@ def test_base_system_create_dataset_prepares_dataset_references(tmp_path, monkey
                 "archive_path": "a.tar.gz",
             },
             "dataset": {
-                "train": [{"data_src": "mini_an4/asr"}],
+                "train": [{"data_src": "mini_an4/esp2_asr"}],
                 # Same source in valid; dedup means only one prepare run.
-                "valid": [{"data_src": "mini_an4/asr"}],
+                "valid": [{"data_src": "mini_an4/esp2_asr"}],
                 "test": None,
             },
         }
@@ -194,7 +210,7 @@ def test_base_system_create_dataset_logs_progress(tmp_path, monkeypatch, caplog)
             "recipe_dir": str(tmp_path / "recipe"),
             "create_dataset": {"recipe_dir": str(tmp_path / "recipe")},
             "dataset": {
-                "train": [{"data_src": "mini_an4/asr"}],
+                "train": [{"data_src": "mini_an4/esp2_asr"}],
                 "valid": None,
                 "test": None,
             },
@@ -228,7 +244,7 @@ def test_base_system_create_dataset_logs_progress(tmp_path, monkeypatch, caplog)
         system.create_dataset()
 
     assert "starting dataset creation process" in caplog.text
-    assert "Ensuring dataset is prepared: mini_an4/asr" in caplog.text
+    assert "Ensuring dataset is prepared: mini_an4/esp2_asr" in caplog.text
     assert "Dataset creation completed" in caplog.text
 
 
@@ -241,7 +257,7 @@ def test_base_system_create_dataset_runs_prepare_and_build_when_needed(
             "recipe_dir": str(tmp_path / "recipe"),
             "create_dataset": {"recipe_dir": str(tmp_path / "recipe")},
             "dataset": {
-                "train": [{"data_src": "mini_an4/asr"}],
+                "train": [{"data_src": "mini_an4/esp2_asr"}],
                 "valid": None,
                 "test": None,
             },

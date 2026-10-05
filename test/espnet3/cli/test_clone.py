@@ -233,15 +233,15 @@ def test_copy_recipe_dereferences_external_symlink(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# command: run (integration — real mini_an4/asr clone)
+# command: run (integration — real mini_an4/esp2_asr clone)
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
 def cloned_mini_an4(tmp_path_factory):
-    """Clone the real mini_an4/asr recipe once for the whole test module."""
+    """Clone the real mini_an4/esp2_asr recipe once for the whole test module."""
     dest = tmp_path_factory.mktemp("integration") / "mini_an4_asr"
-    args = argparse.Namespace(list=False, recipe="mini_an4/asr", project=str(dest))
+    args = argparse.Namespace(list=False, recipe="mini_an4/esp2_asr", project=str(dest))
     run(args)
     return dest
 
@@ -283,17 +283,17 @@ def test_integration_no_dotfiles_at_root(cloned_mini_an4):
 
 def test_integration_publication_yaml_has_hf_repo(cloned_mini_an4):
     text = (cloned_mini_an4 / "conf" / "publication.yaml").read_text(encoding="utf-8")
-    assert "hf_repo: espnet/mini_an4_asr_${exp_tag}" in text
+    assert "hf_repo: espnet/mini_an4_esp2_asr_${exp_tag}" in text
 
 
 def test_integration_demo_yaml_has_title(cloned_mini_an4):
     text = (cloned_mini_an4 / "conf" / "demo.yaml").read_text(encoding="utf-8")
-    assert "title: mini_an4_asr demo" in text
+    assert "title: mini_an4_esp2_asr demo" in text
 
 
 def test_integration_demo_yaml_has_upload_hf_repo(cloned_mini_an4):
     text = (cloned_mini_an4 / "conf" / "demo.yaml").read_text(encoding="utf-8")
-    assert "hf_repo: espnet/mini_an4_asr_${exp_tag}" in text
+    assert "hf_repo: espnet/mini_an4_esp2_asr_${exp_tag}" in text
 
 
 def test_integration_run_py_help_exits_cleanly(cloned_mini_an4):

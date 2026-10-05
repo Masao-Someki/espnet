@@ -195,4 +195,3 @@ class CTCPrefixScorer(BatchPartialScorerInterface):
             new_state.append(self.impl.extend_state(s))
 
         return new_state
-
