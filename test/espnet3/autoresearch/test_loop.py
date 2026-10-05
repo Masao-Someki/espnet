@@ -35,7 +35,8 @@ def _make_config(
     return AutoResearchConfig(
         study_name="demo",
         study_dir=str(tmp_path / "exp" / "autoresearch" / "demo"),
-        objective_file="program.md",
+        # Absolute, so tests never write program.md into the real recipe dir.
+        objective_file=str(tmp_path / "program.md"),
         recipe=RecipeConfig.from_dict(
             {
                 "training_config": "conf/training.yaml",
