@@ -1,4 +1,4 @@
-"""Agent request/response types and the command-line agent implementation.
+"""Agent request/response types and the two agent implementations.
 
 An agent takes an :class:`AgentRequest` describing the current trial and
 returns an :class:`AgentResponse` proposing a config patch. This module owns
@@ -9,10 +9,18 @@ parsed. It is deliberately independent of ``config.py``'s
 instead of a config object, so this module has no import-time dependency on
 the rest of the ``autoresearch`` package.
 
-:class:`CommandAgent` runs a CLI agent (e.g. ``codex exec``) as a
-subprocess, built from an argv template with ``{placeholder}`` substitution,
-and raises :class:`AgentResponseError` (reason ``"agent_response"``) when
-its response cannot be read.
+Two implementations:
+
+- :class:`CommandAgent`: runs a CLI agent (e.g. ``codex exec``) as a
+  subprocess, built from an argv template with ``{placeholder}``
+  substitution.
+- :class:`FileAgent`: a human-in-the-loop handoff. Writes the rendered
+  request to a file and reads a response file back (ported from ATLAS's
+  ``FileAgentClient``).
+
+Both share :func:`render_prompt` for the request's human-readable form, and
+raise :class:`AgentResponseError` (reason ``"agent_response"``) when a
+response cannot be read.
 """
 
 from __future__ import annotations
@@ -96,6 +104,14 @@ class AgentResponseError(Exception):
     """
 
     reason = "agent_response"
+
+
+class AgentWaitingError(Exception):
+    """`FileAgent` found no response file and was told not to wait.
+
+    Not a trial failure: the response simply has not been written yet.
+    Callers should pause the study run here, not fail the trial.
+    """
 
 
 def render_placeholders(parts: Sequence[str], values: Mapping[str, str]) -> list[str]:
@@ -357,3 +373,68 @@ class CommandAgent:
             )
         data = _load_structured(response_file, self.response_format)
         return _response_from_mapping(data)
+
+
+class FileAgent:
+    """Human-in-the-loop agent: writes a request file, reads a response file.
+
+    Ported from ATLAS's `FileAgentClient` onto the new `AgentRequest`/
+    `AgentResponse` types.
+    """
+
+    def __init__(
+        self,
+        *,
+        request_filename: str = "agent_request.md",
+        response_filename: str = "agent_response.yaml",
+        wait: bool = False,
+        poll_interval_sec: float = 5.0,
+        timeout_sec: float = 3600.0,
+    ) -> None:
+        """Build a `FileAgent`; see the class docstring for the fields."""
+        self.request_filename = request_filename
+        self.response_filename = response_filename
+        self.wait = wait
+        self.poll_interval_sec = poll_interval_sec
+        self.timeout_sec = timeout_sec
+
+    def propose(
+        self, request: AgentRequest, *, artifact_dir: str | Path
+    ) -> AgentResponse:
+        """Write the rendered request, then return or wait for a response.
+
+        Args:
+            request: What to ask the (human) agent.
+            artifact_dir: Directory for the request/response files (created
+                if missing).
+
+        Returns:
+            AgentResponse: The parsed proposal, once available.
+
+        Raises:
+            AgentWaitingError: No response file yet, and `wait=False`.
+            AgentResponseError: The response file is unreadable/malformed,
+                or (with `wait=True`) `timeout_sec` elapsed before one
+                appeared.
+        """
+        import time
+
+        artifact_dir = Path(artifact_dir)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        request_path = artifact_dir / self.request_filename
+        response_path = artifact_dir / self.response_filename
+        request_path.write_text(render_prompt(request), encoding="utf-8")
+
+        if response_path.exists():
+            return _response_from_mapping(_load_structured(response_path, "yaml"))
+        if not self.wait:
+            raise AgentWaitingError(f"waiting for agent response: {response_path}")
+
+        deadline = time.monotonic() + self.timeout_sec
+        while time.monotonic() < deadline:
+            if response_path.exists():
+                return _response_from_mapping(_load_structured(response_path, "yaml"))
+            time.sleep(self.poll_interval_sec)
+        raise AgentResponseError(
+            f"timed out waiting for agent response: {response_path}"
+        )
