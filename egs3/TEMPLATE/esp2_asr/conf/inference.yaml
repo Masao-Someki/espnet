@@ -44,8 +44,14 @@ inference_dir: ${exp_dir}/${self_name:}
 # Top-level fields such as `name` and `transform` are consumed by
 # `DataOrganizer`.
 #
+# `fields`: optional declared item keys and kinds, e.g. {speech: audio, text:
+# text}. Checked against the first sample of each test dataset; when the
+# recipe `Dataset` class also declares a `fields` class attribute, the two
+# must agree. Omitted by default (each dataset class is then warned once).
+#
 # Example:
 # dataset:
+#   fields: {speech: audio, text: text}
 #   test:
 #     - name: librispeech_test_clean
 #       data_src: librispeech/asr

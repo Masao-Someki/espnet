@@ -12,6 +12,7 @@ import soundfile as sf
 from torch.utils.data import Dataset as TorchDataset
 
 from egs3.mini_an4.esp2_asr.dataset.builder import MiniAn4Builder
+from espnet3.components.contract import Field
 from espnet3.utils.config_utils import load_config_with_defaults
 
 # ---------------------------------------------------------------------------
@@ -80,6 +81,8 @@ def _read_manifest(manifest_path: Path) -> list[ManifestEntry]:
 
 class MiniAn4Dataset(TorchDataset):
     """Mini AN4 dataset that returns ``{\"speech\", \"text\"}`` samples."""
+
+    fields = (Field("speech", "audio"), Field("text", "text"))
 
     def __init__(self, split: str, recipe_dir: str | Path | None = None) -> None:
         self.split = split

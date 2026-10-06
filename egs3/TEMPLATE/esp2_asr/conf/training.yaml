@@ -72,10 +72,16 @@ create_dataset:
 # Only `data_src_args` is passed to the recipe `Dataset` constructor.
 # Top-level fields such as `name` and `transform` stay in organizer space.
 #
+# `fields`: optional declared item keys and kinds, e.g. {speech: audio, text:
+# text}. Checked against the first training/validation sample; when the
+# recipe `Dataset` class also declares a `fields` class attribute, the two
+# must agree. Omitted by default (each dataset class is then warned once).
+#
 # Example:
 # dataset:
 #   _target_: espnet3.components.data.data_organizer.DataOrganizer
 #   recipe_dir: ${recipe_dir}
+#   fields: {speech: audio, text: text}
 #   train:
 #     - data_src: librispeech/asr
 #       data_src_args:
