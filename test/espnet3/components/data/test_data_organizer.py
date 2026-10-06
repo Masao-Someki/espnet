@@ -846,7 +846,6 @@ def test_organizer_rejects_item_missing_declared_field():
         CombinedDataset(
             [DeclaredDataset()],
             [(do_nothing, do_nothing)],
-            label="train",
         )
 
 
@@ -864,7 +863,6 @@ def test_organizer_rejects_wrong_kind():
         CombinedDataset(
             [DeclaredDataset()],
             [(do_nothing, do_nothing)],
-            label="train",
         )
 
 

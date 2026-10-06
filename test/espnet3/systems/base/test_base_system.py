@@ -223,9 +223,12 @@ def test_create_dataset_checks_manifest_columns(tmp_path, monkeypatch):
     manifest.write_text("utt1\thello\n", encoding="utf-8")
 
     class DummyBuilder:
+        # All-text columns (no "path" kind) so this fixture still constructs
+        # on a tree that predates the path kind; this test only exercises
+        # the column-count check, not the path-existence one.
         manifest_columns = (
             Field("utt_id", "text"),
-            Field("wav", "path"),
+            Field("wav", "text"),
             Field("text", "text"),
         )
         manifest_header = False
