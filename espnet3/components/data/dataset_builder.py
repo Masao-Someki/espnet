@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import ClassVar, Dict, Optional, Tuple
+
+from espnet3.components.contract import Field
 
 
 class DatasetBuilder(ABC):
@@ -193,3 +197,22 @@ class DatasetBuilder(ABC):
             build_dataset(dataset_dir=dataset_root, source_dir=source_root)
             ```
         """
+
+    #: The manifest's columns, in file order. `None` (the default) means the
+    #: manifest is not checked (warned once per class). Set alongside
+    #: `built_manifests` to opt in.
+    manifest_columns: ClassVar[Optional[Tuple[Field, ...]]] = None
+    #: Whether each manifest file has a header row to skip.
+    manifest_header: ClassVar[bool] = False
+
+    def built_manifests(self, recipe_dir=None, **_kwargs) -> Dict[str, Path]:
+        """Return ``{split: manifest_path}`` for the manifests ``build()`` wrote.
+
+        The default returns ``{}``, which skips the manifest check (declare
+        `manifest_columns` and override this to opt in).
+
+        Args:
+            recipe_dir: The recipe root, as passed to ``build()``.
+            **_kwargs: Other ``build()``-style arguments; unused by default.
+        """
+        return {}
