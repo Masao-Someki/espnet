@@ -4,6 +4,8 @@ import pytest
 from omegaconf import OmegaConf
 
 import espnet3.systems.base.system as sysmod
+from espnet3.components.contract import Field
+from espnet3.components.data.contract import DatasetContractError
 from espnet3.systems.base.system import BaseSystem
 
 
@@ -201,6 +203,60 @@ def test_base_system_create_dataset_prepares_dataset_references(tmp_path, monkey
         ("is_source_prepared", expected_kwargs),
         ("is_built", expected_kwargs),
     ]
+
+
+def test_create_dataset_checks_manifest_columns(tmp_path, monkeypatch):
+    train_cfg = OmegaConf.create(
+        {
+            "exp_dir": str(tmp_path / "exp"),
+            "recipe_dir": str(tmp_path / "recipe"),
+            "create_dataset": {"recipe_dir": str(tmp_path / "recipe")},
+            "dataset": {
+                "train": [{"data_src": "mini_an4/esp2_asr"}],
+                "valid": None,
+                "test": None,
+            },
+        }
+    )
+    system = BaseSystem(training_config=train_cfg)
+
+    manifest = tmp_path / "train.tsv"
+    manifest.write_text("utt1\thello\n", encoding="utf-8")
+
+    class DummyBuilder:
+        manifest_columns = (
+            Field("utt_id", "text"),
+            Field("wav", "path"),
+            Field("text", "text"),
+        )
+        manifest_header = False
+
+        def is_source_prepared(self, **kwargs):
+            return True
+
+        def prepare_source(self, **kwargs):
+            pass
+
+        def is_built(self, **kwargs):
+            return True
+
+        def build(self, **kwargs):
+            pass
+
+        def built_manifests(self, **kwargs):
+            return {"train": manifest}
+
+    class DummyModule:
+        DatasetBuilder = DummyBuilder
+
+    monkeypatch.setattr(
+        sysmod,
+        "load_dataset_module",
+        lambda data_src=None, recipe_dir=None: DummyModule(),
+    )
+
+    with pytest.raises(DatasetContractError, match="row 1 has 2 columns"):
+        system.create_dataset()
 
 
 def test_base_system_create_dataset_logs_progress(tmp_path, monkeypatch, caplog):

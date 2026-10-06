@@ -7,7 +7,9 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
+from espnet3.components.contract import Field
 from espnet3.components.data import data_organizer as data_organizer_module
+from espnet3.components.data.contract import DatasetContractError
 from espnet3.components.data.data_organizer import (
     DataOrganizer,
     do_nothing,
@@ -829,6 +831,79 @@ def test_data_organizer_inconsistent_keys():
                 (do_nothing, do_nothing),
             ],
         )
+
+
+def test_organizer_rejects_item_missing_declared_field():
+    class DeclaredDataset:
+        fields = (Field("speech", "audio"), Field("text", "text"))
+
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            return {"speech": np.zeros(16000, dtype=np.float32)}
+
+    with pytest.raises(DatasetContractError, match="lacks declared field 'text'"):
+        CombinedDataset(
+            [DeclaredDataset()],
+            [(do_nothing, do_nothing)],
+            label="train",
+        )
+
+
+def test_organizer_rejects_wrong_kind():
+    class DeclaredDataset:
+        fields = (Field("speech", "audio"), Field("text", "text"))
+
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            return {"speech": 42, "text": "hello"}
+
+    with pytest.raises(DatasetContractError, match="declared audio but the item holds"):
+        CombinedDataset(
+            [DeclaredDataset()],
+            [(do_nothing, do_nothing)],
+            label="train",
+        )
+
+
+def test_organizer_fields_config_and_class_must_agree():
+    class DeclaredDataset:
+        fields = (Field("speech", "audio"), Field("text", "text"), Field("speaker", "text"))
+
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
+
+    with pytest.raises(DatasetContractError, match="make them agree or drop one"):
+        CombinedDataset(
+            [DeclaredDataset()],
+            [(do_nothing, do_nothing)],
+            fields=(Field("speech", "audio"), Field("text", "text")),
+            label="train",
+        )
+
+
+def test_organizer_undeclared_dataset_warns_once(caplog):
+    class UndeclaredDataset:
+        def __len__(self):
+            return 1
+
+        def __getitem__(self, idx):
+            return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
+
+    with caplog.at_level(logging.WARNING):
+        CombinedDataset(
+            [UndeclaredDataset()],
+            [(do_nothing, do_nothing)],
+            label="train",
+        )
+
+    assert any("does not declare fields" in r.message for r in caplog.records)
 
 
 def test_data_organizer_transform_none():
