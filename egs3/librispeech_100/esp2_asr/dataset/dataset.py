@@ -16,6 +16,7 @@ from egs3.librispeech_100.esp2_asr.dataset.builder import (
     LibriSpeech100Builder,
     resolve_source_root,
 )
+from espnet3.components.contract import Field
 from espnet3.utils.config_utils import load_config_with_defaults
 
 _CONFIG_RESOURCE = resources.files(__package__).joinpath("config.yaml")
@@ -91,8 +92,10 @@ class LibriSpeech100Dataset(TorchDataset):
         >>> dataset = LibriSpeech100Dataset(split="train-clean-100")
         >>> sample = dataset[0]
         >>> sorted(sample.keys())
-        ['speech', 'text', 'utt_id']
+        ['speech', 'text']
     """
+
+    fields = (Field("speech", "audio"), Field("text", "text"))
 
     def __init__(
         self,
