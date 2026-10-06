@@ -30,6 +30,14 @@ class DatasetBuilder(ABC):
     ``create_dataset`` should not rewrite the same source tree or manifests
     unnecessarily when the expected outputs are already present.
 
+    A builder that writes its own espnet3 manifest declares
+    ``manifest_columns`` (and overrides ``built_manifests``) - as a class
+    attribute for a fixed set of columns, or set on ``self`` (in its own
+    ``__init__``) for one that depends on its own configuration; there is
+    no undeclared fallback once ``built_manifests()`` actually returns
+    something. A builder with no manifest of its own (it reads its source
+    corpus directly) needs neither.
+
     Notes:
         ``espnet3.systems.base.system.BaseSystem.create_dataset()`` instantiates
         a builder and calls these methods in order. Keep
@@ -217,9 +225,24 @@ class DatasetBuilder(ABC):
             **_kwargs: Other ``build()``-style arguments; unused by default.
 
         Examples:
+            A fixed declaration (class attribute):
+
             ```python
             class MyBuilder(DatasetBuilder):
                 manifest_columns = (Field("utt_id", "text"), Field("wav", "path"))
+
+                def built_manifests(self, recipe_dir, **_kwargs):
+                    return {"train": Path(recipe_dir) / "data/manifest/train.tsv"}
+            ```
+
+            A declaration the builder's own ``__init__`` builds:
+
+            ```python
+            class MyConfigurableBuilder(DatasetBuilder):
+                def __init__(self, extra_column):
+                    self.manifest_columns = (
+                        Field("utt_id", "text"), Field(extra_column, "text")
+                    )
 
                 def built_manifests(self, recipe_dir, **_kwargs):
                     return {"train": Path(recipe_dir) / "data/manifest/train.tsv"}

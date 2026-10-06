@@ -8,12 +8,14 @@ import pytest
 from espnet3.api.inference import Field
 from espnet3.components.contract.dataset import (
     DatasetContractError,
+    check_dataset_column_kind,
+    check_declared_fields,
     check_fields,
     check_item,
     check_manifests,
     fields_from_config,
     reconcile_fields,
-    require_declared,
+    require_fields,
 )
 
 # ---------------------------------------------------------------------------
@@ -21,11 +23,27 @@ from espnet3.components.contract.dataset import (
 # ---------------------------------------------------------------------------
 
 
-def test_check_fields_accepts_well_formed_tuple():
+def test_check_fields_returns_well_formed_tuple():
     class Good:
         fields = (Field("speech", "audio"), Field("text", "text"))
 
-    check_fields(Good, "fields")
+    assert check_fields(Good, "fields") == Good.fields
+
+
+def test_check_fields_returns_none_when_undeclared():
+    class Undeclared:
+        pass
+
+    assert check_fields(Undeclared, "fields") is None
+
+
+def test_check_fields_accepts_instance_attribute():
+    class Configurable:
+        def __init__(self, extra):
+            self.fields = (Field("speech", "audio"), Field(extra, "text"))
+
+    obj = Configurable("text")
+    assert check_fields(obj, "fields") == obj.fields
 
 
 def test_check_fields_rejects_non_tuple():
@@ -94,6 +112,56 @@ def test_reconcile_fields_rejects_disagreement():
 
 
 # ---------------------------------------------------------------------------
+# require_fields
+# ---------------------------------------------------------------------------
+
+
+def test_require_fields_always_raises():
+    class Undeclared:
+        pass
+
+    with pytest.raises(TypeError, match="does not declare fields"):
+        require_fields(Undeclared, "fields")
+
+
+# ---------------------------------------------------------------------------
+# check_declared_fields
+# ---------------------------------------------------------------------------
+
+
+def test_check_declared_fields_uses_class_declaration():
+    class Good:
+        fields = (Field("speech", "audio"),)
+
+    assert check_declared_fields(Good(), None) == Good.fields
+
+
+def test_check_declared_fields_uses_instance_declaration():
+    class Configurable:
+        def __init__(self, extra):
+            self.fields = (Field("speech", "audio"), Field(extra, "text"))
+
+    obj = Configurable("text")
+    assert check_declared_fields(obj, None) == obj.fields
+
+
+def test_check_declared_fields_raises_when_neither_given():
+    class Undeclared:
+        pass
+
+    with pytest.raises(TypeError, match="does not declare fields"):
+        check_declared_fields(Undeclared(), None)
+
+
+def test_check_declared_fields_raises_on_disagreement():
+    class Good:
+        fields = (Field("speech", "audio"),)
+
+    with pytest.raises(DatasetContractError, match="make them agree or drop one"):
+        check_declared_fields(Good(), (Field("text", "text"),))
+
+
+# ---------------------------------------------------------------------------
 # check_item
 # ---------------------------------------------------------------------------
 
@@ -132,19 +200,6 @@ def test_check_item_rejects_wrong_kind():
 def test_check_item_allows_missing_optional_field():
     fields = (Field("speech", "audio"), Field("prompt", "text", optional=True))
     check_item(fields, {"speech": np.zeros(16000, dtype=np.float32)}, "x")
-
-
-# ---------------------------------------------------------------------------
-# require_declared
-# ---------------------------------------------------------------------------
-
-
-def test_require_declared_always_raises():
-    class Undeclared:
-        pass
-
-    with pytest.raises(DatasetContractError, match="does not declare fields"):
-        require_declared(Undeclared, "fields")
 
 
 # ---------------------------------------------------------------------------
@@ -222,3 +277,55 @@ def test_check_manifests_raises_when_manifests_but_undeclared(tmp_path: Path):
 
     with pytest.raises(DatasetContractError, match="does not declare manifest_columns"):
         check_manifests(Undeclared())
+
+
+def test_check_manifests_accepts_instance_declaration(tmp_path: Path):
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    manifest = tmp_path / "train.tsv"
+    manifest.write_text(f"utt1\t{wav}\thello\n", encoding="utf-8")
+
+    class Configurable:
+        def __init__(self, extra):
+            self.manifest_columns = (
+                Field("utt_id", "text"),
+                Field("wav", "path"),
+                Field(extra, "text"),
+            )
+            self.manifest_header = False
+
+        def built_manifests(self, **kwargs):
+            return {"train": manifest}
+
+    check_manifests(Configurable("text"))
+
+
+# ---------------------------------------------------------------------------
+# check_dataset_column_kind
+# ---------------------------------------------------------------------------
+
+_DATASET_FIELDS = (Field("speech", "audio"), Field("text", "text"))
+
+
+def test_check_dataset_column_kind_accepts_matching_kind():
+    check_dataset_column_kind(_DATASET_FIELDS, "text", "text", where="x")
+
+
+def test_check_dataset_column_kind_rejects_mismatched_kind():
+    with pytest.raises(DatasetContractError, match="wants 'audio'"):
+        check_dataset_column_kind(_DATASET_FIELDS, "text", "audio", where="x")
+
+
+def test_check_dataset_column_kind_rejects_no_declared_fields():
+    with pytest.raises(DatasetContractError, match="declares no fields"):
+        check_dataset_column_kind(None, "text", "text", where="x")
+
+
+def test_check_dataset_column_kind_rejects_empty_declared_fields():
+    with pytest.raises(DatasetContractError, match="declares no fields"):
+        check_dataset_column_kind((), "text", "text", where="x")
+
+
+def test_check_dataset_column_kind_rejects_undeclared_column():
+    with pytest.raises(DatasetContractError, match="do not name column 'missing'"):
+        check_dataset_column_kind(_DATASET_FIELDS, "missing", "text", where="x")

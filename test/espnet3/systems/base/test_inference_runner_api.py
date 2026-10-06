@@ -10,6 +10,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from espnet3.api.inference import Audio, Field, InferenceAPI
+from espnet3.components.contract.dataset import DatasetContractError
 from espnet3.components.metrics.base_metric import BaseMetric
 from espnet3.systems.base.inference import infer
 from espnet3.systems.base.inference_provider import InferenceProvider
@@ -39,11 +40,17 @@ class Echo(InferenceAPI):
         }
 
 
+class _DeclaredItems(list):
+    """A plain list of items, with the `fields` declaration tests need."""
+
+    fields = (Field("speech", "audio"), Field("text", "text"))
+
+
 class EchoProvider(InferenceProvider):
     @staticmethod
     def build_dataset(config):
         # arrays cannot live in an OmegaConf config; the test set is here
-        return _items(config.dataset.size)
+        return _DeclaredItems(_items(config.dataset.size))
 
     @staticmethod
     def build_model(config):
@@ -70,7 +77,7 @@ class Match(BaseMetric):
 class MatchAudio(Match):
     """Match, but pairing the data's `speech` with the model's audio `echo`."""
 
-    inputs = (Field("ref", "text"), Field("hyp", "audio"))
+    inputs = (Field("ref", "audio"), Field("hyp", "audio"))
 
     ref_key = "dataset:speech"
     hyp_key = "echo"
@@ -267,10 +274,10 @@ def test_measure_reads_the_reference_from_the_test_set(tmp_path):
     written.write_text("utt0 edited\nutt1 ref1\nutt2 ref2\n")
     (result,) = measure(metrics_cfg, inference_config=inference_cfg).values()
     assert result["test"]["refs"][0] == "edited"
-    # a column the set does not have is named, with what it does have
+    # a column the set's declared fields do not name is caught up front
     missing = OmegaConf.create(OmegaConf.to_container(metrics_cfg))
     missing.metrics[0].inputs = {"ref": "dataset:nope", "hyp": "text"}
-    with pytest.raises(KeyError, match="has no 'nope'; it has \\['speech', 'text'"):
+    with pytest.raises(DatasetContractError, match="do not name column 'nope'"):
         measure(missing, inference_config=inference_cfg)
     # the failed run left nothing a later run would take as finished
     assert not (tmp_path / "test" / "dataset" / "nope.scp").exists()

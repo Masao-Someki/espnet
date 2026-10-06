@@ -7,7 +7,7 @@ from pathlib import Path
 from hydra.utils import get_class, instantiate
 from omegaconf import DictConfig, OmegaConf, open_dict
 
-from espnet3.components.contract.dataset import check_dataset_column_kind
+from espnet3.components.contract.dataset import check_dataset_column_kind, check_fields
 from espnet3.components.contract.metrics import (
     check_metric_contract,
     check_metric_inputs,
@@ -83,8 +83,9 @@ def _dataset_column_scp(
         wanted_kind: The metric's declared kind for this input, when known;
             checked against the dataset's own declared kind for ``column``
             (see ``espnet3.components.contract.dataset.check_dataset_column_kind``).
-            Not checked when the dataset declares no ``fields``, or when
-            this ``.scp`` already exists from an earlier run.
+            Not checked at all when ``None`` (the metric's own input is
+            not declared), or when this ``.scp`` already exists from an
+            earlier run; otherwise the dataset must declare ``column``.
 
     Returns:
         The written ``.scp``, one ``<id> <value>`` line per item in dataset
@@ -97,8 +98,9 @@ def _dataset_column_scp(
     Raises:
         ValueError: If no inference config was given, or an id is not a plain
             token.
-        DatasetContractError: The dataset declares ``column`` with a kind
-            other than ``wanted_kind``.
+        DatasetContractError: ``wanted_kind`` is given but the dataset
+            declares no ``fields``, its ``fields`` does not name
+            ``column``, or names it with a different kind.
     """
     path = inference_dir / test_name / "dataset" / f"{column}.scp"
     if path.exists():
@@ -117,7 +119,7 @@ def _dataset_column_scp(
     provider_cls = get_class(provider_target) if provider_target else InferenceProvider
     dataset = provider_cls.build_dataset(config)
     if wanted_kind is not None:
-        fields = getattr(type(getattr(dataset, "dataset", dataset)), "fields", None)
+        fields = check_fields(getattr(dataset, "dataset", dataset), "fields")
         check_dataset_column_kind(
             fields,
             column,

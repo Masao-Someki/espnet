@@ -8,11 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from torch.utils.data.dataset import Dataset
 
 from espnet3.api.inference import Field
-from espnet3.components.contract.dataset import (
-    check_item,
-    reconcile_fields,
-    require_declared,
-)
+from espnet3.components.contract.dataset import check_declared_fields, check_item
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
 
 
@@ -60,10 +56,11 @@ class CombinedDataset:
             compatible pipelines.
         fields (Optional[Tuple[Field, ...]]): The declared item fields (from
             `DataOrganizer(fields=...)`), reconciled per dataset against its
-            own `fields` class attribute when it has one. Every dataset must
-            declare it one way or the other; `None` here raises
-            `DatasetContractError` once a dataset with no `fields` class
-            attribute is reached.
+            own declared `fields` when it has one. Every dataset must declare
+            `fields` one way or the other - a class attribute for a fixed
+            set of keys, or set on `self` (before the subclass's own
+            `__init__` returns) for one that depends on its own
+            constructor arguments; there is no undeclared fallback.
         label (str): What this combined dataset is, for messages (`"train"`,
             `"valid"`).
 
@@ -71,9 +68,10 @@ class CombinedDataset:
         At initialization, the first sample from each dataset is passed through
         its associated transform to check that all datasets produce dictionaries
         with the same set of keys. This ensures consistency across the combined dataset.
-        An `AssertionError` is raised if the keys differ. When item fields are
-        declared (on the dataset class or via `fields`), that same sample is
-        also checked against them; a mismatch raises `DatasetContractError`.
+        An `AssertionError` is raised if the keys differ. The same sample is also
+        checked against the dataset's declared `fields` (see `check_declared_fields`);
+        a mismatch, or no reachable declaration at all, raises `DatasetContractError`
+        or `TypeError` respectively.
 
     Raises:
         IndexError: If a requested index is outside the range of the combined dataset.
@@ -81,18 +79,54 @@ class CombinedDataset:
             datasets accept as an utterance ID.
         RuntimeError: If `shard()` is called but not supported.
         AssertionError: If output keys from different datasets are inconsistent.
+        TypeError: If a dataset declares no `fields` at all (class or instance).
+        DatasetContractError: If a dataset's first item does not match its
+            declared `fields`.
 
-    Example:
-        >>> dataset = CombinedDataset(
-        ...     datasets=[ds1, ds2],
-        ...     transforms=[
-        ...         (transform1, preprocessor),
-        ...         (transform2, preprocessor),
-        ...     ],
-        ...     use_espnet_preprocessor=True
+    Usage sketch (``ds1``/``ds2``/``transform1``/``transform2``/``preprocessor``
+    are whatever the caller already has)::
+
+        dataset = CombinedDataset(
+            datasets=[ds1, ds2],
+            transforms=[
+                (transform1, preprocessor),
+                (transform2, preprocessor),
+            ],
+            use_espnet_preprocessor=True,
+        )
+        sample = dataset[5]
+        print(sample["text"])
+
+    Examples:
+        A fixed declaration (class attribute):
+
+        >>> import numpy as np
+        >>> class FixedDataset:
+        ...     fields = (Field("speech", "audio"), Field("text", "text"))
+        ...     def __len__(self):
+        ...         return 1
+        ...     def __getitem__(self, idx):
+        ...         return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
+        >>> combined = CombinedDataset([FixedDataset()], [(None, None)], label="train")
+        >>> len(combined)
+        1
+
+        A declaration the dataset's own `__init__` builds:
+
+        >>> class ConfigurableDataset:
+        ...     def __init__(self, extra_field):
+        ...         self.fields = (
+        ...             Field("speech", "audio"), Field(extra_field, "text")
+        ...         )
+        ...     def __len__(self):
+        ...         return 1
+        ...     def __getitem__(self, idx):
+        ...         return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
+        >>> combined = CombinedDataset(
+        ...     [ConfigurableDataset("text")], [(None, None)], label="train"
         ... )
-        >>> sample = dataset[5]
-        >>> print(sample["text"])
+        >>> len(combined)
+        1
     """
 
     def __init__(
@@ -150,13 +184,7 @@ class CombinedDataset:
                     f"{keys} != {sample_keys}"
                 )
 
-            declared = reconcile_fields(
-                getattr(type(dataset), "fields", None),
-                self.fields,
-                class_name=type(dataset).__name__,
-            )
-            if declared is None:
-                require_declared(type(dataset), "fields")
+            declared = check_declared_fields(dataset, self.fields)
             check_item(
                 declared,
                 sample,

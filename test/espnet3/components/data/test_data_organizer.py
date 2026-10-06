@@ -903,7 +903,7 @@ def test_organizer_rejects_undeclared_dataset():
         def __getitem__(self, idx):
             return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
 
-    with pytest.raises(ValueError, match="does not declare fields"):
+    with pytest.raises(TypeError, match="does not declare fields"):
         CombinedDataset(
             [UndeclaredDataset()],
             [(do_nothing, do_nothing)],

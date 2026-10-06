@@ -10,10 +10,9 @@ from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
 from espnet3.components.contract.dataset import (
+    check_declared_fields,
     check_item,
     fields_from_config,
-    reconcile_fields,
-    require_declared,
 )
 from espnet3.components.data.dataset import (
     CombinedDataset,
@@ -136,10 +135,12 @@ class DataOrganizer:
         fields (Optional[Mapping[str, str]]): The declared item keys and kinds,
             e.g. ``{"speech": "audio", "text": "text"}``. Checked against the
             first sample of each training/validation dataset (after its
-            transform, before the preprocessor); when a dataset class also
-            declares a `fields` class attribute, the two must agree. Every
-            dataset must declare `fields` one way or the other; omit this
-            only when each dataset class declares `fields` itself.
+            transform, before the preprocessor); when a dataset also
+            declares `fields` itself (a class attribute, or set on `self`
+            for one built from its own configuration), the two must
+            agree. Every dataset must declare `fields` one way or the
+            other; omit this only when each dataset's own `fields`
+            suffices.
         preprocessor (Optional[Callable]): A global preprocessor function or Hydra
             config applied after each dataset's transform. If it is an instance of
             ``AbsPreprocessor``, each sample is passed as ``(uid, sample)``.
@@ -454,13 +455,7 @@ class DataOrganizer:
         """
         if len(dataset) == 0:
             return
-        declared = reconcile_fields(
-            getattr(type(dataset), "fields", None),
-            self.fields,
-            class_name=type(dataset).__name__,
-        )
-        if declared is None:
-            require_declared(type(dataset), "fields")
+        declared = check_declared_fields(dataset, self.fields)
         sample = transform(dataset[0])
         check_item(
             declared, sample, f"DataOrganizer {label} ({type(dataset).__name__})"
