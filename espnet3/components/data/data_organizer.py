@@ -9,7 +9,12 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
-from espnet3.components.data.contract import fields_from_config
+from espnet3.components.data.contract import (
+    check_item,
+    fields_from_config,
+    reconcile_fields,
+    warn_undeclared,
+)
 from espnet3.components.data.dataset import (
     CombinedDataset,
     DatasetWithTransform,
@@ -404,6 +409,7 @@ class DataOrganizer:
                 name = raw_config.get("name") or str(
                     raw_config.get("data_src") or "local"
                 )
+                self._check_declared_fields(dataset, transform, label=f"test[{name}]")
                 self.test_sets[name] = DatasetWithTransform(
                     dataset,
                     transform,
@@ -437,6 +443,27 @@ class DataOrganizer:
                 )
             preprocessor_cfg = OmegaConf.merge(preprocessor_cfg, {"train": train_flag})
         return instantiate(preprocessor_cfg)
+
+    def _check_declared_fields(self, dataset, transform, *, label: str) -> None:
+        """Check ``dataset``'s first sample against its declared item fields.
+
+        Mirrors the check ``CombinedDataset`` runs for train/valid, for a
+        standalone test dataset: taken after ``transform``, before the
+        preprocessor. A no-op when neither the dataset class nor
+        ``self.fields`` declares anything, beyond the usual one-time warning.
+        """
+        if len(dataset) == 0:
+            return
+        declared = reconcile_fields(
+            getattr(type(dataset), "fields", None),
+            self.fields,
+            class_name=type(dataset).__name__,
+        )
+        if declared is None:
+            warn_undeclared(type(dataset), "fields")
+            return
+        sample = transform(dataset[0])
+        check_item(declared, sample, f"DataOrganizer {label} ({type(dataset).__name__})")
 
     def _build_dataset_list(
         self,
