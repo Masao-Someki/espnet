@@ -12,7 +12,7 @@ import soundfile as sf
 from torch.utils.data import Dataset as TorchDataset
 
 from egs3.mini_an4.esp2_asr.dataset.builder import MiniAn4Builder
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 from espnet3.utils.config_utils import load_config_with_defaults
 
 # ---------------------------------------------------------------------------

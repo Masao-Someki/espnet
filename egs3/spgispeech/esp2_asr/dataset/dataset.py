@@ -40,7 +40,7 @@ from egs3.spgispeech.esp2_asr.dataset.builder import (
     SPGISpeechBuilder,
     resolve_source_root,
 )
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 from espnet3.utils.config_utils import load_config_with_defaults
 
 _CONFIG_RESOURCE = resources.files(__package__).joinpath("config.yaml")

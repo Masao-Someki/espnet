@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar, Dict, Optional, Tuple
 
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 
 
 class DatasetBuilder(ABC):

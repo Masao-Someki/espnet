@@ -8,7 +8,7 @@ import subprocess
 from importlib import resources
 from pathlib import Path
 
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 from espnet3.components.data.dataset_builder import DatasetBuilder
 from espnet3.utils.config_utils import load_config_with_defaults
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 from espnet3.components.contract.dataset import (
     DatasetContractError,
     check_fields,

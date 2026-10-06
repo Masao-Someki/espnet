@@ -7,7 +7,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
-from espnet3.components.contract import Field
+from espnet3.api.inference import Field
 from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.data.data_organizer import (
     DataOrganizer,

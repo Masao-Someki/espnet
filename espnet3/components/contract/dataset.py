@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 
-from espnet3.components.contract import KINDS, Field
+from espnet3.api.inference import KINDS, Field
 
 logger = logging.getLogger(__name__)
 

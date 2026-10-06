@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from espnet3.components.contract import KINDS, AudioKind, Field, NumberKind
+from espnet3.api.inference import KINDS, AudioKind, Field, NumberKind
 
 # The path-kind and AudioKind.accepts tests below use KINDS["path"] and
 # Field("wav", "path") rather than importing PathKind directly, so this file

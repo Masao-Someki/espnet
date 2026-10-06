@@ -1,35 +1,10 @@
-"""The declaration types a contract is built from: :class:`Field` and :class:`Kind`.
+"""Contract-checking code shared by what declares typed inputs and outputs.
 
-Shared by the inference contract and by whatever else declares typed
-inputs and outputs - metrics, a dataset's columns.
+The declaration types themselves (:class:`~espnet3.api.inference.Field`,
+:class:`~espnet3.api.inference.Kind`) live in :mod:`espnet3.api.inference`;
+this package holds only the checking code built on them, such as
+:mod:`.metrics` for a metric's declared inputs/outputs and :mod:`.dataset`
+for a dataset item's and a manifest's.
 """
 
 from __future__ import annotations
-
-from espnet3.components.contract.check import check_declaration
-from espnet3.components.contract.field import Field
-from espnet3.components.contract.kinds import (
-    KINDS,
-    Audio,
-    AudioKind,
-    Kind,
-    NumberKind,
-    PathKind,
-    SegmentsKind,
-    TextKind,
-    register_kind,
-)
-
-__all__ = [
-    "KINDS",
-    "Audio",
-    "AudioKind",
-    "Field",
-    "Kind",
-    "NumberKind",
-    "PathKind",
-    "SegmentsKind",
-    "TextKind",
-    "check_declaration",
-    "register_kind",
-]
