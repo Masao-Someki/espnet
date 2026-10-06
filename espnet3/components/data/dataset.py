@@ -11,7 +11,7 @@ from espnet3.api.inference import Field
 from espnet3.components.contract.dataset import (
     check_item,
     reconcile_fields,
-    warn_undeclared,
+    require_declared,
 )
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
 
@@ -60,8 +60,10 @@ class CombinedDataset:
             compatible pipelines.
         fields (Optional[Tuple[Field, ...]]): The declared item fields (from
             `DataOrganizer(fields=...)`), reconciled per dataset against its
-            own `fields` class attribute when it has one. `None` when neither
-            declares it, which skips the check (warned once per class).
+            own `fields` class attribute when it has one. Every dataset must
+            declare it one way or the other; `None` here raises
+            `DatasetContractError` once a dataset with no `fields` class
+            attribute is reached.
         label (str): What this combined dataset is, for messages (`"train"`,
             `"valid"`).
 
@@ -154,13 +156,12 @@ class CombinedDataset:
                 class_name=type(dataset).__name__,
             )
             if declared is None:
-                warn_undeclared(type(dataset), "fields")
-            else:
-                check_item(
-                    declared,
-                    sample,
-                    f"DataOrganizer {self.label}[{i}]" f" ({type(dataset).__name__})",
-                )
+                require_declared(type(dataset), "fields")
+            check_item(
+                declared,
+                sample,
+                f"DataOrganizer {self.label}[{i}]" f" ({type(dataset).__name__})",
+            )
 
         # Check if dataset is a subclass of ShardedDataset.
         has_sharded = any(

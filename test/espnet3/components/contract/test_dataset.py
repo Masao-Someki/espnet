@@ -1,6 +1,5 @@
 """Tests for espnet3.components.contract.dataset."""
 
-import logging
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +13,7 @@ from espnet3.components.contract.dataset import (
     check_manifests,
     fields_from_config,
     reconcile_fields,
-    warn_undeclared,
+    require_declared,
 )
 
 # ---------------------------------------------------------------------------
@@ -136,30 +135,16 @@ def test_check_item_allows_missing_optional_field():
 
 
 # ---------------------------------------------------------------------------
-# warn_undeclared
+# require_declared
 # ---------------------------------------------------------------------------
 
 
-def test_warn_undeclared_warns_once(caplog):
+def test_require_declared_always_raises():
     class Undeclared:
         pass
 
-    with caplog.at_level(logging.WARNING):
-        warn_undeclared(Undeclared, "fields")
-        warn_undeclared(Undeclared, "fields")
-
-    matches = [r for r in caplog.records if "does not declare fields" in r.message]
-    assert len(matches) == 1
-
-
-def test_warn_undeclared_raises_under_strict_mode(monkeypatch):
-    monkeypatch.setenv("ESPNET3_STRICT_CONTRACTS", "1")
-
-    class Undeclared:
-        pass
-
-    with pytest.raises(TypeError, match="does not declare fields"):
-        warn_undeclared(Undeclared, "fields")
+    with pytest.raises(DatasetContractError, match="does not declare fields"):
+        require_declared(Undeclared, "fields")
 
 
 # ---------------------------------------------------------------------------
@@ -219,12 +204,21 @@ def test_check_manifests_skips_header_row(tmp_path: Path):
     check_manifests(HeaderedBuilder({"train": manifest}))
 
 
-def test_check_manifests_undeclared_builder_warns(caplog):
-    class Undeclared:
+def test_check_manifests_noop_when_builder_writes_no_manifest():
+    class NoManifest:
         def built_manifests(self, **kwargs):
             return {}
 
-    with caplog.at_level(logging.WARNING):
-        check_manifests(Undeclared())
+    check_manifests(NoManifest())
 
-    assert any("manifest_columns" in r.message for r in caplog.records)
+
+def test_check_manifests_raises_when_manifests_but_undeclared(tmp_path: Path):
+    manifest = tmp_path / "train.tsv"
+    manifest.write_text("utt1\thello\n", encoding="utf-8")
+
+    class Undeclared:
+        def built_manifests(self, **kwargs):
+            return {"train": manifest}
+
+    with pytest.raises(DatasetContractError, match="does not declare manifest_columns"):
+        check_manifests(Undeclared())

@@ -5,6 +5,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import BatchSampler, Sampler
 
+from espnet3.api.inference import Field
 from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.data.data_organizer import DataOrganizer, do_nothing
 from espnet3.components.data.dataloader import DataLoaderBuilder
@@ -74,6 +75,8 @@ DUMMY_SHARDED_DATA_SRC = "dummy/sharded"
 
 
 class DummyDataset:
+    fields = (Field("audio", "audio"),)
+
     def __init__(self, path=None):
         self.data = [{"audio": np.random.random(16000 * (i + 1))} for i in range(10)]
 
@@ -85,6 +88,8 @@ class DummyDataset:
 
 
 class DummyDatasetSameLength:
+    fields = (Field("audio", "audio"),)
+
     def __init__(self, path=None):
         self.data = [{"audio": np.random.random(16000)} for i in range(10)]
 
@@ -122,6 +127,8 @@ def dummy_collate_fn(batch):
 
 
 class DummyShardedDataset(ShardedDataset):
+    fields = (Field("text", "text"),)
+
     def __init__(
         self, shard_id: int = 0, total_shards: int = 2, dist_world_size: int = 1
     ):
@@ -516,6 +523,8 @@ def test_iter_factory_drops_tail_batches_for_ddp(monkeypatch, rank):
 
 # Dummy sharded dataset that returns shard-specific samples
 class DummyShardOnlyDataset(ShardedDataset):
+    fields = (Field("text", "text"),)
+
     def __init__(self, shard_id: int = None):
         if shard_id is None:
             self.samples = []

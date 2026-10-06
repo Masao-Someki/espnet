@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-import os
 from pathlib import Path
 from typing import Any, List, Mapping, Optional, Tuple
 
 from espnet3.api.inference import KINDS, Field
-
-logger = logging.getLogger(__name__)
-
-_WARNED_UNDECLARED: set = set()
 
 
 class DatasetContractError(ValueError):
@@ -24,46 +18,23 @@ class DatasetContractError(ValueError):
     """
 
 
-def strict_contracts_enabled() -> bool:
-    """Whether ``ESPNET3_STRICT_CONTRACTS`` asks for errors instead of warnings.
+def require_declared(cls: type, attr: str) -> None:
+    """Raise because ``cls`` has no ``attr`` contract declaration.
+
+    Every dataset and builder must declare its item fields / manifest
+    columns to be used; there is no undeclared-but-unchecked mode.
 
     Examples:
-        >>> import os
-        >>> _ = os.environ.pop("ESPNET3_STRICT_CONTRACTS", None)
-        >>> strict_contracts_enabled()
-        False
-        >>> os.environ["ESPNET3_STRICT_CONTRACTS"] = "1"
-        >>> strict_contracts_enabled()
-        True
-        >>> del os.environ["ESPNET3_STRICT_CONTRACTS"]
-    """
-    return os.environ.get("ESPNET3_STRICT_CONTRACTS", "") not in ("", "0")
-
-
-def warn_undeclared(cls: type, attr: str) -> None:
-    """Warn once per class that it has no ``attr`` contract declaration.
-
-    Raises ``TypeError`` instead, under ``ESPNET3_STRICT_CONTRACTS``.
-
-    Examples:
-        >>> import os
-        >>> os.environ["ESPNET3_STRICT_CONTRACTS"] = "1"
         >>> class Undeclared:
         ...     pass
-        >>> warn_undeclared(Undeclared, "fields")
+        >>> require_declared(Undeclared, "fields")
         Traceback (most recent call last):
-        TypeError: Undeclared does not declare fields; it is not checked. ...
-        >>> del os.environ["ESPNET3_STRICT_CONTRACTS"]
+        espnet3.components.contract.dataset.DatasetContractError: Undeclared ...
     """
-    message = (
-        f"{cls.__qualname__} does not declare {attr}; it is not checked. "
-        f"Add a `{attr}` class attribute to opt in."
+    raise DatasetContractError(
+        f"{cls.__qualname__} does not declare {attr}; add a `{attr}` class "
+        "attribute."
     )
-    if strict_contracts_enabled():
-        raise TypeError(message)
-    if cls not in _WARNED_UNDECLARED:
-        _WARNED_UNDECLARED.add(cls)
-        logger.warning(message)
 
 
 def check_fields(cls: type, attr: str) -> None:
@@ -209,15 +180,19 @@ def _first_row(path: Path, *, header: bool) -> List[str]:
 def check_manifests(builder: Any, **kwargs) -> None:
     """Raise unless each built manifest's first row matches its declared columns.
 
-    A builder with no ``manifest_columns`` is not checked (warned once).
+    A builder whose ``built_manifests()`` is empty (it writes no espnet3
+    manifest of its own) is not checked; one that does write manifests
+    must declare ``manifest_columns`` to be used.
 
     Args:
         builder: A ``DatasetBuilder`` instance, already built.
         **kwargs: Passed to ``builder.built_manifests(**kwargs)``.
 
     Raises:
-        DatasetContractError: A manifest's first row has the wrong number of
-            columns, or a ``path``-kind column's value is not an existing file.
+        DatasetContractError: ``built_manifests()`` is non-empty but
+            ``manifest_columns`` is undeclared; a manifest's first row has
+            the wrong number of columns; or a ``path``-kind column's value
+            is not an existing file.
 
     Examples:
         >>> import tempfile
@@ -230,12 +205,17 @@ def check_manifests(builder: Any, **kwargs) -> None:
         ...         return {"train": path}
         >>> check_manifests(ExampleBuilder())
     """
+    manifests = builder.built_manifests(**kwargs)
+    if not manifests:
+        return
     columns = getattr(type(builder), "manifest_columns", None)
     if columns is None:
-        warn_undeclared(type(builder), "manifest_columns")
-        return
+        raise DatasetContractError(
+            f"{type(builder).__name__} built manifests {sorted(manifests)} "
+            "but does not declare manifest_columns; add one to check them."
+        )
     header = getattr(builder, "manifest_header", False)
-    for split, path in builder.built_manifests(**kwargs).items():
+    for split, path in manifests.items():
         row = _first_row(Path(path), header=header)
         if len(row) != len(columns):
             raise DatasetContractError(
@@ -258,6 +238,5 @@ __all__ = [
     "check_manifests",
     "fields_from_config",
     "reconcile_fields",
-    "strict_contracts_enabled",
-    "warn_undeclared",
+    "require_declared",
 ]

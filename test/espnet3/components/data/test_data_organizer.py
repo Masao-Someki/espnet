@@ -155,6 +155,8 @@ class TrainFlagRecordingPreprocessor(AbsPreprocessor):
 
 
 class DummyDataset:
+    fields = (Field("audio", "audio"), Field("text", "text"))
+
     def __init__(self, path=None):
         self.data = [
             {"audio": np.random.random(16000), "text": "hello"},
@@ -169,6 +171,8 @@ class DummyDataset:
 
 
 class DummyStringKeyDataset:
+    fields = (Field("audio", "audio"), Field("text", "text"))
+
     def __init__(self, path=None):
         self.data = {
             "utt0": {"audio": np.random.random(16000), "text": "hello"},
@@ -188,6 +192,8 @@ class DummyStringKeyDataset:
 
 
 class DummyShardedDataset(ShardedDataset):
+    fields = (Field("audio", "audio"), Field("text", "text"))
+
     def __init__(
         self,
         path=None,
@@ -889,7 +895,7 @@ def test_organizer_fields_config_and_class_must_agree():
         )
 
 
-def test_organizer_undeclared_dataset_warns_once(caplog):
+def test_organizer_rejects_undeclared_dataset():
     class UndeclaredDataset:
         def __len__(self):
             return 1
@@ -897,14 +903,11 @@ def test_organizer_undeclared_dataset_warns_once(caplog):
         def __getitem__(self, idx):
             return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
 
-    with caplog.at_level(logging.WARNING):
+    with pytest.raises(ValueError, match="does not declare fields"):
         CombinedDataset(
             [UndeclaredDataset()],
             [(do_nothing, do_nothing)],
-            label="train",
         )
-
-    assert any("does not declare fields" in r.message for r in caplog.records)
 
 
 def test_data_organizer_transform_none():

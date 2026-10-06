@@ -199,8 +199,9 @@ class DatasetBuilder(ABC):
         """
 
     #: The manifest's columns, in file order. `None` (the default) means the
-    #: manifest is not checked (warned once per class). Set alongside
-    #: `built_manifests` to opt in.
+    #: manifest is not checked, which is only valid when `built_manifests`
+    #: also stays at its default (an empty dict); a builder that writes a
+    #: manifest must declare this. Set alongside `built_manifests` to opt in.
     manifest_columns: ClassVar[Optional[Tuple[Field, ...]]] = None
     #: Whether each manifest file has a header row to skip.
     manifest_header: ClassVar[bool] = False

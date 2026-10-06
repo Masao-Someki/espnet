@@ -1,7 +1,5 @@
 """The ``path`` kind: a filesystem path, as ``str`` or ``os.PathLike``."""
 
-from __future__ import annotations
-
 import os
 
 from espnet3.api.inference.kinds.base import Kind

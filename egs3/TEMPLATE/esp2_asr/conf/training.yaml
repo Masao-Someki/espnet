@@ -72,10 +72,11 @@ create_dataset:
 # Only `data_src_args` is passed to the recipe `Dataset` constructor.
 # Top-level fields such as `name` and `transform` stay in organizer space.
 #
-# `fields`: optional declared item keys and kinds, e.g. {speech: audio, text:
-# text}. Checked against the first training/validation sample; when the
-# recipe `Dataset` class also declares a `fields` class attribute, the two
-# must agree. Omitted by default (each dataset class is then warned once).
+# `fields`: declared item keys and kinds, e.g. {speech: audio, text: text}.
+# Checked against the first training/validation sample; when the recipe
+# `Dataset` class also declares a `fields` class attribute, the two must
+# agree. Required one way or the other; omit this only when the recipe's
+# `Dataset` class declares `fields` itself.
 #
 # Example:
 # dataset:

@@ -184,6 +184,9 @@ def test_base_system_create_dataset_prepares_dataset_references(tmp_path, monkey
         def build(self, **kwargs):
             calls.append(("build", kwargs))
 
+        def built_manifests(self, **kwargs):
+            return {}
+
     class DummyModule:
         DatasetBuilder = DummyBuilder
 
@@ -289,6 +292,9 @@ def test_base_system_create_dataset_logs_progress(tmp_path, monkeypatch, caplog)
         def build(self, **kwargs):
             return None
 
+        def built_manifests(self, **kwargs):
+            return {}
+
     class DummyModule:
         DatasetBuilder = DummyBuilder
 
@@ -338,6 +344,9 @@ def test_base_system_create_dataset_runs_prepare_and_build_when_needed(
 
         def build(self, **kwargs):
             calls.append(("build", kwargs))
+
+        def built_manifests(self, **kwargs):
+            return {}
 
     class DummyModule:
         DatasetBuilder = DummyBuilder
@@ -400,6 +409,9 @@ def test_base_system_create_dataset_local_ref_dedup(tmp_path, monkeypatch):
 
         def build(self, **kwargs):
             calls.append(("build", kwargs))
+
+        def built_manifests(self, **kwargs):
+            return {}
 
     class DummyModule:
         DatasetBuilder = DummyBuilder

@@ -13,7 +13,7 @@ from espnet3.components.contract.dataset import (
     check_item,
     fields_from_config,
     reconcile_fields,
-    warn_undeclared,
+    require_declared,
 )
 from espnet3.components.data.dataset import (
     CombinedDataset,
@@ -137,9 +137,9 @@ class DataOrganizer:
             e.g. ``{"speech": "audio", "text": "text"}``. Checked against the
             first sample of each training/validation dataset (after its
             transform, before the preprocessor); when a dataset class also
-            declares a `fields` class attribute, the two must agree. Omit to
-            skip this declaration (each dataset class is then warned once,
-            unless it declares `fields` itself).
+            declares a `fields` class attribute, the two must agree. Every
+            dataset must declare `fields` one way or the other; omit this
+            only when each dataset class declares `fields` itself.
         preprocessor (Optional[Callable]): A global preprocessor function or Hydra
             config applied after each dataset's transform. If it is an instance of
             ``AbsPreprocessor``, each sample is passed as ``(uid, sample)``.
@@ -449,8 +449,8 @@ class DataOrganizer:
 
         Mirrors the check ``CombinedDataset`` runs for train/valid, for a
         standalone test dataset: taken after ``transform``, before the
-        preprocessor. A no-op when neither the dataset class nor
-        ``self.fields`` declares anything, beyond the usual one-time warning.
+        preprocessor. Every dataset must declare `fields`, on the class or
+        via ``self.fields``.
         """
         if len(dataset) == 0:
             return
@@ -460,8 +460,7 @@ class DataOrganizer:
             class_name=type(dataset).__name__,
         )
         if declared is None:
-            warn_undeclared(type(dataset), "fields")
-            return
+            require_declared(type(dataset), "fields")
         sample = transform(dataset[0])
         check_item(
             declared, sample, f"DataOrganizer {label} ({type(dataset).__name__})"
