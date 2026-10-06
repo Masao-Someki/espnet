@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 
 from egs3.librispeech_100.esp2_asr.dataset.dataset import LibriSpeech100Dataset
-from espnet3.components.data.contract import check_item
+from espnet3.components.contract.dataset import check_item
 
 _ALL_SPLITS = (
     "train-clean-100",

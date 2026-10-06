@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from torch.utils.data.dataset import Dataset
 
 from espnet3.components.contract import Field
-from espnet3.components.data.contract import (
+from espnet3.components.contract.dataset import (
     check_item,
     reconcile_fields,
     warn_undeclared,

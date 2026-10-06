@@ -9,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
-from espnet3.components.data.contract import (
+from espnet3.components.contract.dataset import (
     check_item,
     fields_from_config,
     reconcile_fields,

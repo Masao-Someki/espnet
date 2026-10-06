@@ -6,7 +6,7 @@ from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
 
-from espnet3.components.data.contract import check_manifests
+from espnet3.components.contract.dataset import check_manifests
 from espnet3.components.data.dataset_module import (
     load_dataset_module,
     parse_dataset_reference_config,

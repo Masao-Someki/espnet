@@ -126,7 +126,7 @@ class SPGISpeechBuilder(DatasetBuilder):
     file is the raw corpus's own ``train.csv``/``val.csv``, which
     ``SPGISpeechDataset`` reads directly; it is ``|``-delimited with a
     header row, while ``check_manifests``'s row reader
-    (``espnet3/components/data/contract.py:_first_row``) always splits on a
+    (``espnet3/components/contract/dataset.py:_first_row``) always splits on a
     tab, so pointing a declaration at it would not check the real columns,
     only misreport them as one.
     """

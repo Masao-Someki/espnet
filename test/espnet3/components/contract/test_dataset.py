@@ -1,4 +1,4 @@
-"""Tests for espnet3.components.data.contract."""
+"""Tests for espnet3.components.contract.dataset."""
 
 import logging
 from pathlib import Path
@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from espnet3.components.contract import Field
-from espnet3.components.data.contract import (
+from espnet3.components.contract.dataset import (
     DatasetContractError,
     check_fields,
     check_item,

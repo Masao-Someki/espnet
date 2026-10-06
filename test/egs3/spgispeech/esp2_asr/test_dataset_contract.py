@@ -11,7 +11,7 @@ import soundfile as sf
 from egs3.spgispeech.esp2_asr.dataset.builder import SPGISpeechBuilder
 from egs3.spgispeech.esp2_asr.dataset.dataset import SPGISpeechDataset
 from espnet3.components.contract import Field
-from espnet3.components.data.contract import check_item
+from espnet3.components.contract.dataset import check_item
 
 
 def _write_fake_corpus(source_root: Path) -> None:
