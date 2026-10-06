@@ -231,8 +231,49 @@ def check_manifests(builder: Any, **kwargs) -> None:
                 )
 
 
+def check_dataset_column_kind(
+    fields: Optional[Tuple[Field, ...]], column: str, wanted_kind: str, *, where: str
+) -> None:
+    """Raise unless a dataset's declared ``column`` has kind ``wanted_kind``.
+
+    For a metric input sourced from the test set itself
+    (``dataset:<column>``), checked once its column's declared kind is
+    known. A dataset that declares no ``fields``, or whose declared
+    ``fields`` does not name ``column``, is not checked here (nothing to
+    compare against).
+
+    Args:
+        fields: The dataset's declared item fields, or ``None``.
+        column: The dataset column a metric input reads.
+        wanted_kind: The kind the metric's declared input expects.
+        where: What is being checked, for the error.
+
+    Raises:
+        DatasetContractError: ``fields`` names ``column`` with a different
+            kind than ``wanted_kind``.
+
+    Examples:
+        >>> fields = (Field("speech", "audio"), Field("text", "text"))
+        >>> check_dataset_column_kind(fields, "text", "text", where="x")
+        >>> check_dataset_column_kind(fields, "text", "audio", where="x")
+        Traceback (most recent call last):
+        espnet3.components.contract.dataset.DatasetContractError: x: dataset ...
+    """
+    if fields is None:
+        return
+    match = next((f for f in fields if f.name == column), None)
+    if match is None:
+        return
+    if match.kind != wanted_kind:
+        raise DatasetContractError(
+            f"{where}: dataset column {column!r} is declared {match.kind!r} "
+            f"but the metric input wants {wanted_kind!r}"
+        )
+
+
 __all__ = [
     "DatasetContractError",
+    "check_dataset_column_kind",
     "check_fields",
     "check_item",
     "check_manifests",

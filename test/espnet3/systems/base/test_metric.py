@@ -407,3 +407,112 @@ def test_measure_succeeds_for_wer_against_a_declared_inference_model(tmp_path):
 
     expected_key = get_class_path(WER())
     assert results[expected_key][test_name] == {"WER": 0.0}
+
+
+# ---------------------------------------------------------------------------
+# dataset:<column> inputs checked against the dataset's declared fields
+# ---------------------------------------------------------------------------
+
+
+class _FakeRawDataset:
+    fields = (Field("text", "text"),)
+
+    def __init__(self):
+        self.items = [{"text": "hello world"}]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        return self.items[idx]
+
+
+class _FakeDatasetWithTransform:
+    def __init__(self):
+        self.dataset = _FakeRawDataset()
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        return self.dataset[idx]
+
+
+class _FakeProvider:
+    @staticmethod
+    def build_dataset(config):
+        return _FakeDatasetWithTransform()
+
+
+class RefFromDatasetMetric(BaseMetric):
+    inputs = (Field("ref", "audio"), Field("hyp", "text"))
+    outputs = (Field("ok", "number"),)
+
+    def __call__(self, data, test_name, inference_dir):
+        return {"ok": 1}
+
+
+class RefTextMetric(BaseMetric):
+    inputs = (Field("ref", "text"), Field("hyp", "text"))
+    outputs = (Field("ok", "number"),)
+
+    def __call__(self, data, test_name, inference_dir):
+        return {"ok": 1}
+
+
+def test_measure_rejects_dataset_column_wrong_kind(tmp_path, monkeypatch):
+    import espnet3.systems.base.metric as metric_module
+
+    monkeypatch.setattr(metric_module, "InferenceProvider", _FakeProvider)
+
+    inference_dir = tmp_path / "infer"
+    test_name = "test-clean"
+    task_dir = inference_dir / test_name
+    task_dir.mkdir(parents=True)
+    _write_scp(task_dir / "hyp.scp", ["utt1 hello world"])
+
+    cfg = OmegaConf.create(
+        {
+            "inference_dir": str(inference_dir),
+            "dataset": {"test": [{"name": test_name}]},
+            "metrics": [
+                {
+                    "metric": {"_target_": f"{__name__}.RefFromDatasetMetric"},
+                    "inputs": {"ref": "dataset:text", "hyp": "hyp"},
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="dataset column 'text' is declared 'text'"):
+        measure(cfg, _INFERENCE_CFG)
+
+
+def test_measure_accepts_dataset_column_matching_kind(tmp_path, monkeypatch):
+    import espnet3.systems.base.metric as metric_module
+
+    monkeypatch.setattr(metric_module, "InferenceProvider", _FakeProvider)
+
+    inference_dir = tmp_path / "infer"
+    test_name = "test-clean"
+    task_dir = inference_dir / test_name
+    task_dir.mkdir(parents=True)
+    _write_scp(task_dir / "hyp.scp", ["utt1 hello world"])
+
+    cfg = OmegaConf.create(
+        {
+            "inference_dir": str(inference_dir),
+            "dataset": {"test": [{"name": test_name}]},
+            "metrics": [
+                {
+                    "metric": {"_target_": f"{__name__}.RefTextMetric"},
+                    "inputs": {"ref": "dataset:text", "hyp": "hyp"},
+                }
+            ],
+        }
+    )
+
+    results = measure(cfg, _INFERENCE_CFG)
+
+    expected_key = get_class_path(RefTextMetric())
+    assert results[expected_key][test_name] == {"ok": 1}
