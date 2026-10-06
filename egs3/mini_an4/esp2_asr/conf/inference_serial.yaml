@@ -1,9 +1,16 @@
+# CI only (ci/test_integration_espnet3.sh): conf/inference.yaml with one
+# utterance per batch, the reference that inference_parallel.yaml must
+# reproduce byte for byte (ci/check_espnet3_parallel_workers.py). One
+# utterance per batch is what lets mini_an4's two-utterance test set split
+# into two shards at all, and the reference must batch the same way. Kept
+# in step with conf/inference.yaml by hand; only batch_size differs.
+
 ##########################################################
 #                   Inference SETTING                    #
 ##########################################################
 # Common usage:
 #   python run.py --stages infer \
-#       --training_config conf/tuning/training_e_branchformer.yaml \
+#       --training_config conf/training_asr_transformer.yaml \
 #       --inference_config conf/inference.yaml
 #
 ##########################################################
@@ -25,30 +32,22 @@
 # - `name` becomes `${inference_dir}/<name>/`
 # - `data_src` is omitted, so ESPnet3 loads
 #   `${recipe_dir}/dataset/__init__.py`
-# - `data_src_args` is passed directly to `LibriSpeech100Dataset(...)`
+# - `data_src_args` is passed directly to `MiniAn4Dataset(...)`
 #
 # Dataset splits:
 #   test:
-#     - split="dev-clean" from `LibriSpeech100Dataset`
-#     - split="dev-other" from `LibriSpeech100Dataset`
-#     - split="test-clean" from `LibriSpeech100Dataset`
-#     - split="test-other" from `LibriSpeech100Dataset`
+#     - split="valid" from `MiniAn4Dataset`
+#     - split="test" from `MiniAn4Dataset`
 # Notes:
 #   - actual data sources are defined via `${recipe_dir}`
 dataset:
   test:
-    - name: dev-clean
+    - name: valid
       data_src_args:
-        split: dev-clean
-    - name: dev-other
+        split: valid
+    - name: test
       data_src_args:
-        split: dev-other
-    - name: test-clean
-      data_src_args:
-        split: test-clean
-    - name: test-other
-      data_src_args:
-        split: test-other
+        split: test
 
 ##########################################################
 #                    MODEL AND OUTPUT                    #
@@ -56,11 +55,9 @@ dataset:
 model:
   _target_: espnet3.systems.esp2_asr.inference.Inference
   asr_train_config: ${exp_dir}/config.yaml
-  # Weight average over the top-10 `valid/acc` checkpoints, written by
-  # `AverageCheckpointsCallback` (espnet3/components/callbacks/default_callbacks.py).
-  asr_model_file: ${exp_dir}/valid.acc.ave_10best.pth
-  beam_size: 20
+  asr_model_file: ${exp_dir}/epoch0_step1_valid.loss.ckpt
+  beam_size: 1
   ctc_weight: 0.3
 
 # utterances per beam search; `null` decodes one at a time (see TEMPLATE)
-batch_size: 4
+batch_size: 1
