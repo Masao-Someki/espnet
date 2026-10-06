@@ -129,6 +129,12 @@ class SPGISpeechBuilder(DatasetBuilder):
     (``espnet3/components/contract/dataset.py:_first_row``) always splits on a
     tab, so pointing a declaration at it would not check the real columns,
     only misreport them as one.
+
+    Examples:
+        >>> getattr(SPGISpeechBuilder, "manifest_columns") is None
+        True
+        >>> SPGISpeechBuilder().built_manifests()
+        {}
     """
 
     def is_source_prepared(

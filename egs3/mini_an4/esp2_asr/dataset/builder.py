@@ -57,7 +57,12 @@ def _parse_transcript_line(line: str) -> tuple[str, str, str]:
 
 
 class MiniAn4Builder(DatasetBuilder):
-    """Prepare and build Mini AN4 assets for ESPnet3 recipes."""
+    """Prepare and build Mini AN4 assets for ESPnet3 recipes.
+
+    Examples:
+        >>> [c.name for c in MiniAn4Builder.manifest_columns]
+        ['utt_id', 'wav', 'text']
+    """
 
     manifest_columns = (
         Field("utt_id", "text"),
@@ -72,6 +77,11 @@ class MiniAn4Builder(DatasetBuilder):
         Args:
             recipe_dir: Recipe root directory.
             **_kwargs: Unused extra options for API compatibility.
+
+        Examples:
+            >>> manifests = MiniAn4Builder().built_manifests("egs3/mini_an4/esp2_asr")
+            >>> sorted(manifests)
+            ['test', 'train', 'valid']
         """
         data = Path(recipe_dir).resolve() / _CFG["data_path"]
         return {

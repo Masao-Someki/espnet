@@ -225,7 +225,19 @@ class BaseSystem:
     # Stage stubs (override in subclasses if needed)
     # ---------------------------------------------------------
     def create_dataset(self, *args, **kwargs):
-        """Create datasets from dataset references."""
+        """Create datasets from dataset references.
+
+        For each `training_config.dataset.{train,valid,test}` entry, prepares
+        the recipe's builder (`is_source_prepared`/`prepare_source`,
+        `is_built`/`build`) and, when that builder declares
+        `manifest_columns`, checks the built manifest's first row against it.
+
+        Examples:
+            ```python
+            system = BaseSystem(training_config=train_cfg)
+            system.create_dataset()
+            ```
+        """
         self._reject_stage_args("create_dataset", args, kwargs)
         logger.info(
             "%s.create_dataset(): starting dataset creation process",

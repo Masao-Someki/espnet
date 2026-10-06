@@ -214,5 +214,14 @@ class DatasetBuilder(ABC):
         Args:
             recipe_dir: The recipe root, as passed to ``build()``.
             **_kwargs: Other ``build()``-style arguments; unused by default.
+
+        Examples:
+            ```python
+            class MyBuilder(DatasetBuilder):
+                manifest_columns = (Field("utt_id", "text"), Field("wav", "path"))
+
+                def built_manifests(self, recipe_dir, **_kwargs):
+                    return {"train": Path(recipe_dir) / "data/manifest/train.tsv"}
+            ```
         """
         return {}

@@ -251,6 +251,12 @@ class AudioKind(Kind):
     ``(channels, samples)``, mono included as one row; ``channels=N``
     exactly ``N`` channels, or a ``TypeError``. Pieces of a stream
     concatenate in time.
+
+    Examples:
+        >>> from espnet3.api.inference.field import Field
+        >>> field = Field("speech", "audio")
+        >>> AudioKind().accepts(np.zeros(16000, dtype=np.float32), field)
+        True
     """
 
     def check(self, value, field, model, *, output):
@@ -319,6 +325,16 @@ class AudioKind(Kind):
         :meth:`Audio.coerce` accepts when given a fixed rate, without
         requiring one: an :class:`Audio`, a path, a ``(rate, samples)``
         pair, or a bare array/tensor.
+
+        Examples:
+            >>> from espnet3.api.inference.field import Field
+            >>> field = Field("speech", "audio")
+            >>> AudioKind().accepts(np.zeros(16000, dtype=np.float32), field)
+            True
+            >>> AudioKind().accepts((16000, np.zeros(16000, dtype=np.float32)), field)
+            True
+            >>> AudioKind().accepts(42, field)
+            False
         """
         if isinstance(value, Audio):
             return True

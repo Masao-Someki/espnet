@@ -98,6 +98,14 @@ class Kind(ABC):
         "no"; override when a kind's :meth:`check` needs the model for
         something a model-free caller cannot supply (``audio`` needs a
         rate when none is carried).
+
+        Examples:
+            >>> from espnet3.api.inference.field import Field
+            >>> from espnet3.api.inference.kinds.text import TextKind
+            >>> TextKind().accepts("hi", Field("text", "text"))
+            True
+            >>> TextKind().accepts(7, Field("text", "text"))
+            False
         """
         try:
             self.check(value, field, None, output=False)

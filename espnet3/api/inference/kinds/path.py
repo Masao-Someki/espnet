@@ -8,7 +8,13 @@ from espnet3.api.inference.kinds.base import Kind
 
 
 class PathKind(Kind):
-    """``path``: a filesystem path; used for manifest columns such as a wav path."""
+    """``path``: a filesystem path; used for manifest columns such as a wav path.
+
+    Examples:
+        >>> from espnet3.api.inference.field import Field
+        >>> PathKind().check("a.wav", Field("wav", "path"), None, output=False)
+        'a.wav'
+    """
 
     def check(self, value, field, model, *, output):
         """Require ``str`` or ``os.PathLike``; return it unchanged.
@@ -26,9 +32,10 @@ class PathKind(Kind):
             TypeError: If ``value`` is not a ``str`` or ``os.PathLike``.
 
         Examples:
-            >>> PathKind().check("a.wav", Field("wav", "path"), model, output=False)
+            >>> from espnet3.api.inference.field import Field
+            >>> PathKind().check("a.wav", Field("wav", "path"), None, output=False)
             'a.wav'
-            >>> PathKind().check(7, Field("wav", "path"), model, output=True)
+            >>> PathKind().check(7, Field("wav", "path"), None, output=True)
             Traceback (most recent call last):
             TypeError: 'wav' returned as int, must be a str or os.PathLike
         """

@@ -80,7 +80,12 @@ def _read_manifest(manifest_path: Path) -> list[ManifestEntry]:
 
 
 class MiniAn4Dataset(TorchDataset):
-    """Mini AN4 dataset that returns ``{\"speech\", \"text\"}`` samples."""
+    """Mini AN4 dataset that returns ``{\"speech\", \"text\"}`` samples.
+
+    Examples:
+        >>> [f.name for f in MiniAn4Dataset.fields]
+        ['speech', 'text']
+    """
 
     fields = (Field("speech", "audio"), Field("text", "text"))
 
