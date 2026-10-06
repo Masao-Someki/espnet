@@ -6,6 +6,7 @@ from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
 
+from espnet3.components.data.contract import check_manifests
 from espnet3.components.data.dataset_module import (
     load_dataset_module,
     parse_dataset_reference_config,
@@ -269,6 +270,7 @@ class BaseSystem:
 
                 if not builder.is_built(**builder_kwargs):
                     builder.build(**builder_kwargs)
+                check_manifests(builder, **builder_kwargs)
                 prepared_any = True
 
         if not prepared_any:
