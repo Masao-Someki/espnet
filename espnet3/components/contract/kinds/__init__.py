@@ -27,6 +27,7 @@ from __future__ import annotations
 from espnet3.components.contract.kinds.audio import Audio, AudioKind
 from espnet3.components.contract.kinds.base import Kind
 from espnet3.components.contract.kinds.number import NumberKind
+from espnet3.components.contract.kinds.path import PathKind
 from espnet3.components.contract.kinds.segments import SegmentsKind
 from espnet3.components.contract.kinds.text import TextKind
 
@@ -36,6 +37,7 @@ KINDS: dict[str, Kind] = {
     "text": TextKind(),
     "segments": SegmentsKind(),
     "number": NumberKind(),
+    "path": PathKind(),
 }
 
 
@@ -72,6 +74,7 @@ __all__ = [
     "AudioKind",
     "Kind",
     "NumberKind",
+    "PathKind",
     "SegmentsKind",
     "TextKind",
     "register_kind",
