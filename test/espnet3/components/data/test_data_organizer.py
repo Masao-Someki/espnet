@@ -870,7 +870,11 @@ def test_organizer_rejects_wrong_kind():
 
 def test_organizer_fields_config_and_class_must_agree():
     class DeclaredDataset:
-        fields = (Field("speech", "audio"), Field("text", "text"), Field("speaker", "text"))
+        fields = (
+            Field("speech", "audio"),
+            Field("text", "text"),
+            Field("speaker", "text"),
+        )
 
         def __len__(self):
             return 1

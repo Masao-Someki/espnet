@@ -157,8 +157,9 @@ class CombinedDataset:
                 warn_undeclared(type(dataset), "fields")
             else:
                 check_item(
-                    declared, sample, f"DataOrganizer {self.label}[{i}]"
-                    f" ({type(dataset).__name__})"
+                    declared,
+                    sample,
+                    f"DataOrganizer {self.label}[{i}]" f" ({type(dataset).__name__})",
                 )
 
         # Check if dataset is a subclass of ShardedDataset.

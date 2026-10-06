@@ -102,7 +102,9 @@ _FIELDS = (Field("speech", "audio"), Field("text", "text"))
 
 
 def test_check_item_accepts_matching_item():
-    check_item(_FIELDS, {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}, "x")
+    check_item(
+        _FIELDS, {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}, "x"
+    )
 
 
 def test_check_item_allows_undeclared_extra_keys():

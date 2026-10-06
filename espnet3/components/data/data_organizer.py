@@ -463,7 +463,9 @@ class DataOrganizer:
             warn_undeclared(type(dataset), "fields")
             return
         sample = transform(dataset[0])
-        check_item(declared, sample, f"DataOrganizer {label} ({type(dataset).__name__})")
+        check_item(
+            declared, sample, f"DataOrganizer {label} ({type(dataset).__name__})"
+        )
 
     def _build_dataset_list(
         self,
