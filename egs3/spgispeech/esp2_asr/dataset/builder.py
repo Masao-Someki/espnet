@@ -119,6 +119,16 @@ class SPGISpeechBuilder(DatasetBuilder):
     responsibility is to ensure the expected files are available under the
     configured source directory (or the ``SPGISPEECH`` environment variable,
     or the shared corpus default).
+
+    No ``manifest_columns``: this recipe has no ``build()``-written espnet3
+    manifest for ``check_manifests`` to check (``built_manifests()`` keeps
+    the ``DatasetBuilder`` default, an empty dict). The only manifest-shaped
+    file is the raw corpus's own ``train.csv``/``val.csv``, which
+    ``SPGISpeechDataset`` reads directly; it is ``|``-delimited with a
+    header row, while ``check_manifests``'s row reader
+    (``espnet3/components/data/contract.py:_first_row``) always splits on a
+    tab, so pointing a declaration at it would not check the real columns,
+    only misreport them as one.
     """
 
     def is_source_prepared(
