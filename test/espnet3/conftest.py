@@ -5,6 +5,46 @@ import sys
 import tempfile
 import types
 
+import numpy as np
+import pytest
+
+from espnet3.api.inference import KINDS, Kind
+
+
+class TensorKind(Kind):
+    """A test-only kind for a raw numeric array/tensor, not audio or text.
+
+    Examples:
+        ```python
+        TensorKind().check(np.zeros(3), Field("x", "test_tensor"), None, output=False)
+        ```
+    """
+
+    def check(self, value, field, model, *, output):
+        """Accept only an ndarray or a tensor; anything else is a TypeError.
+
+        Examples:
+            ```python
+            TensorKind().check(np.zeros(3), field, None, output=False)
+            ```
+        """
+        if isinstance(value, np.ndarray) or hasattr(value, "detach"):
+            return value
+        raise TypeError(f"{field.name!r} must be an ndarray or a tensor")
+
+
+@pytest.fixture
+def tensor_kind(monkeypatch):
+    """Register the ``test_tensor`` kind for one test, then remove it.
+
+    Examples:
+        ```python
+        def test_something(tensor_kind):
+            Field("x", "test_tensor")
+        ```
+    """
+    monkeypatch.setitem(KINDS, "test_tensor", TensorKind())
+
 
 def _install_stub(name: str, module: types.ModuleType) -> None:
     sys.modules.setdefault(name, module)

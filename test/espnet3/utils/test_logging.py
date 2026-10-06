@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
 
+from espnet3.api.inference import Field
 from espnet3.utils import logging_utils as elog
 
 # | Test Name                                              | Description                                                    | # noqa: E501
@@ -280,12 +281,16 @@ def test_log_training_summary_includes_model_and_optimizer():
         _reset_logger(logger, old_handlers, old_level, old_propagate)
 
 
-def test_log_data_organizer_includes_datasets():
+def test_log_data_organizer_includes_datasets(monkeypatch, tensor_kind):
     logger, stream, cleanup = _capture_logger("espnet3.test.data_organizer")
     old_handlers, old_level, old_propagate, handler = cleanup
 
     from espnet3.components.data.data_organizer import DataOrganizer
     from espnet3.components.data.dataset import CombinedDataset
+
+    monkeypatch.setattr(
+        DummyDataset, "fields", (Field("x", "test_tensor"),), raising=False
+    )
 
     class DummyOrganizer(DataOrganizer):
         def __init__(self):
@@ -305,7 +310,7 @@ def test_log_data_organizer_includes_datasets():
         _reset_logger(logger, old_handlers, old_level, old_propagate)
 
 
-def test_log_data_organizer_combined_variants():
+def test_log_data_organizer_combined_variants(monkeypatch, tensor_kind):
     logger, stream, cleanup = _capture_logger("espnet3.test.data_organizer.variants")
     old_handlers, old_level, old_propagate, handler = cleanup
 
@@ -320,6 +325,10 @@ def test_log_data_organizer_combined_variants():
 
     from espnet3.components.data.data_organizer import DataOrganizer
     from espnet3.components.data.dataset import CombinedDataset
+
+    monkeypatch.setattr(
+        DummyDataset, "fields", (Field("x", "test_tensor"),), raising=False
+    )
 
     class DummyOrganizer(DataOrganizer):
         def __init__(self):

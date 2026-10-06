@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
 
+from espnet3.api.inference import Field
 from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.modeling.lightning_module import ESPnetLightningModule
 from espnet3.components.modeling.optimization_spec import OptimizationStep
@@ -15,7 +16,13 @@ DUMMY_DATA_SRC = "dummy/asr"
 
 
 @pytest.fixture(autouse=True)
-def patch_dataset_reference(monkeypatch):
+def patch_dataset_reference(monkeypatch, tensor_kind):
+    monkeypatch.setattr(
+        DummyDataset,
+        "fields",
+        (Field("x", "test_tensor"),),
+        raising=False,
+    )
     monkeypatch.setattr(
         data_organizer_module,
         "instantiate_dataset_reference",
