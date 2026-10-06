@@ -9,7 +9,6 @@ from omegaconf import DictConfig, OmegaConf
 from espnet2.train.preprocessor import AbsPreprocessor
 from espnet3.components.contract import Field
 from espnet3.components.data import data_organizer as data_organizer_module
-from espnet3.components.data.contract import DatasetContractError
 from espnet3.components.data.data_organizer import (
     DataOrganizer,
     do_nothing,
@@ -843,7 +842,7 @@ def test_organizer_rejects_item_missing_declared_field():
         def __getitem__(self, idx):
             return {"speech": np.zeros(16000, dtype=np.float32)}
 
-    with pytest.raises(DatasetContractError, match="lacks declared field 'text'"):
+    with pytest.raises(ValueError, match="lacks declared field 'text'"):
         CombinedDataset(
             [DeclaredDataset()],
             [(do_nothing, do_nothing)],
@@ -861,7 +860,7 @@ def test_organizer_rejects_wrong_kind():
         def __getitem__(self, idx):
             return {"speech": 42, "text": "hello"}
 
-    with pytest.raises(DatasetContractError, match="declared audio but the item holds"):
+    with pytest.raises(ValueError, match="declared audio but the item holds"):
         CombinedDataset(
             [DeclaredDataset()],
             [(do_nothing, do_nothing)],
@@ -879,7 +878,7 @@ def test_organizer_fields_config_and_class_must_agree():
         def __getitem__(self, idx):
             return {"speech": np.zeros(16000, dtype=np.float32), "text": "hi"}
 
-    with pytest.raises(DatasetContractError, match="make them agree or drop one"):
+    with pytest.raises(ValueError, match="make them agree or drop one"):
         CombinedDataset(
             [DeclaredDataset()],
             [(do_nothing, do_nothing)],

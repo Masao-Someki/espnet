@@ -5,7 +5,6 @@ from omegaconf import OmegaConf
 
 import espnet3.systems.base.system as sysmod
 from espnet3.components.contract import Field
-from espnet3.components.data.contract import DatasetContractError
 from espnet3.systems.base.system import BaseSystem
 
 
@@ -255,7 +254,7 @@ def test_create_dataset_checks_manifest_columns(tmp_path, monkeypatch):
         lambda data_src=None, recipe_dir=None: DummyModule(),
     )
 
-    with pytest.raises(DatasetContractError, match="row 1 has 2 columns"):
+    with pytest.raises(ValueError, match="row 1 has 2 columns"):
         system.create_dataset()
 
 

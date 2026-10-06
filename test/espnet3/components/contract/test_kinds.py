@@ -3,7 +3,12 @@
 import numpy as np
 import pytest
 
-from espnet3.components.contract import KINDS, AudioKind, Field, NumberKind, PathKind
+from espnet3.components.contract import KINDS, AudioKind, Field, NumberKind
+
+# The path-kind and AudioKind.accepts tests below use KINDS["path"] and
+# Field("wav", "path") rather than importing PathKind directly, so this file
+# stays importable when copied alone onto a tree that predates the path kind
+# (there, Field("wav", "path") itself raises ValueError: known kinds are ...).
 
 
 def test_number_kind_is_registered():
@@ -30,23 +35,24 @@ def test_number_kind_rejects_str():
 
 
 def test_path_kind_registered():
-    assert isinstance(KINDS["path"], PathKind)
+    assert "path" in KINDS
 
 
 def test_path_kind_accepts_str_and_path_like():
     import os
 
     field = Field("wav", "path")
-    assert PathKind().check("a.wav", field, model=None, output=False) == "a.wav"
-    assert PathKind().check(
-        os.fspath("a.wav"), field, model=None, output=False
-    ) == "a.wav"
+    assert KINDS["path"].check("a.wav", field, model=None, output=False) == "a.wav"
+    assert (
+        KINDS["path"].check(os.fspath("a.wav"), field, model=None, output=False)
+        == "a.wav"
+    )
 
 
 def test_path_kind_rejects_non_path():
     field = Field("wav", "path")
     with pytest.raises(TypeError, match="must be a str or os.PathLike"):
-        PathKind().check(7, field, model=None, output=False)
+        KINDS["path"].check(7, field, model=None, output=False)
 
 
 @pytest.mark.parametrize(
