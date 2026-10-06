@@ -3,12 +3,13 @@
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.train.preprocessor import AbsPreprocessor
+from espnet3.components.data.contract import fields_from_config
 from espnet3.components.data.dataset import (
     CombinedDataset,
     DatasetWithTransform,
@@ -127,6 +128,13 @@ class DataOrganizer:
         test (Optional[List[Union[DatasetConfig, Dict[str, Any], DictConfig]]]):
             A list of test dataset configurations, each with a name and corresponding
             data source and optional transform.
+        fields (Optional[Mapping[str, str]]): The declared item keys and kinds,
+            e.g. ``{"speech": "audio", "text": "text"}``. Checked against the
+            first sample of each training/validation dataset (after its
+            transform, before the preprocessor); when a dataset class also
+            declares a `fields` class attribute, the two must agree. Omit to
+            skip this declaration (each dataset class is then warned once,
+            unless it declares `fields` itself).
         preprocessor (Optional[Callable]): A global preprocessor function or Hydra
             config applied after each dataset's transform. If it is an instance of
             ``AbsPreprocessor``, each sample is passed as ``(uid, sample)``.
@@ -248,9 +256,11 @@ class DataOrganizer:
         test: Optional[List[Union[DatasetConfig, Dict[str, Any], DictConfig]]] = None,
         preprocessor: Optional[Callable[[dict], dict]] = None,
         recipe_dir: Optional[str] = None,
+        fields: Optional[Mapping[str, str]] = None,
     ):
         """Initialize DataOrganizer object."""
         self.recipe_dir = recipe_dir
+        self.fields = fields_from_config(fields) if fields else None
 
         preprocessor_cfg = preprocessor
         if preprocessor_cfg is None:
@@ -346,11 +356,13 @@ class DataOrganizer:
             self.train = self._build_dataset_list(
                 train,
                 train_preprocessor,
+                label="train",
             )
         if valid is not None:
             self.valid = self._build_dataset_list(
                 valid,
                 valid_preprocessor,
+                label="valid",
             )
 
         # Check consistency between train and valid datasets:
@@ -430,6 +442,7 @@ class DataOrganizer:
         self,
         config_list,
         preprocessor,
+        label: str,
     ):
         """Build a combined dataset from config entries."""
         datasets = []
@@ -455,6 +468,8 @@ class DataOrganizer:
             datasets,
             transforms,
             use_espnet_preprocessor=isinstance(preprocessor, AbsPreprocessor),
+            fields=self.fields,
+            label=label,
         )
 
     @property

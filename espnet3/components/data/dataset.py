@@ -7,6 +7,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from torch.utils.data.dataset import Dataset
 
+from espnet3.components.contract import Field
+from espnet3.components.data.contract import (
+    check_item,
+    reconcile_fields,
+    warn_undeclared,
+)
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
 
 
@@ -52,12 +58,20 @@ class CombinedDataset:
         use_espnet_preprocessor (bool): If True, applies the preprocessor as
             `preprocessor(uid, sample)`. This is used for ESPnet `AbsPreprocessor`
             compatible pipelines.
+        fields (Optional[Tuple[Field, ...]]): The declared item fields (from
+            `DataOrganizer(fields=...)`), reconciled per dataset against its
+            own `fields` class attribute when it has one. `None` when neither
+            declares it, which skips the check (warned once per class).
+        label (str): What this combined dataset is, for messages (`"train"`,
+            `"valid"`).
 
     Note:
         At initialization, the first sample from each dataset is passed through
         its associated transform to check that all datasets produce dictionaries
         with the same set of keys. This ensures consistency across the combined dataset.
-        An `AssertionError` is raised if the keys differ.
+        An `AssertionError` is raised if the keys differ. When item fields are
+        declared (on the dataset class or via `fields`), that same sample is
+        also checked against them; a mismatch raises `DatasetContractError`.
 
     Raises:
         IndexError: If a requested index is outside the range of the combined dataset.
@@ -84,6 +98,8 @@ class CombinedDataset:
         datasets: List[Any],
         transforms: List[Tuple[Callable, Callable]],
         use_espnet_preprocessor: bool = False,
+        fields: Optional[Tuple[Field, ...]] = None,
+        label: str = "dataset",
     ):
         """Initialize CombinedDataset object."""
         self.datasets = datasets
@@ -91,6 +107,8 @@ class CombinedDataset:
         self.lengths = [len(ds) for ds in datasets]
         self.cumulative_lengths = []
         self.use_espnet_preprocessor = use_espnet_preprocessor
+        self.fields = fields
+        self.label = label
 
         for transform, preprocessor in transforms:
             if transform is None:
@@ -128,6 +146,19 @@ class CombinedDataset:
                 assert keys == sample_keys, (
                     f"Inconsistent output keys in dataset {i}: "
                     f"{keys} != {sample_keys}"
+                )
+
+            declared = reconcile_fields(
+                getattr(type(dataset), "fields", None),
+                self.fields,
+                class_name=type(dataset).__name__,
+            )
+            if declared is None:
+                warn_undeclared(type(dataset), "fields")
+            else:
+                check_item(
+                    declared, sample, f"DataOrganizer {self.label}[{i}]"
+                    f" ({type(dataset).__name__})"
                 )
 
         # Check if dataset is a subclass of ShardedDataset.
