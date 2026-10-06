@@ -219,6 +219,24 @@ def check_declared_fields(
         TypeError: ``dataset.fields`` is declared but malformed, or
             neither it nor ``config_fields`` is given.
         DatasetContractError: Both are given and disagree.
+
+    Examples:
+        A fixed declaration (class attribute):
+
+        >>> class FixedDataset:
+        ...     fields = (Field("speech", "audio"), Field("text", "text"))
+        >>> check_declared_fields(FixedDataset(), None)[0].name
+        'speech'
+
+        A declaration the dataset's own ``__init__`` builds:
+
+        >>> class ConfigurableDataset:
+        ...     def __init__(self, extra_field):
+        ...         self.fields = (
+        ...             Field("speech", "audio"), Field(extra_field, "text")
+        ...         )
+        >>> check_declared_fields(ConfigurableDataset("text"), None)[1].name
+        'text'
     """
     class_fields = check_fields(dataset, "fields")
     declared = reconcile_fields(
