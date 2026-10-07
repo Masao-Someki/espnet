@@ -273,7 +273,15 @@ class BaseSystem:
         return None
 
     def collect_stats(self, *args, **kwargs):
-        """Collect statistics needed for training."""
+        """Collect statistics needed for training.
+
+        Examples:
+            ```python
+            system = ASRSystem(training_config=training_config)
+            system.collect_stats()
+            # Writes stats under training_config.stats_dir.
+            ```
+        """
         self._reject_stage_args("collect_stats", args, kwargs)
         logger.info(
             "Collecting stats | exp_dir=%s stats_dir=%s",
@@ -283,7 +291,15 @@ class BaseSystem:
         return collect_stats(self._stage_config(self.training_config))
 
     def train(self, *args, **kwargs):
-        """Train the system model."""
+        """Train the system model.
+
+        Examples:
+            ```python
+            system = ASRSystem(training_config=training_config)
+            system.train()
+            # Runs model.fit() and saves the resolved config under exp_dir.
+            ```
+        """
         self._reject_stage_args("train", args, kwargs)
         model_target = None
         if self.training_config is not None and hasattr(self.training_config, "model"):
@@ -298,7 +314,15 @@ class BaseSystem:
         return train(self._stage_config(self.training_config))
 
     def infer(self, *args, **kwargs):
-        """Run inference on the configured datasets."""
+        """Run inference on the configured datasets.
+
+        Examples:
+            ```python
+            system = ASRSystem(inference_config=inference_config)
+            system.infer()
+            # Writes decoded hypotheses under inference_config.inference_dir.
+            ```
+        """
         self._reject_stage_args("infer", args, kwargs)
         logger.info(
             "Inference start | inference_dir=%s",
@@ -307,7 +331,17 @@ class BaseSystem:
         return infer(self._stage_config(self.inference_config))
 
     def measure(self, *args, **kwargs):
-        """Compute evaluation metrics from hypothesis/reference outputs."""
+        """Compute evaluation metrics from hypothesis/reference outputs.
+
+        Examples:
+            ```python
+            system = ASRSystem(
+                metrics_config=metrics_config, inference_config=inference_config
+            )
+            result = system.measure()
+            # result holds the computed metric values.
+            ```
+        """
         self._reject_stage_args("measure", args, kwargs)
         logger.info(
             "Metrics start | metrics_config=%s",
@@ -324,7 +358,18 @@ class BaseSystem:
     # Publication stages (optional overrides)
     # ---------------------------------------------------------
     def pack_model(self, *args, **kwargs):
-        """Pack model artifacts into an espnet3 bundle."""
+        """Pack model artifacts into an espnet3 bundle.
+
+        Examples:
+            ```python
+            system = ASRSystem(
+                training_config=training_config,
+                publication_config=publication_config,
+            )
+            system.pack_model()
+            # Packs model artifacts under publication_config.pack_model.out_dir.
+            ```
+        """
         self._reject_stage_args("pack_model", args, kwargs)
         return _pack_model(
             training_config=self._stage_config(self.training_config),
