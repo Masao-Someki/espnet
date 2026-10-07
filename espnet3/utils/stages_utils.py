@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable, List, Sequence
 
 from espnet3.components.contract.stages import stage_log_dir
+from espnet3.utils.experiment_context import save_stage_config
 from espnet3.utils.logging_utils import (
     log_stage,
     log_stage_metadata,
@@ -95,6 +96,8 @@ def run_stages(
         >>> class ExampleSystem:
         ...     stages = (StageSpec("train", "training"),)
         ...     _default_log_dir = None
+        ...     exp_dir = None
+        ...     training_config = None
         ...     def train(self):
         ...         print("training ran")
         >>> run_stages(ExampleSystem(), ["train"])
@@ -108,6 +111,9 @@ def run_stages(
             raise AttributeError(f"System has no stage method: {stage}")
 
         with log_stage(stage):
+            rank = _get_process_rank()
+            save_stage_config(system, stage, dry_run=dry_run, rank=rank, log=log)
+
             if dry_run:
                 log.info("[DRY RUN] would run stage: %s", stage)
                 continue
@@ -120,7 +126,6 @@ def run_stages(
                 # rank0 avoids multi-process rotation races;
                 # per_rank writes per-rank logs.
                 stage_log_mode = _get_stage_log_mode(system)
-                rank = _get_process_rank()
                 if stage_log_mode not in {"rank0", "per_rank"}:
                     log.error(
                         "Unknown stage_log_mode=%r (expected 'rank0' or 'per_rank'); "

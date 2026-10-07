@@ -1,6 +1,8 @@
 """Tests for espnet3.systems.launch: build_parser, launch, default_conf_package."""
 
 import logging
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from omegaconf import OmegaConf
@@ -58,19 +60,34 @@ def stub_config_loading(monkeypatch):
         captured.setdefault("default_package", default_package)
         return OmegaConf.create({})
 
+    def fake_build_experiment_context(**kwargs):
+        captured["build_experiment_context_kwargs"] = kwargs
+        return SimpleNamespace(exp_dir=kwargs.get("exp_dir") or "./exp/stub")
+
+    def fake_save_experiment_context(exp_dir, context, **kwargs):
+        captured["save_experiment_context_args"] = (exp_dir, context, kwargs)
+        return Path(exp_dir) / "config" / "context.yaml"
+
     monkeypatch.setattr(
         launch_module, "load_and_merge_config", fake_load_and_merge_config
     )
     monkeypatch.setattr(
         launch_module, "configure_logging", lambda *a, **k: logging.getLogger("test")
     )
-    monkeypatch.setattr(
-        launch_module, "apply_training_experiment_context", lambda *a, **k: None
-    )
+    # Note: apply_training_experiment_context is called from inside
+    # build_experiment_context (espnet3.utils.experiment_context), not
+    # imported into launch_module directly - stubbing
+    # build_experiment_context below already covers it.
     monkeypatch.setattr(
         launch_module, "validate_experiment_context", lambda *a, **k: None
     )
     monkeypatch.setattr(launch_module, "resolve_loaded_configs", lambda *a, **k: None)
+    monkeypatch.setattr(
+        launch_module, "build_experiment_context", fake_build_experiment_context
+    )
+    monkeypatch.setattr(
+        launch_module, "save_experiment_context", fake_save_experiment_context
+    )
     return captured
 
 
@@ -95,6 +112,73 @@ def test_build_parser_rejects_unknown_stage_name():
     parser = build_parser(_RecordingSystem)
     with pytest.raises(SystemExit):
         parser.parse_args(["--stages", "decode"])
+
+
+def test_build_parser_has_exp_dir_and_overwrite_context_args():
+    parser = build_parser(_RecordingSystem)
+    args = parser.parse_args(["--stages", "train", "--training_config", "a.yaml"])
+
+    assert args.exp_dir is None
+    assert args.overwrite_context is False
+
+
+def test_build_parser_accepts_exp_dir_and_overwrite_context():
+    parser = build_parser(_RecordingSystem)
+    args = parser.parse_args(
+        [
+            "--stages",
+            "train",
+            "--training_config",
+            "a.yaml",
+            "--exp_dir",
+            "./exp/my_run",
+            "--overwrite_context",
+        ]
+    )
+
+    assert args.exp_dir == "./exp/my_run"
+    assert args.overwrite_context is True
+
+
+def test_launch_passes_exp_dir_and_overwrite_context_through(
+    stub_config_loading, tmp_path
+):
+    launch(
+        _RecordingSystem,
+        argv=[
+            "--stages",
+            "train",
+            "--training_config",
+            str(tmp_path / "training.yaml"),
+            "--exp_dir",
+            str(tmp_path / "exp" / "my_run"),
+            "--overwrite_context",
+        ],
+    )
+
+    build_kwargs = stub_config_loading["build_experiment_context_kwargs"]
+    assert build_kwargs["exp_dir"] == str(tmp_path / "exp" / "my_run")
+    _, _, save_kwargs = stub_config_loading["save_experiment_context_args"]
+    assert save_kwargs["overwrite_context"] is True
+
+
+def test_launch_builds_roles_from_requested_stages(stub_config_loading, tmp_path):
+    launch(
+        _RecordingSystem,
+        argv=[
+            "--stages",
+            "train",
+            "infer",
+            "--training_config",
+            str(tmp_path / "training.yaml"),
+            "--inference_config",
+            str(tmp_path / "inference.yaml"),
+        ],
+    )
+
+    build_kwargs = stub_config_loading["build_experiment_context_kwargs"]
+    # _RecordingSystem declares train -> training, infer -> inference.
+    assert build_kwargs["roles"] == ("training", "inference")
 
 
 def test_launch_requires_config_for_requested_stage(stub_config_loading):

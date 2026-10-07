@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -10,15 +11,16 @@ from espnet3.components.contract.stages import (
     CONFIG_ROLES,
     check_requested_stages,
     stage_names,
+    stage_spec,
 )
 from espnet3.utils.config_utils import load_and_merge_config
-from espnet3.utils.logging_utils import configure_logging
-from espnet3.utils.run_utils import (
-    apply_training_experiment_context,
-    resolve_loaded_configs,
-    validate_experiment_context,
+from espnet3.utils.experiment_context import (
+    build_experiment_context,
+    save_experiment_context,
 )
-from espnet3.utils.stages_utils import resolve_stages, run_stages
+from espnet3.utils.logging_utils import configure_logging
+from espnet3.utils.run_utils import resolve_loaded_configs, validate_experiment_context
+from espnet3.utils.stages_utils import _get_process_rank, resolve_stages, run_stages
 
 
 def build_parser(system_cls: type) -> argparse.ArgumentParser:
@@ -31,7 +33,8 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
     Returns:
         A parser with ``--stages``, one ``--<role>_config`` per
         :data:`~espnet3.components.contract.stages.CONFIG_ROLES`,
-        ``--dry_run``, and ``--write_requirements``.
+        ``--exp_dir``, ``--overwrite_context``, ``--dry_run``, and
+        ``--write_requirements``.
 
     Examples:
         >>> from espnet3.systems.esp2_asr.system import ASRSystem
@@ -56,6 +59,17 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
             type=Path,
             help=f"Hydra config for the {role} role's stages.",
         )
+    parser.add_argument(
+        "--exp_dir",
+        default=None,
+        type=str,
+        help="Experiment directory for a standalone run with no training_config.",
+    )
+    parser.add_argument(
+        "--overwrite_context",
+        action="store_true",
+        help="Allow this run's identity to replace a saved context.yaml.",
+    )
     parser.add_argument(
         "--dry_run",
         action="store_true",
@@ -94,6 +108,12 @@ def launch(
 ) -> None:
     """Parse CLI args, build ``system_cls``, and run its requested stages.
 
+    Loads each config role, builds and validates the experiment context
+    (identity such as ``exp_tag``/``exp_dir`` propagated across roles, or
+    recovered from a saved ``context.yaml`` for a standalone run), resolves
+    interpolations, builds ``system_cls``, saves the run's context once (rank
+    0, unless ``--dry_run``), and runs the requested stages.
+
     Args:
         system_cls: The system class to instantiate and run.
         conf_package: Package holding the default configs; defaults to
@@ -105,6 +125,8 @@ def launch(
     Raises:
         espnet3.components.contract.stages.StageContractError: A requested
             stage is not declared, or its config role was not given.
+        espnet3.utils.run_utils.ExperimentContextError: The configs lack
+            enough experiment identity for the requested stages.
 
     Examples:
         ```python
@@ -137,21 +159,34 @@ def launch(
     }
 
     logger = configure_logging()
-    apply_training_experiment_context(
+    roles = tuple(
+        dict.fromkeys(stage_spec(system_cls, s).config for s in stages_to_run)
+    )
+    context = build_experiment_context(
         training_config=configs["training"],
         inference_config=configs["inference"],
         metrics_config=configs["metrics"],
         publication_config=configs["publication"],
         demo_config=configs["demo"],
+        exp_dir=args.exp_dir,
+        roles=roles,
         log=logger,
     )
     validate_experiment_context(
         training_config=configs["training"],
         inference_config=configs["inference"],
         metrics_config=configs["metrics"],
+        publication_config=configs["publication"],
+        demo_config=configs["demo"],
         stages_to_run=stages_to_run,
     )
-    resolve_loaded_configs(*configs.values())
+    resolve_loaded_configs(
+        training=configs["training"],
+        inference=configs["inference"],
+        metrics=configs["metrics"],
+        publication=configs["publication"],
+        demo=configs["demo"],
+    )
 
     system = system_cls(
         training_config=configs["training"],
@@ -164,4 +199,15 @@ def launch(
     logger.info("System: %s", system_cls.__name__)
     logger.info("Requested stages: %s", args.stages)
     logger.info("Resolved stages: %s", stages_to_run)
+
+    if not args.dry_run and _get_process_rank() == 0:
+        save_experiment_context(
+            context.exp_dir,
+            context,
+            overwrite_context=args.overwrite_context,
+            stages=stages_to_run,
+            argv=list(argv) if argv is not None else sys.argv,
+            log=logger,
+        )
+
     run_stages(system=system, stages_to_run=stages_to_run, args=args, log=logger)

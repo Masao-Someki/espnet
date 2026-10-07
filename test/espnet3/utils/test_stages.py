@@ -168,6 +168,40 @@ def test_run_stages_train_uses_per_rank_log_filename(monkeypatch, tmp_path):
     assert seen["filename"] == "train_rank3.log"
 
 
+def test_run_stages_saves_stage_config_before_running_each_stage(monkeypatch):
+    calls = []
+
+    def fake_save_stage_config(system, stage, *, dry_run=False, rank=0, log=None):
+        calls.append((stage, dry_run, rank))
+
+    monkeypatch.setattr(stages_utils, "save_stage_config", fake_save_stage_config)
+    monkeypatch.setattr(stages_utils, "_get_process_rank", lambda: 2)
+
+    system = DummySystem()
+    run_stages(system, ["stage_a", "stage_b"])
+
+    assert calls == [("stage_a", False, 2), ("stage_b", False, 2)]
+    # save_stage_config ran before each stage method, not just at the end.
+    assert system.calls == ["a", "b"]
+
+
+def test_run_stages_dry_run_still_calls_save_stage_config_with_dry_run_true(
+    monkeypatch,
+):
+    calls = []
+
+    def fake_save_stage_config(system, stage, *, dry_run=False, rank=0, log=None):
+        calls.append((stage, dry_run))
+
+    monkeypatch.setattr(stages_utils, "save_stage_config", fake_save_stage_config)
+
+    system = DummySystem()
+    run_stages(system, ["stage_a"], args=argparse.Namespace(dry_run=True))
+
+    assert calls == [("stage_a", True)]
+    assert system.calls == []
+
+
 def test_run_stages_train_unknown_log_mode_falls_back_to_rank0(
     monkeypatch, tmp_path, caplog
 ):
