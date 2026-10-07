@@ -1,0 +1,222 @@
+"""Tests for espnet3.components.contract.stages."""
+
+from pathlib import Path
+
+import pytest
+from omegaconf import OmegaConf
+
+from espnet3.components.contract.stages import (
+    CONFIG_ROLES,
+    StageContractError,
+    StageSpec,
+    check_requested_stages,
+    check_stage_contract,
+    stage_log_dir,
+    stage_names,
+    stage_spec,
+)
+
+# ---------------------------------------------------------------------------
+# check_stage_contract: definition-time errors
+# ---------------------------------------------------------------------------
+
+
+def test_check_stage_contract_rejects_empty_stages():
+    class Empty:
+        stages = ()
+
+    with pytest.raises(StageContractError, match="must be a non-empty tuple"):
+        check_stage_contract(Empty)
+
+
+def test_check_stage_contract_rejects_non_stagespec_elements():
+    class NotASpec:
+        stages = ("train",)
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="must be a non-empty tuple"):
+        check_stage_contract(NotASpec)
+
+
+def test_check_stage_contract_rejects_duplicate_names():
+    class Duplicate:
+        stages = (StageSpec("train", "training"), StageSpec("train", "training"))
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="repeats a name"):
+        check_stage_contract(Duplicate)
+
+
+def test_check_stage_contract_rejects_unknown_config_role():
+    class BadRole:
+        stages = (StageSpec("train", "not_a_role"),)
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="config must be one of"):
+        check_stage_contract(BadRole)
+
+
+def test_check_stage_contract_rejects_non_str_log_dir():
+    class BadLogDir:
+        stages = (StageSpec("train", "training", 123),)
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="log_dir must be a str or None"):
+        check_stage_contract(BadLogDir)
+
+
+def test_check_stage_contract_rejects_stage_with_no_method():
+    class MissingMethod:
+        stages = (StageSpec("train", "training"),)
+
+    with pytest.raises(StageContractError, match="defines no method"):
+        check_stage_contract(MissingMethod)
+
+
+def test_check_stage_contract_rejects_public_method_not_a_stage():
+    class ExtraPublicMethod:
+        stages = (StageSpec("train", "training"),)
+
+        def train(self):
+            pass
+
+        def helper(self):
+            pass
+
+    with pytest.raises(StageContractError, match="helper is public but not a stage"):
+        check_stage_contract(ExtraPublicMethod)
+
+
+def test_check_stage_contract_allows_private_helpers():
+    class WithPrivateHelper:
+        stages = (StageSpec("train", "training"),)
+
+        def train(self):
+            pass
+
+        def _helper(self):
+            pass
+
+    check_stage_contract(WithPrivateHelper)
+
+
+def test_check_stage_contract_accepts_valid_declaration():
+    class Good:
+        stages = (
+            StageSpec("create_dataset", "training", "data_dir"),
+            StageSpec("pack_model", "publication"),
+        )
+
+        def create_dataset(self):
+            pass
+
+        def pack_model(self):
+            pass
+
+    check_stage_contract(Good)
+
+
+# ---------------------------------------------------------------------------
+# check_requested_stages: request-time errors
+# ---------------------------------------------------------------------------
+
+
+class _ExampleSystem:
+    stages = (
+        StageSpec("train", "training"),
+        StageSpec("pack_model", "publication"),
+    )
+
+    def train(self):
+        pass
+
+    def pack_model(self):
+        pass
+
+
+def test_check_requested_stages_rejects_unknown_stage():
+    with pytest.raises(StageContractError, match=r"has no stage \['decode'\]"):
+        check_requested_stages(_ExampleSystem, ["decode"], {"training": object()})
+
+
+def test_check_requested_stages_rejects_missing_config():
+    with pytest.raises(
+        StageContractError, match="pack_model runs on the publication config"
+    ):
+        check_requested_stages(
+            _ExampleSystem, ["train", "pack_model"], {"training": object()}
+        )
+
+
+def test_check_requested_stages_accepts_satisfied_request():
+    check_requested_stages(
+        _ExampleSystem,
+        ["train", "pack_model"],
+        {"training": object(), "publication": object()},
+    )
+
+
+# ---------------------------------------------------------------------------
+# stage_names / stage_spec / stage_log_dir
+# ---------------------------------------------------------------------------
+
+
+def test_stage_names_preserves_declared_order():
+    assert stage_names(_ExampleSystem) == ["train", "pack_model"]
+
+
+def test_stage_spec_returns_the_matching_spec():
+    assert stage_spec(_ExampleSystem, "pack_model").config == "publication"
+
+
+def test_stage_spec_raises_for_unknown_name():
+    with pytest.raises(StageContractError, match="has no stage 'decode'"):
+        stage_spec(_ExampleSystem, "decode")
+
+
+def test_stage_log_dir_reads_the_configured_path(tmp_path):
+    class WithConfig:
+        stages = (StageSpec("train", "training", "exp_dir"),)
+        training_config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
+        _default_log_dir = tmp_path / "logs"
+
+        def train(self):
+            pass
+
+    assert stage_log_dir(WithConfig(), "train") == tmp_path / "exp"
+
+
+def test_stage_log_dir_falls_back_when_config_is_none():
+    class NoConfig:
+        stages = (StageSpec("train", "training", "exp_dir"),)
+        training_config = None
+        _default_log_dir = Path("logs")
+
+        def train(self):
+            pass
+
+    assert stage_log_dir(NoConfig(), "train") == Path("logs")
+
+
+def test_stage_log_dir_falls_back_when_log_dir_is_none():
+    class NoLogDir:
+        stages = (StageSpec("pack_model", "publication"),)
+        publication_config = OmegaConf.create({"out_dir": "somewhere"})
+        _default_log_dir = Path("logs")
+
+        def pack_model(self):
+            pass
+
+    assert stage_log_dir(NoLogDir(), "pack_model") == Path("logs")
+
+
+def test_config_roles_are_the_five_documented_roles():
+    assert CONFIG_ROLES == ("training", "inference", "metrics", "publication", "demo")
