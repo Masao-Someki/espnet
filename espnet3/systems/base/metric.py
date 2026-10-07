@@ -21,14 +21,76 @@ from espnet3.utils.scp_utils import check_utt_id, get_class_path, load_scp_paths
 logger = logging.getLogger(__name__)
 
 
+def _resolve_test_sets_from_manifest(inference_dir: Path) -> list[str] | None:
+    """Return done test-set names from ``inference_dir/test_sets.json``, or None.
+
+    Returns None (so the caller falls back to a directory scan) if the
+    manifest file does not exist, or if it exists but lists no test set
+    with ``status == "done"``. Raises ValueError if a done test set's name
+    has no matching directory under ``inference_dir`` (a mismatch between
+    the manifest and what is actually on disk).
+    """
+    manifest_path = inference_dir / "test_sets.json"
+    if not manifest_path.is_file():
+        logger.warning(
+            "test_sets.json not found under %s; falling back to a directory scan",
+            inference_dir,
+        )
+        return None
+
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest = json.load(f)
+    entries = manifest.get("test_sets", [])
+    done = sorted(e["name"] for e in entries if e.get("status") == "done")
+    not_done = sorted(e["name"] for e in entries if e.get("status") != "done")
+    if not_done:
+        logger.warning(
+            "Excluding test set(s) not marked done in test_sets.json: %s",
+            not_done,
+        )
+    if not done:
+        logger.warning(
+            "test_sets.json under %s lists no test set marked done; "
+            "falling back to a directory scan",
+            inference_dir,
+        )
+        return None
+
+    missing = [name for name in done if not (inference_dir / name).is_dir()]
+    if missing:
+        raise ValueError(
+            "test_sets.json lists test set(s) with no matching directory under "
+            f"{inference_dir}: {missing}"
+        )
+    return done
+
+
 def _resolve_test_sets(metrics_config: DictConfig) -> list[str]:
-    """Return the test-set names to score for the measurement stage."""
+    """Return the test-set names to score for the measurement stage.
+
+    Resolved in priority order: (1) ``metrics_config.dataset.test`` if set,
+    (2) the ``status == "done"`` entries of ``inference_dir/test_sets.json``
+    if present, (3) a scan of ``inference_dir``'s subdirectories (the
+    original, pre-test_sets.json behavior), as a last-resort fallback.
+
+    Examples:
+        >>> from omegaconf import OmegaConf
+        >>> cfg = OmegaConf.create(
+        ...     {"dataset": {"test": [{"name": "test-clean"}]}}
+        ... )
+        >>> _resolve_test_sets(cfg)
+        ['test-clean']
+    """
     dataset = getattr(metrics_config, "dataset", None)
     test_config = getattr(dataset, "test", None) if dataset is not None else None
     if test_config:
         return [t.name for t in test_config]
 
     inference_dir = Path(metrics_config.inference_dir)
+    from_manifest = _resolve_test_sets_from_manifest(inference_dir)
+    if from_manifest is not None:
+        return from_manifest
+
     test_sets = sorted(
         entry.name
         for entry in inference_dir.iterdir()
@@ -185,14 +247,17 @@ def _resolve_inputs(
 def measure(metrics_config: DictConfig, inference_config: DictConfig | None = None):
     """Compute metrics for each test set and write a metrics JSON file.
 
-    Test sets are resolved in the following order:
+    Test sets are resolved in the following order (see
+    :func:`_resolve_test_sets`):
 
         1. If ``metrics_config.dataset.test`` is defined, use the configured
            ``name`` fields as-is.
-        2. Otherwise, scan ``metrics_config.inference_dir`` and treat each
+        2. Otherwise, the ``status == "done"`` test sets named in
+           ``inference_dir/test_sets.json``, written by the ``infer`` stage.
+        3. Otherwise, scan ``metrics_config.inference_dir`` and treat each
            non-hidden subdirectory as a test set.
 
-    Example:
+    Examples:
         If ``inference_dir`` contains:
 
         .. code-block:: text

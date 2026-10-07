@@ -1,7 +1,11 @@
 """Inference entrypoint for ESPnet3 systems."""
 
+import hashlib
+import json
 import logging
+import os
 import time
+from datetime import datetime
 from pathlib import Path
 
 from hydra.utils import instantiate
@@ -14,6 +18,42 @@ from espnet3.systems.base.inference_runner import (
 )
 
 logger = logging.getLogger(__name__)
+
+TEST_SETS_MANIFEST_NAME = "test_sets.json"
+
+
+def _config_fingerprint(config: DictConfig) -> str:
+    """Return a stable sha256 fingerprint of the resolved config.
+
+    Uses canonical JSON (sorted keys) so the same logical config always
+    hashes the same way regardless of key insertion order.
+
+    Examples:
+        >>> from omegaconf import OmegaConf
+        >>> a = _config_fingerprint(OmegaConf.create({"x": 1, "y": 2}))
+        >>> b = _config_fingerprint(OmegaConf.create({"y": 2, "x": 1}))
+        >>> a == b
+        True
+    """
+    container = OmegaConf.to_container(config, resolve=True)
+    canonical = json.dumps(container, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _write_test_sets_manifest(
+    inference_dir: Path, fingerprint: str, entries: list
+) -> None:
+    """Write ``inference_dir/test_sets.json`` atomically (write-then-replace)."""
+    manifest = {
+        "schema_version": 1,
+        "inference_config_fingerprint": fingerprint,
+        "test_sets": entries,
+    }
+    manifest_path = inference_dir / TEST_SETS_MANIFEST_NAME
+    tmp_path = manifest_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, manifest_path)
 
 
 def infer(config: DictConfig):
@@ -91,6 +131,19 @@ def infer(config: DictConfig):
     ``measure`` reads it from the data (bind ``ref`` to ``dataset:text``
     in the metrics config's ``inputs:``).
 
+    Alongside the SCP files, each test set's progress is recorded in
+    ``${inference_dir}/test_sets.json``: ``"running"`` when a test set
+    starts, ``"done"`` (with ``finished_at``) once its SCP files are
+    written. ``measure`` reads this file to tell a finished test set
+    from a stale, partial one.
+
+    Examples:
+        .. code-block:: python
+
+            infer(config)
+            # ${inference_dir}/test_sets.json now lists each test set's
+            # name, status ("running" or "done"), and finished_at.
+
     Args:
         config: Hydra/OmegaConf configuration containing the dataset,
             inference directory, provider/runner definitions, and optional
@@ -115,6 +168,14 @@ def infer(config: DictConfig):
         "Starting inference | inference_dir=%s test_sets=%s",
         getattr(config, "inference_dir", None),
         test_sets,
+    )
+
+    inference_dir_path = Path(config.inference_dir)
+    inference_dir_path.mkdir(parents=True, exist_ok=True)
+    config_fingerprint = _config_fingerprint(config)
+    test_set_status = {name: {"name": name, "status": "running"} for name in test_sets}
+    _write_test_sets_manifest(
+        inference_dir_path, config_fingerprint, list(test_set_status.values())
     )
 
     for test_name in test_sets:
@@ -221,6 +282,13 @@ def infer(config: DictConfig):
             "Finished test set %s | outputs=%s",
             test_name,
             output_dir,
+        )
+        test_set_status[test_name]["status"] = "done"
+        test_set_status[test_name]["finished_at"] = datetime.now().isoformat(
+            timespec="seconds"
+        )
+        _write_test_sets_manifest(
+            inference_dir_path, config_fingerprint, list(test_set_status.values())
         )
 
     logger.info("Inference finished in %.2fs", time.perf_counter() - start)
