@@ -9,10 +9,9 @@ import os
 import time
 from importlib import import_module
 from pathlib import Path
-from typing import Iterable
+from typing import ClassVar, Iterable
 
-from omegaconf import DictConfig
-
+from espnet3.components.contract.stages import StageSpec
 from espnet3.systems.base.system import BaseSystem
 from espnet3.systems.esp2_asr.tokenizers.sentencepiece import train_sentencepiece
 
@@ -22,47 +21,27 @@ logger = logging.getLogger(__name__)
 class ASRSystem(BaseSystem):
     """ASR-specific system.
 
-    This system adds:
-      - Tokenizer training inside train()
+    This system adds ``train_tokenizer`` (its log goes under
+    ``training_config.tokenizer.save_path``), run before ``train`` trains
+    the tokenizer if it is not already cached.
 
-    Additional stage log paths:
-        | Stage           | Path reference                  |
-        |---              |---                              |
-        | train_tokenizer | training_config.tokenizer.save_path |
+    Examples:
+        >>> [s.name for s in ASRSystem.stages[:2]]
+        ['create_dataset', 'train_tokenizer']
     """
 
-    def __init__(
-        self,
-        training_config: DictConfig | None = None,
-        inference_config: DictConfig | None = None,
-        metrics_config: DictConfig | None = None,
-        publication_config: DictConfig | None = None,
-        stage_log_mapping: dict | None = None,
-        demo_config: DictConfig | None = None,
-    ) -> None:
-        """Initialize the ASR system with optional stage configs.
-
-        Args:
-            training_config: Training configuration.
-            inference_config: Inference configuration.
-            metrics_config: Measurement configuration.
-            publication_config: Publication configuration for model packing
-                and upload stages.
-            stage_log_mapping: Optional per-stage log directory overrides.
-            demo_config: Demo configuration for demo packing and upload
-                stages.
-        """
-        super().__init__(
-            training_config=training_config,
-            inference_config=inference_config,
-            metrics_config=metrics_config,
-            publication_config=publication_config,
-            stage_log_mapping={
-                "train_tokenizer": "training_config.tokenizer.save_path",
-                **(stage_log_mapping or {}),
-            },
-            demo_config=demo_config,
-        )
+    stages: ClassVar[tuple[StageSpec, ...]] = (
+        StageSpec("create_dataset", "training", "data_dir"),
+        StageSpec("train_tokenizer", "training", "tokenizer.save_path"),
+        StageSpec("collect_stats", "training", "stats_dir"),
+        StageSpec("train", "training", "exp_dir"),
+        StageSpec("infer", "inference", "inference_dir"),
+        StageSpec("measure", "metrics", "inference_dir"),
+        StageSpec("pack_model", "publication"),
+        StageSpec("upload_model", "publication"),
+        StageSpec("pack_demo", "demo", "pack.out_dir"),
+        StageSpec("upload_demo", "demo", "pack.out_dir"),
+    )
 
     def train(self, *args, **kwargs):
         """Train the model, training the tokenizer first if needed.
