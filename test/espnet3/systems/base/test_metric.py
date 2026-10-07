@@ -573,12 +573,25 @@ def test_measure_accepts_dataset_column_matching_kind(tmp_path, monkeypatch):
     assert results[expected_key][test_name] == {"ok": 1}
 
 
+class _TextOnlyDataset:
+    fields = (Field("text", "text"),)
+
+    def __init__(self):
+        self.items = [{"utt_id": "utt1", "text": "hello world"}]
+
+    def __len__(self):
+        return len(self.items)
+
+    def __getitem__(self, idx):
+        return self.items[idx]
+
+
 class _DatasetTextProvider:
     """A minimal provider whose test set has only a `text` column."""
 
     @staticmethod
     def build_dataset(config):
-        return [{"utt_id": "utt1", "text": "hello world"}]
+        return _TextOnlyDataset()
 
     @staticmethod
     def build_model(config):
