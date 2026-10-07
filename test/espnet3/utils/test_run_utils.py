@@ -2,13 +2,17 @@ import logging
 
 import pytest
 from omegaconf import OmegaConf
-from omegaconf.errors import InterpolationKeyError
 
 from espnet3.utils.run_utils import (
+    ExperimentContextError,
     apply_training_experiment_context,
     resolve_loaded_configs,
     validate_experiment_context,
 )
+
+
+def test_experiment_context_error_is_a_value_error():
+    assert issubclass(ExperimentContextError, ValueError)
 
 
 def test_apply_training_experiment_context_inserts_missing_values(caplog) -> None:
@@ -159,16 +163,20 @@ def test_validate_experiment_context_accepts_standalone_inference() -> None:
             }
         ),
         metrics_config=None,
+        publication_config=None,
+        demo_config=None,
         stages_to_run=["infer"],
     )
 
 
 def test_validate_experiment_context_requires_identity() -> None:
-    with pytest.raises(ValueError, match="infer stage requires --training_config"):
+    with pytest.raises(ExperimentContextError, match="infer stage requires"):
         validate_experiment_context(
             training_config=None,
             inference_config=OmegaConf.create({"exp_tag": None}),
             metrics_config=None,
+            publication_config=None,
+            demo_config=None,
             stages_to_run=["infer"],
         )
 
@@ -183,6 +191,8 @@ def test_validate_experiment_context_accepts_training_backed_inference() -> None
         ),
         inference_config=OmegaConf.create({"inference_dir": "${exp_dir}/inference"}),
         metrics_config=None,
+        publication_config=None,
+        demo_config=None,
         stages_to_run=["infer"],
     )
 
@@ -192,17 +202,68 @@ def test_validate_experiment_context_accepts_standalone_metrics_by_exp_dir() -> 
         training_config=None,
         inference_config=None,
         metrics_config=OmegaConf.create({"exp_dir": "./exp/standalone_eval"}),
+        publication_config=None,
+        demo_config=None,
         stages_to_run=["measure"],
     )
 
 
 def test_validate_experiment_context_rejects_non_standalone_metrics() -> None:
-    with pytest.raises(ValueError, match="measure stage requires --training_config"):
+    with pytest.raises(ExperimentContextError, match="measure stage requires"):
         validate_experiment_context(
             training_config=None,
             inference_config=None,
             metrics_config=OmegaConf.create({"exp_dir": "./exp/None/metrics"}),
+            publication_config=None,
+            demo_config=None,
             stages_to_run=["measure"],
+        )
+
+
+def test_validate_experiment_context_requires_inference_dir_for_measure() -> None:
+    # measure always needs inference_dir, even when training_config is given:
+    # a training-backed run that requests measure without first running infer
+    # (or pointing inference_dir at an existing run) has nothing to score.
+    with pytest.raises(ExperimentContextError, match="inference_dir"):
+        validate_experiment_context(
+            training_config=OmegaConf.create(
+                {"exp_tag": "train_asr_rnn", "exp_dir": "./exp/train_asr_rnn"}
+            ),
+            inference_config=None,
+            metrics_config=OmegaConf.create({"inference_dir": None}),
+            publication_config=None,
+            demo_config=None,
+            stages_to_run=["measure"],
+        )
+
+
+def test_validate_experiment_context_rejects_unresolved_exp_tag_in_pack_demo() -> None:
+    with pytest.raises(ExperimentContextError, match=r"\$\{exp_tag\}"):
+        validate_experiment_context(
+            training_config=None,
+            inference_config=None,
+            metrics_config=None,
+            publication_config=None,
+            demo_config=OmegaConf.create({"pack": {"out_dir": "./demo/${exp_tag}"}}),
+            stages_to_run=["pack_demo"],
+        )
+
+
+def test_validate_experiment_context_rejects_task_without_model() -> None:
+    with pytest.raises(ExperimentContextError, match="model"):
+        validate_experiment_context(
+            training_config=OmegaConf.create(
+                {
+                    "exp_tag": "train_debug",
+                    "exp_dir": "./exp/train_debug",
+                    "task": "asr",
+                }
+            ),
+            inference_config=None,
+            metrics_config=None,
+            publication_config=None,
+            demo_config=None,
+            stages_to_run=["train"],
         )
 
 
@@ -222,7 +283,7 @@ def test_resolve_loaded_configs_resolves_interpolations() -> None:
         publication_config=None,
         log=logging.getLogger("test.run_utils"),
     )
-    resolve_loaded_configs(training, inference)
+    resolve_loaded_configs(training=training, inference=inference)
 
     assert training.exp_dir == "./exp/train_debug"
     assert inference.inference_dir == "./exp/train_debug/inference"
@@ -250,6 +311,8 @@ def test_validate_experiment_context_accepts_metrics_synced_from_inference() -> 
         training_config=None,
         inference_config=inference,
         metrics_config=metrics,
+        publication_config=None,
+        demo_config=None,
         stages_to_run=["infer", "measure"],
     )
 
@@ -257,7 +320,7 @@ def test_validate_experiment_context_accepts_metrics_synced_from_inference() -> 
 def test_resolve_loaded_configs_ignores_none_entries() -> None:
     inference = OmegaConf.create({"inference_dir": "./exp/standalone_eval/inference"})
 
-    resolve_loaded_configs(None, inference)
+    resolve_loaded_configs(training=None, inference=inference)
 
     assert inference.inference_dir == "./exp/standalone_eval/inference"
 
@@ -265,7 +328,25 @@ def test_resolve_loaded_configs_ignores_none_entries() -> None:
 def test_resolve_loaded_configs_raises_on_missing_interpolation() -> None:
     inference = OmegaConf.create({"inference_dir": "${exp_dir}/inference"})
 
-    with pytest.raises(InterpolationKeyError):
+    with pytest.raises(ExperimentContextError, match="inference"):
+        resolve_loaded_configs(inference=inference)
+
+
+def test_resolve_loaded_configs_wraps_omegaconf_error_with_role_name() -> None:
+    metrics = OmegaConf.create({"inference_dir": "${exp_dir}/metrics"})
+
+    try:
+        resolve_loaded_configs(metrics=metrics)
+    except ExperimentContextError as exc:
+        assert "metrics" in str(exc)
+    else:
+        pytest.fail("expected ExperimentContextError")
+
+
+def test_resolve_loaded_configs_is_keyword_only() -> None:
+    inference = OmegaConf.create({"inference_dir": "./exp/standalone_eval/inference"})
+
+    with pytest.raises(TypeError):
         resolve_loaded_configs(inference)
 
 
@@ -416,7 +497,9 @@ def test_resolve_loaded_configs_resolves_publication_interpolations() -> None:
         publication_config=publication,
         log=logging.getLogger("test.run_utils"),
     )
-    resolve_loaded_configs(training, inference, publication)
+    resolve_loaded_configs(
+        training=training, inference=inference, publication=publication
+    )
 
     assert publication.pack_model.out_dir == "./exp/train_debug/model_pack"
     assert publication.pack_model.inference_dir == "./exp/train_debug/inference"

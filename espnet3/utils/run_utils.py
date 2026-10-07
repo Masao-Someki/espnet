@@ -13,6 +13,25 @@ from typing import Sequence
 
 from omegaconf import DictConfig, OmegaConf
 
+
+class ExperimentContextError(ValueError):
+    """Runner configs lack enough experiment identity for a requested stage.
+
+    Raised by :func:`validate_experiment_context` and
+    :func:`resolve_loaded_configs` (wrapping interpolation failures), and by
+    ``espnet3.utils.experiment_context`` when a saved context cannot be
+    read or reused. A `ValueError` subclass, so existing callers that
+    already catch `ValueError` around config validation keep working.
+
+    Examples:
+        >>> raise ExperimentContextError(
+        ...     "measure stage needs metrics_config.inference_dir"
+        ... )
+        Traceback (most recent call last):
+        espnet3.utils.run_utils.ExperimentContextError: measure stage ...
+    """
+
+
 _TRAINING_CONTEXT_KEYS = (
     "exp_tag",
     "exp_dir",
@@ -65,21 +84,49 @@ def _has_exp_identity(config: DictConfig) -> bool:
         `exp_dir`.
 
     Notes:
-        `exp_dir` values that still contain `${exp_tag}` are not considered
-        standalone because they still depend on another missing key.
+        Reads the config's raw (unresolved) values, so a missing identity
+        key never raises an interpolation error here - it is simply
+        reported as absent. `exp_dir` values that still contain an
+        unresolved `${...}` reference are not considered standalone because
+        they depend on another missing key.
 
     Examples:
         `OmegaConf.create({"exp_tag": "train_debug"})` returns `True`.
         `OmegaConf.create({"exp_dir": "${exp_tag}/foo"})` returns `False`.
     """
-    exp_tag = config.get("exp_tag")
-    if not _is_missing_or_empty(exp_tag):
+    raw = OmegaConf.to_container(config, resolve=False)
+    if not isinstance(raw, dict):
+        return False
+
+    exp_tag = raw.get("exp_tag")
+    if not _is_missing_or_empty(exp_tag) and "${" not in str(exp_tag):
         return True
 
-    exp_dir = config.get("exp_dir")
+    exp_dir = raw.get("exp_dir")
     if not isinstance(exp_dir, str) or not exp_dir.strip():
         return False
-    return "${exp_tag}" not in exp_dir and "None" not in exp_dir
+    return "${" not in exp_dir and "None" not in exp_dir
+
+
+def _find_unresolved_identity_ref(config: DictConfig) -> str | None:
+    """Return the first unresolved `${exp_tag}`/`${exp_dir}` reference in `config`.
+
+    Used to name the exact unresolved value in an error message (e.g.
+    `demo_config.pack.out_dir`'s `"./demo/${exp_tag}"`), rather than only
+    reporting that `exp_tag`/`exp_dir` themselves are absent.
+    """
+    raw = OmegaConf.to_container(config, resolve=False)
+    stack = [raw]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, str):
+            if "${exp_tag}" in node or "${exp_dir}" in node:
+                return node
+        elif isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return None
 
 
 def _copy_config_context(
@@ -412,21 +459,38 @@ def apply_training_experiment_context(
         )
 
 
+def _is_truthy_mapping(value) -> bool:
+    """Return whether `value` is a non-empty, dict-like config node."""
+    if value is None:
+        return False
+    if hasattr(value, "keys"):
+        return len(list(value.keys())) > 0
+    return bool(value)
+
+
 def validate_experiment_context(
     *,
     training_config: DictConfig | None,
     inference_config: DictConfig | None,
     metrics_config: DictConfig | None,
+    publication_config: DictConfig | None,
+    demo_config: DictConfig | None,
     stages_to_run: Sequence[str],
 ) -> None:
     """Validate that runtime configs have enough experiment identity.
 
-    This helper enforces the two supported runner modes:
+    This helper enforces the supported runner modes:
 
     1. Training-backed mode, where `training_config` is present and provides
-       experiment identity for inference and metrics.
+       experiment identity for inference, metrics, publication, and demo.
     2. Standalone inference/metrics mode, where the runtime config must define
        its own `exp_tag` or concrete `exp_dir`.
+
+    Unlike the training-identity checks, the `measure` stage's
+    `metrics_config.inference_dir` and the `collect_stats`/`train` stages'
+    `training_config.model` are checked even when `training_config` is
+    present - a present `training_config` only supplies `exp_tag`/`exp_dir`,
+    not `inference_dir` or a non-empty model.
 
     Args:
         training_config (DictConfig | None): Training config selected for the
@@ -435,6 +499,10 @@ def validate_experiment_context(
             stage.
         metrics_config (DictConfig | None): Metrics config for the `measure`
             stage.
+        publication_config (DictConfig | None): Publication config for the
+            `pack_model`/`upload_model` stages.
+        demo_config (DictConfig | None): Demo config for the `pack_demo`/
+            `upload_demo` stages.
         stages_to_run (Sequence[str]): Resolved stage names requested by the
             runner.
 
@@ -442,9 +510,8 @@ def validate_experiment_context(
         None: Validation succeeds silently.
 
     Raises:
-        ValueError: If `infer` or `measure` is requested without
-            `training_config` and the corresponding runtime config does not
-            define `exp_tag` or a concrete `exp_dir`.
+        ExperimentContextError: If a requested stage lacks the experiment
+            identity, `inference_dir`, or non-empty `model` it needs.
 
     Notes:
         Validation is stage-aware. For example, a missing metrics identity is
@@ -462,93 +529,142 @@ def validate_experiment_context(
             training_config=None,
             inference_config=inference_config,
             metrics_config=None,
+            publication_config=None,
+            demo_config=None,
             stages_to_run=["infer"],
         )
         # Succeeds because standalone inference can derive exp_dir.
         ```
 
-        Reject standalone inference when experiment identity is missing:
-
-        ```python
-        inference_config = OmegaConf.create(
-            {"inference_dir": "${exp_dir}/inference"}
-        )
-        validate_experiment_context(
-            training_config=None,
-            inference_config=inference_config,
-            metrics_config=None,
-            stages_to_run=["infer"],
-        )
-        # Raises:
-        #   ValueError: infer stage requires --training_config or a
-        #   standalone inference_config with exp_tag/exp_dir.
-        ```
-
-        Accept training-backed inference even when inference_config does not
-        define `exp_tag`:
+        Reject a measure stage missing `inference_dir`, even with training:
 
         ```python
         training_config = OmegaConf.create(
             {"exp_tag": "train_asr_rnn", "exp_dir": "./exp/train_asr_rnn"}
         )
-        inference_config = OmegaConf.create(
-            {"inference_dir": "${exp_dir}/inference"}
-        )
+        metrics_config = OmegaConf.create({"exp_tag": None, "exp_dir": None})
         validate_experiment_context(
             training_config=training_config,
-            inference_config=inference_config,
-            metrics_config=None,
-            stages_to_run=["infer"],
+            inference_config=None,
+            metrics_config=metrics_config,
+            publication_config=None,
+            demo_config=None,
+            stages_to_run=["measure"],
         )
-        # Succeeds because training-backed mode is active.
+        # Raises:
+        #   ExperimentContextError: measure stage needs
+        #   metrics_config.inference_dir ...
         ```
     """
-    if training_config is not None:
-        return
-
-    if "infer" in stages_to_run and inference_config is not None:
-        if not _has_exp_identity(inference_config):
-            raise ValueError(
-                "infer stage requires --training_config or a standalone "
-                "inference_config with exp_tag/exp_dir."
+    if (
+        "collect_stats" in stages_to_run or "train" in stages_to_run
+    ) and training_config is not None:
+        task = training_config.get("task")
+        if task and not _is_truthy_mapping(training_config.get("model")):
+            raise ExperimentContextError(
+                f"training_config.task={task!r} requires a non-empty "
+                "model: block for the collect_stats/train stages."
             )
+
+    if training_config is None:
+        if "infer" in stages_to_run and inference_config is not None:
+            if not _has_exp_identity(inference_config):
+                raise ExperimentContextError(
+                    "infer stage requires --training_config or a standalone "
+                    "inference_config with exp_tag/exp_dir."
+                )
+
+        if "pack_demo" in stages_to_run or "upload_demo" in stages_to_run:
+            if demo_config is not None and not _has_exp_identity(demo_config):
+                unresolved = _find_unresolved_identity_ref(demo_config)
+                if unresolved is not None:
+                    raise ExperimentContextError(
+                        f"pack_demo stage needs experiment identity: "
+                        f"demo_config references {unresolved!r}. Pass "
+                        "--training_config, a demo_config with exp_tag/"
+                        "exp_dir, or --exp_dir."
+                    )
+                raise ExperimentContextError(
+                    "pack_demo stage needs experiment identity: pass "
+                    "--training_config, a demo_config with exp_tag/exp_dir, "
+                    "or --exp_dir."
+                )
 
     if "measure" in stages_to_run and metrics_config is not None:
-        if not _has_exp_identity(metrics_config):
-            raise ValueError(
-                "measure stage requires --training_config or a standalone "
-                "metrics_config with exp_tag/exp_dir."
+        if training_config is None:
+            # No training_config to anchor identity: metrics_config must
+            # carry its own (an --exp_dir CLI value recovers inference_dir
+            # from a saved context later; validate only checks identity
+            # here, since it does not see --exp_dir).
+            if not _has_exp_identity(metrics_config):
+                raise ExperimentContextError(
+                    "measure stage requires --training_config or a "
+                    "standalone metrics_config with exp_tag/exp_dir."
+                )
+        elif _is_missing_or_empty(metrics_config.get("inference_dir")):
+            # training_config only supplies exp_tag/exp_dir, never
+            # inference_dir, so a still-missing inference_dir here means
+            # nothing will fill it in.
+            raise ExperimentContextError(
+                "measure stage needs metrics_config.inference_dir. Pass "
+                "--inference_config (inference_dir is propagated), set "
+                "inference_dir in the metrics config, or pass --exp_dir."
             )
 
 
-def resolve_loaded_configs(*configs: DictConfig | None) -> None:
-    """Resolve a set of already-loaded configs in place.
+def resolve_loaded_configs(
+    *,
+    training: DictConfig | None = None,
+    inference: DictConfig | None = None,
+    metrics: DictConfig | None = None,
+    publication: DictConfig | None = None,
+    demo: DictConfig | None = None,
+) -> None:
+    """Resolve a set of already-loaded configs in place, by config role.
 
     Runner entry points use `load_and_merge_config(..., resolve=False)` so they
     can patch experiment identity before OmegaConf interpolations are
     evaluated. This helper performs the final resolution step once all runtime
-    adjustments are complete.
+    adjustments are complete, wrapping any interpolation failure in an
+    `ExperimentContextError` that names the role whose config was unresolved.
 
     Args:
-        *configs (DictConfig | None): Configs to resolve. `None` entries are
-            ignored.
+        training (DictConfig | None): Training config to resolve.
+        inference (DictConfig | None): Inference config to resolve.
+        metrics (DictConfig | None): Metrics config to resolve.
+        publication (DictConfig | None): Publication config to resolve.
+        demo (DictConfig | None): Demo config to resolve.
 
     Returns:
         None: Provided configs are resolved in place.
 
     Raises:
-        omegaconf.errors.OmegaConfBaseException: Propagated if interpolation
-            resolution fails for any config.
+        ExperimentContextError: If interpolation resolution fails for any
+            config; the message names the role and the missing key.
 
     Notes:
-        Resolution happens independently for each config in the order passed by
-        the caller.
+        Resolution happens independently for each role, in the fixed order
+        training, inference, metrics, publication, demo.
 
     Examples:
-        `resolve_loaded_configs(training, inference, metrics)` resolves all
-        three configs in place.
-        `resolve_loaded_configs(None, inference)` resolves only inference.
+        `resolve_loaded_configs(training=training, inference=inference)`
+        resolves both configs in place; roles left at their default `None`
+        are skipped.
     """
-    for config in configs:
-        if config is not None:
+    for role, config in (
+        ("training", training),
+        ("inference", inference),
+        ("metrics", metrics),
+        ("publication", publication),
+        ("demo", demo),
+    ):
+        if config is None:
+            continue
+        try:
             OmegaConf.resolve(config)
+        except Exception as e:
+            raise ExperimentContextError(
+                f"{role}_config has an unresolved interpolation: {e}. "
+                "Missing experiment identity (exp_tag/exp_dir) or another "
+                "config value it depends on."
+            ) from e
