@@ -33,6 +33,7 @@ from omegaconf import DictConfig, OmegaConf
 from espnet3.components.contract.stages import stage_spec
 from espnet3.utils.run_utils import (
     ExperimentContextError,
+    _copy_config_context,
     apply_training_experiment_context,
 )
 
@@ -158,6 +159,83 @@ def _git_sha() -> Optional[str]:
     return sha or None
 
 
+_SAVED_CONTEXT_KEYS = ("exp_tag", "exp_dir", "inference_dir")
+
+
+def _fill_role_config_from_saved(
+    role_config: Optional[DictConfig],
+    role_name: str,
+    saved: "ExperimentContext",
+    log: logging.Logger,
+) -> None:
+    """Fill `role_config`'s empty identity keys from a saved context.
+
+    Only `exp_tag`/`exp_dir`/`inference_dir` keys that are currently empty
+    on `role_config` are filled; a key that already carries a value is left
+    untouched. This is what lets a standalone `--exp_dir` run (e.g.
+    `measure` alone, no `training_config`) recover `inference_dir` from a
+    context a previous `train`/`infer` run saved, instead of only reaching
+    `ExperimentContext.inference_dir` (which nothing reads back into the
+    role config itself).
+
+    Args:
+        role_config: One run's inference/metrics/publication/demo config, or
+            `None` when that role was not given.
+        role_name: The role's name (e.g. `"metrics"`), used in log/error
+            messages.
+        saved: The context loaded from `<exp_dir>/config/context.yaml`.
+        log: Logger used for the `inference_dir`-conflict warning.
+
+    Raises:
+        ExperimentContextError: `role_config` already has its own `exp_dir`
+            and it differs from `saved.exp_dir`.
+    """
+    if role_config is None:
+        return
+
+    saved_values = {
+        "exp_tag": saved.exp_tag,
+        "exp_dir": saved.exp_dir,
+        "inference_dir": saved.inference_dir,
+    }
+    empty_keys = [
+        key
+        for key in _SAVED_CONTEXT_KEYS
+        if _is_missing_or_empty(role_config.get(key) if key in role_config else None)
+    ]
+    if empty_keys:
+        _copy_config_context(
+            source=OmegaConf.create(saved_values),
+            target=role_config,
+            keys=empty_keys,
+            source_name="saved_context",
+            target_name=f"{role_name}_config",
+            log=log,
+        )
+
+    if "exp_dir" not in empty_keys:
+        current = _get_str(role_config, "exp_dir")
+        if current and saved.exp_dir and current != saved.exp_dir:
+            raise ExperimentContextError(
+                f"{role_name}_config.exp_dir {current!r} does not match the "
+                f"context already saved at {saved.exp_dir!r}. Use a "
+                "different exp_dir, or drop the explicit exp_dir to reuse "
+                "the saved experiment."
+            )
+
+    if "inference_dir" not in empty_keys:
+        current = _get_str(role_config, "inference_dir")
+        if current and saved.inference_dir and current != saved.inference_dir:
+            log.warning(
+                "%s_config.inference_dir %r differs from the saved "
+                "context's inference_dir %r; keeping %s_config's own value.",
+                role_name,
+                current,
+                saved.inference_dir,
+                role_name,
+            )
+
+
 def build_experiment_context(
     *,
     training_config: Optional[DictConfig] = None,
@@ -266,27 +344,34 @@ def build_experiment_context(
             "data_dir": _get_str(identity_source, "data_dir"),
         }
 
-    if training_config is not None:
-        # Propagating identity among standalone sibling configs (e.g.
-        # inference -> metrics) is only meaningful once training_config has
-        # anchored a single identity; without it, each standalone config's
-        # own identity must stay intact for the `roles` fallback above to
-        # rank correctly.
-        apply_training_experiment_context(
-            training_config=training_config,
-            inference_config=inference_config,
-            metrics_config=metrics_config,
-            publication_config=publication_config,
-            demo_config=demo_config,
-            log=log,
-        )
-
     saved: Optional[ExperimentContext] = None
     if exp_dir is not None:
         try:
             saved = load_experiment_context(exp_dir)
         except ExperimentContextError:
             saved = None  # Nothing saved yet at exp_dir; nothing to reconcile.
+
+    if saved is not None:
+        # Recover identity/inference_dir from a previous run's saved context
+        # into this run's own role configs, before validation sees them -
+        # e.g. a standalone `measure` run (no training_config) needs
+        # metrics_config.inference_dir filled in from here.
+        for role_name, role_config in role_configs.items():
+            _fill_role_config_from_saved(role_config, role_name, saved, log)
+
+    # Propagate identity/inference_dir among this run's own configs
+    # (training_config -> inference/metrics/publication/demo, and
+    # inference_config -> metrics/publication) regardless of whether
+    # training_config is given, so a standalone --inference_config +
+    # --metrics_config run still has inference_dir propagated between them.
+    apply_training_experiment_context(
+        training_config=training_config,
+        inference_config=inference_config,
+        metrics_config=metrics_config,
+        publication_config=publication_config,
+        demo_config=demo_config,
+        log=log,
+    )
 
     if own_identity is not None:
         if saved is not None:

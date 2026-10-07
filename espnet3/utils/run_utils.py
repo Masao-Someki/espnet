@@ -487,8 +487,9 @@ def validate_experiment_context(
        its own `exp_tag` or concrete `exp_dir`.
 
     Unlike the training-identity checks, the `measure` stage's
-    `metrics_config.inference_dir` and the `collect_stats`/`train` stages'
-    `training_config.model` are checked even when `training_config` is
+    `metrics_config.inference_dir` is checked unconditionally (regardless of
+    `training_config`), and the `collect_stats`/`train` stages'
+    `training_config.model` is checked even when `training_config` is
     present - a present `training_config` only supplies `exp_tag`/`exp_dir`,
     not `inference_dir` or a non-empty model.
 
@@ -591,20 +592,22 @@ def validate_experiment_context(
                 )
 
     if "measure" in stages_to_run and metrics_config is not None:
-        if training_config is None:
+        if training_config is None and not _has_exp_identity(metrics_config):
             # No training_config to anchor identity: metrics_config must
-            # carry its own (an --exp_dir CLI value recovers inference_dir
-            # from a saved context later; validate only checks identity
-            # here, since it does not see --exp_dir).
-            if not _has_exp_identity(metrics_config):
-                raise ExperimentContextError(
-                    "measure stage requires --training_config or a "
-                    "standalone metrics_config with exp_tag/exp_dir."
-                )
-        elif _is_missing_or_empty(metrics_config.get("inference_dir")):
+            # carry its own (--exp_dir recovers it from a saved context
+            # before validate runs; see build_experiment_context).
+            raise ExperimentContextError(
+                "measure stage requires --training_config or a "
+                "standalone metrics_config with exp_tag/exp_dir."
+            )
+
+        if _is_missing_or_empty(metrics_config.get("inference_dir")):
+            # Checked regardless of training_config: a present
             # training_config only supplies exp_tag/exp_dir, never
-            # inference_dir, so a still-missing inference_dir here means
-            # nothing will fill it in.
+            # inference_dir, and build_experiment_context already recovers
+            # it from --inference_config or a saved context before this
+            # check runs, so a still-missing value here means nothing will
+            # fill it in.
             raise ExperimentContextError(
                 "measure stage needs metrics_config.inference_dir. Pass "
                 "--inference_config (inference_dir is propagated), set "

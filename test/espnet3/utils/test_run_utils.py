@@ -197,11 +197,19 @@ def test_validate_experiment_context_accepts_training_backed_inference() -> None
     )
 
 
-def test_validate_experiment_context_accepts_standalone_metrics_by_exp_dir() -> None:
+def test_validate_experiment_context_accepts_standalone_metrics_with_inference_dir():
+    # measure always needs inference_dir (regardless of training_config), so
+    # a standalone metrics_config must supply its own to pass - exp_dir alone
+    # is not enough.
     validate_experiment_context(
         training_config=None,
         inference_config=None,
-        metrics_config=OmegaConf.create({"exp_dir": "./exp/standalone_eval"}),
+        metrics_config=OmegaConf.create(
+            {
+                "exp_dir": "./exp/standalone_eval",
+                "inference_dir": "./exp/standalone_eval/inference",
+            }
+        ),
         publication_config=None,
         demo_config=None,
         stages_to_run=["measure"],

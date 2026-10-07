@@ -15,7 +15,10 @@ from espnet3.utils.experiment_context import (
     save_experiment_context,
     save_stage_config,
 )
-from espnet3.utils.run_utils import ExperimentContextError
+from espnet3.utils.run_utils import (
+    ExperimentContextError,
+    validate_experiment_context,
+)
 
 _LOG = logging.getLogger("test_experiment_context")
 
@@ -24,8 +27,7 @@ class _FakeSystem:
     """Minimal stand-in for `BaseSystem`: just what `save_stage_config` reads.
 
     The stage -> config role mapping comes from the stages contract
-    (`StageSpec.config`), the same source `stage_log_dir` uses - there is no
-    separate `stage_config_roles` attribute to fake.
+    (`StageSpec.config`), the same source `stage_log_dir` uses.
     """
 
     stages: ClassVar[tuple[StageSpec, ...]] = (
@@ -99,22 +101,34 @@ def test_build_experiment_context_standalone_from_inference_config():
     assert ctx.stats_dir is None
 
 
-def test_build_experiment_context_roles_order_picks_fallback_identity():
-    # Neither config has training_config to anchor to; two standalone configs
-    # each carry their own identity. `roles` says which one wins.
+def _standalone_inference_and_metrics_configs():
+    """Fresh inference/metrics configs, each with its own identity.
+
+    A new pair per call: `build_experiment_context` propagates identity
+    across the configs it is given, so reusing one pair across two calls
+    would let the first call's propagation leak into the second.
+    """
     inference = OmegaConf.create(
         {"exp_tag": "from_inference", "exp_dir": "./exp/from_inference"}
     )
     metrics = OmegaConf.create(
         {"exp_tag": "from_metrics", "exp_dir": "./exp/from_metrics"}
     )
+    return inference, metrics
 
+
+def test_build_experiment_context_roles_order_picks_fallback_identity():
+    # Neither config has training_config to anchor to; two standalone configs
+    # each carry their own identity. `roles` says which one wins.
+    inference, metrics = _standalone_inference_and_metrics_configs()
     by_inference = build_experiment_context(
         inference_config=inference,
         metrics_config=metrics,
         roles=("inference", "metrics"),
         log=_LOG,
     )
+
+    inference, metrics = _standalone_inference_and_metrics_configs()
     by_metrics = build_experiment_context(
         inference_config=inference,
         metrics_config=metrics,
@@ -420,3 +434,105 @@ def test_build_experiment_context_standalone_inference_dir_mismatch_warns(
     # Explicit config wins; saved value is only used for the warning.
     assert recovered.inference_dir == "./exp/train_asr_transformer/alt"
     assert "inference_dir" in caplog.text
+
+
+# Regression tests for standalone measure/metrics:
+# build_experiment_context must fill empty identity/inference_dir keys on the
+# role config it derived them from (a saved context or a sibling config), not
+# just on the ExperimentContext it returns - validate_experiment_context and
+# measure() both read the role config directly, never the ExperimentContext.
+
+
+def test_standalone_measure_fills_metrics_config_from_saved_context(tmp_path):
+    exp_dir = tmp_path / "exp" / "train_asr_rnn"
+    training = _training_config(tmp_path, exp_tag="train_asr_rnn")
+    inference = OmegaConf.create({"inference_dir": "./exp/train_asr_rnn/inference"})
+    first_run_ctx = build_experiment_context(
+        training_config=training,
+        inference_config=inference,
+        roles=("training", "inference"),
+        log=_LOG,
+    )
+    save_experiment_context(str(exp_dir), first_run_ctx)
+
+    # A later, standalone `measure` run: only --exp_dir and an otherwise
+    # empty metrics_config, recovering identity and inference_dir from the
+    # context `train`+`infer` saved earlier.
+    metrics_config = OmegaConf.create({})
+    build_experiment_context(
+        metrics_config=metrics_config,
+        exp_dir=str(exp_dir),
+        roles=("metrics",),
+        log=_LOG,
+    )
+
+    assert metrics_config.get("exp_tag") == "train_asr_rnn"
+    assert metrics_config.get("inference_dir") == "./exp/train_asr_rnn/inference"
+
+    # With the role config filled in, validate_experiment_context (which
+    # reads metrics_config directly, not the ExperimentContext) must accept
+    # the standalone measure request.
+    validate_experiment_context(
+        training_config=None,
+        inference_config=None,
+        metrics_config=metrics_config,
+        publication_config=None,
+        demo_config=None,
+        stages_to_run=["measure"],
+    )
+
+
+def test_standalone_measure_without_a_saved_inference_dir_is_rejected(tmp_path):
+    # metrics_config carries its own standalone identity (exp_tag/exp_dir),
+    # so the identity check alone would not catch a missing inference_dir -
+    # this isolates the "measure always needs inference_dir" rule from the
+    # identity rule, which the two checks must enforce independently of
+    # training_config.
+    exp_dir = tmp_path / "exp" / "standalone_eval"
+    metrics_config = OmegaConf.create(
+        {
+            "exp_tag": "standalone_eval",
+            "exp_dir": str(exp_dir),
+        }
+    )
+
+    # build_experiment_context derives a context from metrics_config's own
+    # identity; since nothing anywhere names an inference_dir, the context's
+    # inference_dir stays unset too.
+    ctx = build_experiment_context(
+        metrics_config=metrics_config, roles=("metrics",), log=_LOG
+    )
+    assert ctx.inference_dir is None
+
+    with pytest.raises(ExperimentContextError, match="measure stage"):
+        validate_experiment_context(
+            training_config=None,
+            inference_config=None,
+            metrics_config=metrics_config,
+            publication_config=None,
+            demo_config=None,
+            stages_to_run=["measure"],
+        )
+
+
+def test_standalone_inference_and_metrics_propagates_inference_dir_without_training():
+    # No training_config at all: a bare `--inference_config` + `--metrics_config`
+    # run must still have metrics inherit inference_dir from inference, the
+    # same as the training-backed case does.
+    inference = OmegaConf.create(
+        {
+            "exp_tag": "standalone_eval",
+            "exp_dir": "./exp/standalone_eval",
+            "inference_dir": "./exp/standalone_eval/inference",
+        }
+    )
+    metrics = OmegaConf.create({})
+
+    build_experiment_context(
+        inference_config=inference,
+        metrics_config=metrics,
+        roles=("inference", "metrics"),
+        log=_LOG,
+    )
+
+    assert metrics.get("inference_dir") == "./exp/standalone_eval/inference"
