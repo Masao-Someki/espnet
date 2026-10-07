@@ -53,6 +53,76 @@ def test_stage_log_dir_falls_back_to_cwd_logs_without_training_config():
     assert system._default_log_dir.name == "logs"
 
 
+def test_base_system_marks_given_configs_readonly(tmp_path):
+    train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
+    infer_cfg = OmegaConf.create({"inference_dir": str(tmp_path / "infer")})
+
+    system = BaseSystem(training_config=train_cfg, inference_config=infer_cfg)
+
+    assert OmegaConf.is_readonly(system.training_config)
+    assert OmegaConf.is_readonly(system.inference_config)
+    with pytest.raises(Exception):
+        system.training_config.exp_dir = "other"
+
+
+def test_base_system_stage_config_returns_writable_copy(tmp_path):
+    train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp"), "model": {}})
+    system = BaseSystem(training_config=train_cfg)
+
+    copy_ = BaseSystem._stage_config(system.training_config)
+
+    assert not OmegaConf.is_readonly(copy_)
+    copy_.model.normalize = True
+    assert "normalize" not in system.training_config.model
+    assert OmegaConf.is_readonly(system.training_config)
+
+
+def test_base_system_stage_config_passes_through_none():
+    assert BaseSystem._stage_config(None) is None
+
+
+def test_base_system_collect_stats_passes_a_stage_config_copy(tmp_path, monkeypatch):
+    train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp"), "model": {}})
+    system = BaseSystem(training_config=train_cfg)
+    seen = {}
+
+    def fake_collect(cfg):
+        cfg.model.normalize = True  # a stage may freely write into its own copy
+        seen["cfg"] = cfg
+
+    monkeypatch.setattr(sysmod, "collect_stats", fake_collect)
+
+    system.collect_stats()
+
+    assert seen["cfg"] is not system.training_config
+    assert "normalize" not in system.training_config.model
+
+
+def test_base_system_measure_passes_inference_config(tmp_path, monkeypatch):
+    train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
+    infer_cfg = OmegaConf.create({"inference_dir": str(tmp_path / "infer")})
+    measure_cfg = OmegaConf.create({"inference_dir": str(tmp_path / "infer")})
+    system = BaseSystem(
+        training_config=train_cfg,
+        inference_config=infer_cfg,
+        metrics_config=measure_cfg,
+    )
+    seen = {}
+
+    def fake_measure(cfg, inference_config=None):
+        seen["metrics_cfg"] = cfg
+        seen["inference_cfg"] = inference_config
+        return {}
+
+    monkeypatch.setattr(sysmod, "measure", fake_measure)
+
+    system.measure()
+
+    assert seen["metrics_cfg"] is not system.metrics_config
+    assert seen["inference_cfg"] is not system.inference_config
+    assert seen["inference_cfg"].inference_dir == str(tmp_path / "infer")
+
+
 def test_base_system_invokes_helpers(tmp_path, monkeypatch):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp"), "model": {}})
     infer_cfg = OmegaConf.create({"inference_dir": str(tmp_path / "infer")})
@@ -105,11 +175,18 @@ def test_base_system_invokes_helpers(tmp_path, monkeypatch):
     assert system.measure() == {"metric": 1.0}
     assert system.pack_demo() == "pack_demo"
     assert system.upload_demo() == "upload_demo"
-    assert calls["collect"] is train_cfg
-    assert calls["train"] is train_cfg
-    assert calls["infer"] is infer_cfg
-    assert calls["measure"] is measure_cfg
-    assert calls["measure_inference_config"] is infer_cfg
+    # Each stage receives a writable deep copy, not the system's own
+    # (readonly) config object - compare by value, not identity.
+    assert calls["collect"] == train_cfg
+    assert calls["collect"] is not train_cfg
+    assert calls["train"] == train_cfg
+    assert calls["train"] is not train_cfg
+    assert calls["infer"] == infer_cfg
+    assert calls["infer"] is not infer_cfg
+    assert calls["measure"] == measure_cfg
+    assert calls["measure"] is not measure_cfg
+    assert calls["measure_inference_config"] == infer_cfg
+    assert calls["measure_inference_config"] is not infer_cfg
     assert calls["pack_demo"] is system
     assert calls["upload_demo"] is system
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import time
 from pathlib import Path
@@ -52,8 +53,37 @@ def _ensure_directories(config: DictConfig) -> None:
         Path(config.stats_dir).mkdir(parents=True, exist_ok=True)
 
 
+def _writable_copy(config: DictConfig) -> DictConfig:
+    """Return a deep copy of `config` with any readonly flag cleared.
+
+    `BaseSystem` holds each stage's original config readonly and passes a
+    writable deep copy into the stage function, but `collect_stats` is also
+    called and tested directly - copying again here keeps a caller's config
+    intact even when `collect_stats` is not reached through `BaseSystem`.
+
+    Examples:
+        >>> from omegaconf import OmegaConf
+        >>> cfg = OmegaConf.create({"model": {"normalize": "global_mvn"}})
+        >>> OmegaConf.set_readonly(cfg, True)
+        >>> copy_ = _writable_copy(cfg)
+        >>> copy_.model.pop("normalize")
+        'global_mvn'
+        >>> "normalize" in cfg.model
+        True
+    """
+    copy_ = copy.deepcopy(config)
+    OmegaConf.set_readonly(copy_, False)
+    return copy_
+
+
 def collect_stats(config: DictConfig) -> None:
-    """Collect statistics required by the training pipeline."""
+    """Collect statistics required by the training pipeline.
+
+    Examples:
+        The caller's `config` is left untouched; `collect_stats` only pops
+        `model.normalize`/`model.normalize_conf` from its own writable copy.
+    """
+    config = _writable_copy(config)
     _ensure_directories(config)
     start = time.perf_counter()
 
