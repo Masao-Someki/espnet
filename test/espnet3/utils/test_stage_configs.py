@@ -170,17 +170,33 @@ def test_build_stage_configs_resolves_same_run_interpolation_in_memory(tmp_path)
             {"exp_tag": "debug", "exp_dir": "./exp/${exp_tag}"}
         ),
         "inference": OmegaConf.create({"inference_dir": "${exp_dir}/infer"}),
-        "metrics": OmegaConf.create({"inference_dir": "${inference_dir}/measure"}),
+        "metrics": OmegaConf.create({"measure_dir": "${inference_dir}/measure"}),
     }
 
     stage_configs, own_keys = build_stage_configs(_System, configs, exp_dir=tmp_path)
 
     assert stage_configs["train"].exp_dir == "./exp/debug"
     assert stage_configs["infer"].inference_dir == "./exp/debug/infer"
+    assert stage_configs["measure"].measure_dir == "./exp/debug/infer/measure"
     assert own_keys["train"] == ("exp_tag", "exp_dir")
     assert own_keys["infer"] == ("inference_dir",)
     # nothing is baked by build_stage_configs itself
     assert not (tmp_path / "config").exists()
+
+
+def test_build_stage_configs_raises_when_a_stage_points_at_its_own_inherited_key(
+    tmp_path,
+):
+    configs = {
+        "training": OmegaConf.create({"exp_dir": str(tmp_path / "exp")}),
+        "inference": OmegaConf.create({"inference_dir": "${exp_dir}/infer"}),
+        # A stage's own key fully replaces the inherited one (section 12.1),
+        # so pointing it at "${inference_dir}" makes it point at itself.
+        "metrics": OmegaConf.create({"inference_dir": "${inference_dir}"}),
+    }
+
+    with pytest.raises(ConfigError):
+        build_stage_configs(_System, configs, exp_dir=tmp_path)
 
 
 def test_build_stage_configs_respects_upto_and_skips_later_stages(tmp_path):

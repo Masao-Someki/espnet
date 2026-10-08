@@ -10,6 +10,7 @@ from omegaconf import OmegaConf
 
 from espnet3.publication.demo import packing as demo_packing
 from espnet3.publication.demo.packing import pack_demo, upload_demo
+from espnet3.systems.base.system import BaseSystem
 from espnet3.utils.config_utils import load_and_merge_config
 
 
@@ -443,3 +444,85 @@ def test_upload_demo_empty_delete_patterns_passes_none_to_upload_folder(
     upload_demo(system)
 
     assert upload_calls[0]["delete_patterns"] is None
+
+
+# ---------------------------------------------------------------------------
+# pack_demo / upload_demo against a real BaseSystem (regression: reads
+# stage_configs, not the removed system.demo_config)
+# ---------------------------------------------------------------------------
+
+
+def _make_demo_base_system(tmp_path: Path) -> BaseSystem:
+    exp_dir = tmp_path / "exp"
+    demo_dir = tmp_path / "exp" / "demo"
+    model_pack_dir = tmp_path / "model_pack"
+    model_pack_dir.mkdir(parents=True)
+    app_script = tmp_path / "app.py"
+    app_script.write_text("# test app\n", encoding="utf-8")
+    training_config = OmegaConf.create({"exp_dir": str(exp_dir)})
+    demo_config = OmegaConf.create(
+        {
+            "model": {"dir_or_tag": str(model_pack_dir)},
+            "ui": {"app_script": str(app_script)},
+            "pack": {"out_dir": str(demo_dir)},
+            "upload_demo": {
+                "hf_repo": "testuser/test-space",
+                "update": True,
+                "delete_patterns": ["*"],
+            },
+        }
+    )
+    return BaseSystem(
+        configs={"training": training_config, "demo": demo_config},
+        exp_dir=exp_dir,
+    )
+
+
+def test_pack_demo_reads_the_pack_demo_stage_config(tmp_path: Path) -> None:
+    system = _make_demo_base_system(tmp_path)
+
+    out_dir = system.pack_demo()
+
+    assert out_dir == tmp_path / "exp" / "demo"
+    assert (out_dir / "demo.yaml").exists()
+    assert (out_dir / "app.py").exists()
+    assert (out_dir / "model_pack").is_symlink()
+
+
+def test_upload_demo_reads_the_upload_demo_stage_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    system = _make_demo_base_system(tmp_path)
+    system.pack_demo()
+    calls = []
+
+    class DummyApi:
+        def create_repo(self, **kwargs):
+            calls.append(("create_repo", kwargs))
+
+        def upload_folder(self, **kwargs):
+            calls.append(("upload_folder", kwargs))
+
+    monkeypatch.setattr(demo_packing, "HfApi", lambda: DummyApi())
+
+    system.upload_demo()
+
+    assert calls[0] == (
+        "create_repo",
+        {
+            "repo_id": "testuser/test-space",
+            "repo_type": "space",
+            "private": False,
+            "exist_ok": True,
+            "space_sdk": "gradio",
+        },
+    )
+    assert calls[1] == (
+        "upload_folder",
+        {
+            "repo_id": "testuser/test-space",
+            "repo_type": "space",
+            "folder_path": str(tmp_path / "exp" / "demo"),
+            "delete_patterns": ["*"],
+        },
+    )

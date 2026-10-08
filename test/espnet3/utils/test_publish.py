@@ -9,6 +9,7 @@ import pytest
 from huggingface_hub.errors import HfHubHTTPError
 from omegaconf import OmegaConf
 
+from espnet3.systems.base.system import BaseSystem
 from espnet3.systems.esp2_asr.system import ASRSystem
 from espnet3.utils import publication_utils as publish
 from espnet3.utils.publication_utils import (
@@ -1429,6 +1430,65 @@ def test_upload_model_empty_delete_patterns_passes_none(tmp_path, monkeypatch):
     publish.upload_model(system)
 
     assert upload_calls[0]["delete_patterns"] is None
+
+
+# ---------------------------------------------------------------------------
+# upload_model against a real BaseSystem (regression: reads stage_configs,
+# not the removed system.publication_config / system.training_config)
+# ---------------------------------------------------------------------------
+
+
+def test_upload_model_reads_the_upload_model_stage_config(tmp_path, monkeypatch):
+    pack_dir = tmp_path / "exp" / "model_pack"
+    pack_dir.mkdir(parents=True)
+    training_config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
+    publication_config = OmegaConf.create(
+        {
+            "pack_model": {"out_dir": str(pack_dir)},
+            "upload_model": {
+                "hf_repo": "espnet/test-repo",
+                "update": True,
+                "delete_patterns": ["*"],
+            },
+        }
+    )
+    system = BaseSystem(
+        configs={"training": training_config, "publication": publication_config},
+        exp_dir=tmp_path / "exp",
+    )
+    calls = []
+
+    class DummyApi:
+        def create_repo(self, **kwargs):
+            calls.append(("create_repo", kwargs))
+
+        def upload_folder(self, **kwargs):
+            calls.append(("upload_folder", kwargs))
+
+    monkeypatch.setattr(publish, "HfApi", lambda: DummyApi())
+
+    system.upload_model()
+
+    assert calls == [
+        (
+            "create_repo",
+            {
+                "repo_id": "espnet/test-repo",
+                "repo_type": "model",
+                "private": False,
+                "exist_ok": True,
+            },
+        ),
+        (
+            "upload_folder",
+            {
+                "repo_id": "espnet/test-repo",
+                "repo_type": "model",
+                "folder_path": str(pack_dir.resolve()),
+                "delete_patterns": ["*"],
+            },
+        ),
+    ]
 
 
 def test_meta_records_a_system_only_when_the_task_path_names_one():

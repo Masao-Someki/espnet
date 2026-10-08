@@ -80,7 +80,7 @@ def test_base_system_measure_passes_metrics_and_inference_configs(
 ):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
     infer_cfg = OmegaConf.create({"inference_dir": "${exp_dir}/infer"})
-    metrics_cfg = OmegaConf.create({"inference_dir": "${inference_dir}"})
+    metrics_cfg = OmegaConf.create({})
     system = BaseSystem(
         configs={
             "training": train_cfg,
@@ -101,12 +101,17 @@ def test_base_system_measure_passes_metrics_and_inference_configs(
 
     assert seen["metrics_cfg"] is system.stage_configs["measure"]
     assert seen["inference_cfg"] is system.stage_configs["infer"]
+    # measure has no inference_dir of its own; it inherits infer's.
+    assert (
+        system.stage_configs["measure"].inference_dir
+        == str(tmp_path / "exp") + "/infer"
+    )
 
 
 def test_base_system_invokes_helpers(tmp_path, monkeypatch):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
     infer_cfg = OmegaConf.create({"inference_dir": "${exp_dir}/infer"})
-    metrics_cfg = OmegaConf.create({"inference_dir": "${inference_dir}"})
+    metrics_cfg = OmegaConf.create({})
 
     calls = {}
 
@@ -154,7 +159,7 @@ def test_base_system_pack_model_reads_train_infer_and_measure_by_name(
 ):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
     infer_cfg = OmegaConf.create({"inference_dir": "${exp_dir}/infer"})
-    metrics_cfg = OmegaConf.create({"inference_dir": "${inference_dir}"})
+    metrics_cfg = OmegaConf.create({})
     publication_cfg = OmegaConf.create({"pack_model": {"out_dir": "./pack"}})
     seen = {}
 
@@ -188,10 +193,7 @@ def test_base_system_pack_model_reads_train_infer_and_measure_by_name(
 def test_base_system_create_dataset_requires_dataset_config(tmp_path):
     train_cfg = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
     system = BaseSystem(configs={"training": train_cfg})
-    with pytest.raises(
-        RuntimeError,
-        match=r"create_dataset: the stage config has no `dataset`",
-    ):
+    with pytest.raises(RuntimeError, match="has no dataset"):
         system.create_dataset()
 
 
@@ -346,7 +348,7 @@ def test_base_system_create_dataset_raises_when_no_dataset_entries(tmp_path):
         }
     )
     system = BaseSystem(configs={"training": train_cfg})
-    with pytest.raises(RuntimeError, match="must include at least one entry"):
+    with pytest.raises(RuntimeError, match="has no entry"):
         system.create_dataset()
 
 

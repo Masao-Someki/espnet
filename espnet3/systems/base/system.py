@@ -18,6 +18,7 @@ from espnet3.systems.base.metric import measure
 from espnet3.systems.base.training import collect_stats, train
 from espnet3.utils.publication_utils import pack_model as _pack_model
 from espnet3.utils.publication_utils import upload_model as _upload_model
+from espnet3.utils.run_utils import ConfigError
 from espnet3.utils.stage_configs import build_stage_configs
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ class BaseSystem:
                 declared stage.
 
         Raises:
-            RuntimeError: `exp_dir` is not given and no config in
+            ConfigError: `exp_dir` is not given and no config in
                 `configs` has a self-resolving `exp_dir`.
 
         Notes:
@@ -156,7 +157,7 @@ class BaseSystem:
             Path(exp_dir) if exp_dir is not None else _exp_dir_from(type(self), configs)
         )
         if resolved_exp_dir is None:
-            raise RuntimeError(
+            raise ConfigError(
                 f"{type(self).__name__} needs an experiment directory; pass "
                 "--exp_dir, or set exp_dir in one of the given configs."
             )
@@ -218,7 +219,12 @@ class BaseSystem:
     # Stage stubs (override in subclasses if needed)
     # ---------------------------------------------------------
     def create_dataset(self, *args, **kwargs):
-        """Create datasets from dataset references."""
+        """Create datasets from dataset references.
+
+        Examples:
+            >>> system = BaseSystem(configs={"training": training_config})
+            >>> system.create_dataset()
+        """
         self._reject_stage_args("create_dataset", args, kwargs)
         config = self.stage_configs["create_dataset"]
         logger.info(

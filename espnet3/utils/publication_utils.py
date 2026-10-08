@@ -739,7 +739,7 @@ def upload_model(system) -> None:
     """Upload packed model artifacts to a Hugging Face model repo.
 
     Args:
-        system: ESPnet3 system instance with ``publication_config``.
+        system: ESPnet3 system instance with ``stage_configs["upload_model"]``.
 
     Raises:
         RuntimeError: If required config values are missing or upload fails.
@@ -747,22 +747,16 @@ def upload_model(system) -> None:
     Examples:
         >>> upload_model(system)
     """
-    publication_cfg = system.publication_config
+    publication_cfg = system.stage_configs["upload_model"]
     upload_cfg = publication_cfg.upload_model
     repo = upload_cfg.hf_repo
     private = bool(getattr(upload_cfg, "private", False))
 
-    # Resolve the pack directory from config
+    # Resolve the pack directory from config. exp_dir is already resolved
+    # (its interpolations were evaluated when this stage's config was built).
     pack_cfg = getattr(publication_cfg, "pack_model", None) or OmegaConf.create({})
-    recipe_root = Path(system.training_config.recipe_dir).resolve()
-    exp_dir = Path(system.training_config.exp_dir)
-    if not exp_dir.is_absolute():
-        exp_dir = recipe_root / exp_dir
-    exp_dir = exp_dir.resolve()
-    pack_dir = Path(getattr(pack_cfg, "out_dir", exp_dir / "model_pack"))
-    if not pack_dir.is_absolute():
-        pack_dir = recipe_root / pack_dir
-    pack_dir = pack_dir.resolve()
+    exp_dir = Path(publication_cfg.exp_dir)
+    pack_dir = Path(getattr(pack_cfg, "out_dir", exp_dir / "model_pack")).resolve()
     if not pack_dir.exists():
         raise RuntimeError(f"Model pack not found: {pack_dir}")
 

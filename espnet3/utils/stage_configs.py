@@ -9,6 +9,7 @@ separate experiment-context file.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from typing import Dict, Iterable, Mapping, Optional, Tuple
 from omegaconf import DictConfig, OmegaConf
 
 from espnet3.utils.run_utils import ConfigError, resolve_loaded_configs
+
+logger = logging.getLogger(__name__)
 
 _CONFIG_DIRNAME = "config"
 _HISTORY_DIRNAME = "history"
@@ -248,9 +251,14 @@ def bake(
             return stage_path  # Unchanged since the last run; leave as-is.
         history_dir = config_dir / _HISTORY_DIRNAME
         history_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(
-            str(stage_path),
-            str(history_dir / f"{stage}.{_history_timestamp()}.yaml"),
+        history_path = history_dir / f"{stage}.{_history_timestamp()}.yaml"
+        shutil.move(str(stage_path), str(history_path))
+        logger.warning(
+            "%s: config/%s.yaml differs from the last run; the previous "
+            "one is kept as %s",
+            stage,
+            stage,
+            history_path,
         )
 
     tmp_path = stage_path.with_suffix(".yaml.tmp")

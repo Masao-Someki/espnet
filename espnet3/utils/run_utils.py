@@ -17,27 +17,6 @@ class ConfigError(ValueError):
     """
 
 
-def _is_missing_or_empty(value) -> bool:
-    """Return whether a config value should be treated as absent.
-
-    `None` and empty strings are considered absent, while other values
-    (including `0` and `False`) are kept.
-
-    Args:
-        value: Config value to inspect.
-
-    Returns:
-        bool: `True` when the value should be treated as missing.
-
-    Examples:
-        >>> _is_missing_or_empty(None)
-        True
-        >>> _is_missing_or_empty("train_debug")
-        False
-    """
-    return value is None or (isinstance(value, str) and not value.strip())
-
-
 def resolve_loaded_configs(configs: Mapping[str, DictConfig]) -> None:
     """Resolve each config in `configs` in place, naming its key on failure.
 

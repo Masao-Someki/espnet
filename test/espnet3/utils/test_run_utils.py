@@ -1,26 +1,11 @@
 import pytest
 from omegaconf import OmegaConf
 
-from espnet3.utils.run_utils import (
-    ConfigError,
-    _is_missing_or_empty,
-    resolve_loaded_configs,
-)
+from espnet3.utils.run_utils import ConfigError, resolve_loaded_configs
 
 
 def test_config_error_is_a_value_error():
     assert issubclass(ConfigError, ValueError)
-
-
-def test_is_missing_or_empty_treats_none_and_blank_as_missing():
-    assert _is_missing_or_empty(None) is True
-    assert _is_missing_or_empty("") is True
-    assert _is_missing_or_empty("   ") is True
-
-
-def test_is_missing_or_empty_keeps_other_values():
-    assert _is_missing_or_empty("train_debug") is False
-    assert _is_missing_or_empty(0) is False
 
 
 def test_resolve_loaded_configs_resolves_each_entry_in_place():
