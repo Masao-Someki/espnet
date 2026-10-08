@@ -37,6 +37,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
+from espnet3.utils.scp_utils import check_utt_id
+
 UID_HASH_LENGTH = 8
 UID_SEPARATOR = "-"
 EXCLUDED_KEY_SUFFIX = "_dir"
@@ -172,6 +174,32 @@ def parse_uid(uid: str) -> Optional[Tuple[str, int]]:
     if match is None:
         return None
     return match.group(1), int(match.group(2))
+
+
+def item_uid(dataset: Any, idx: int) -> str:
+    """Return the stable id a caller should use for one item of ``dataset``.
+
+    ``dataset.get_uid(idx)`` when ``dataset`` has one (``CombinedDataset``
+    does); otherwise ``str(idx)``, for a plain dataset a provider returns
+    without going through ``CombinedDataset``.
+
+    Args:
+        dataset (Any): The dataset ``idx`` indexes into.
+        idx (int): The item's index into ``dataset``.
+
+    Returns:
+        str: The id, checked by ``check_utt_id`` so it can head an SCP line
+        and name an artifact file.
+
+    Examples:
+        >>> class NoUid:
+        ...     pass
+        >>> item_uid(NoUid(), 3)
+        '3'
+    """
+    get_uid = getattr(dataset, "get_uid", None)
+    uid = get_uid(idx) if get_uid is not None else str(idx)
+    return check_utt_id(uid)
 
 
 @dataclass(frozen=True)

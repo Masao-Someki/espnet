@@ -10,6 +10,7 @@ from torch.utils.data.dataset import Dataset
 
 from espnet3.components.data.dataset_uid import DatasetUidEntry, format_uid, parse_uid
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
+from espnet3.utils.scp_utils import check_utt_id
 
 logger = logging.getLogger(__name__)
 
@@ -49,19 +50,22 @@ class CombinedDataset:
     **Dataset-hash UID protocol.** ``get_uid(idx)`` is the single source of
     truth for the utterance ID used from ``collect_stats`` (shape-file keys)
     through batching (the UID returned alongside each sample when
-    ``use_espnet_collator`` is set, and passed to the preprocessor). A UID has
-    the form ``"<8-hex-char dataset hash>-<position>"``: the hash identifies a
-    sub-dataset by its config (via ``espnet3.components.data.dataset_uid``,
-    ignoring keys ending in ``_dir``), and ``position`` is that item's index
-    within that sub-dataset. Because the hash depends only on the entry's own
-    config, the UID is stable across reordering or adding sibling entries --
-    it never encodes where a sub-dataset sits among its siblings.
-    ``DataOrganizer`` computes ``uid_prefixes``/``uid_entries`` from each
-    entry's config and passes them to this constructor; that is the only
-    supported way to get stable UIDs. A ``CombinedDataset`` built directly
-    without ``uid_prefixes`` (``uid_prefixes=None``, the default) falls back
-    to the legacy ``str(global_idx)`` UID, which is **not** stable across
-    reordering, for backward compatibility only.
+    ``use_espnet_collator`` is set, and passed to the preprocessor). Per
+    sub-dataset, it prefers the sub-dataset's own ``get_utt_id(position)``
+    when it has one, then a string-index-mode key, then falls back to the
+    dataset-hash UID, the form ``"<8-hex-char dataset hash>-<position>"``:
+    the hash identifies a sub-dataset by its config (via
+    ``espnet3.components.data.dataset_uid``, ignoring keys ending in
+    ``_dir``), and ``position`` is that item's index within that
+    sub-dataset. Because the hash depends only on the entry's own config,
+    the dataset-hash form is stable across reordering or adding sibling
+    entries -- it never encodes where a sub-dataset sits among its
+    siblings. ``DataOrganizer`` computes ``uid_prefixes``/``uid_entries``
+    from each entry's config and passes them to this constructor; that is
+    the only supported way to get stable UIDs. A ``CombinedDataset`` built
+    directly without ``uid_prefixes`` (``uid_prefixes=None``, the default)
+    falls back to the legacy ``str(global_idx)`` UID, which is **not**
+    stable across reordering, for backward compatibility only.
 
     Args:
         datasets (List[Any]): A list of dataset instances. Each must implement
@@ -154,6 +158,10 @@ class CombinedDataset:
             else {}
         )
         self._position_maps: List[Optional[Sequence[int]]] = [None] * len(datasets)
+        # The pre-shard datasets get_uid() reads get_utt_id from, so a shard
+        # reports the same utterance id as the original at that position.
+        self._base_datasets: List[Any] = datasets
+        self._utt_id_index: Optional[Dict[str, Tuple[int, int]]] = None
         self._shard_index: Optional[int] = None
 
         # Check the first sample from all dataset to ensure they all have the same keys
@@ -232,6 +240,9 @@ class CombinedDataset:
             return self._getitem_string_mode(idx)
 
         if isinstance(idx, str):
+            located = self._locate_by_utt_id(idx)
+            if located is not None:
+                return self._getitem_int(self._global_index(*located))
             try:
                 numerical_idx = int(idx)
             except (ValueError, TypeError):
@@ -240,6 +251,42 @@ class CombinedDataset:
                 idx = numerical_idx
 
         return self._getitem_int(idx)
+
+    def _global_index(self, dataset_idx: int, pos: int) -> int:
+        """Return the global index for a (sub-dataset, position) pair."""
+        return (self.cumulative_lengths[dataset_idx - 1] if dataset_idx else 0) + pos
+
+    def _locate_by_utt_id(self, uid: str) -> Optional[Tuple[int, int]]:
+        """Return ``(dataset_idx, position)`` for a sub-dataset's own utterance id.
+
+        Builds ``_utt_id_index`` the first time this is called, scanning
+        only the sub-datasets that have ``get_utt_id`` -- not every item in
+        datasets that do not use utterance ids at all. Reads ``self.datasets``
+        (this instance's own, possibly sharded, datasets), matching
+        ``self.cumulative_lengths``; a shard wrapper generally has no
+        ``get_utt_id`` of its own, so this -- like hash UID lookup -- is not
+        reachable once sharded, by the same shard-local-only design.
+
+        Raises:
+            ValueError: If two items share an utterance id.
+        """
+        if self._utt_id_index is None:
+            index: Dict[str, Tuple[int, int]] = {}
+            for dataset_idx, dataset in enumerate(self.datasets):
+                get_utt_id = getattr(dataset, "get_utt_id", None)
+                if get_utt_id is None:
+                    continue
+                for pos in range(len(dataset)):
+                    utt_id = check_utt_id(get_utt_id(pos))
+                    if utt_id in index:
+                        raise ValueError(
+                            f"utterance id {utt_id!r} is used by more than "
+                            "one item; utterance ids must be unique across "
+                            "datasets."
+                        )
+                    index[utt_id] = (dataset_idx, pos)
+            self._utt_id_index = index
+        return self._utt_id_index.get(uid)
 
     def _getitem_by_uid(self, uid: str, parsed: Tuple[str, int]):
         """Resolve a well-formed dataset-hash UID to its item."""
@@ -261,10 +308,7 @@ class CombinedDataset:
                 f"UID {uid!r}: position {pos} is out of range for dataset "
                 f"{dataset_idx} (length {self.lengths[dataset_idx]})."
             )
-        global_idx = (
-            self.cumulative_lengths[dataset_idx - 1] if dataset_idx else 0
-        ) + pos
-        return self._getitem_int(global_idx)
+        return self._getitem_int(self._global_index(dataset_idx, pos))
 
     def _getitem_int(self, idx: int):
         """Return the item at global integer index ``idx``."""
@@ -393,27 +437,39 @@ class CombinedDataset:
         raise IndexError("Index out of range in CombinedDataset")
 
     def get_uid(self, idx: int) -> str:
-        """Return the dataset-hash UID for a global integer index.
+        """Return the stable id for a global integer index.
 
-        This is the single source of truth for the UID used consistently
+        This is the single source of truth for the id used consistently
         from ``collect_stats`` (shape-file keys) through batching. See the
-        class docstring's "Dataset-hash UID protocol" section.
+        class docstring's "Dataset-hash UID protocol" section. Preferred,
+        in order:
+
+        1. The sub-dataset's own ``get_utt_id(position) -> str`` (checked
+           by ``check_utt_id``), when it has one -- a manifest-backed id
+           that names the item itself, not just where it sits.
+        2. Its string-index-mode key, when the sub-dataset is addressed by
+           string keys rather than integers.
+        3. ``format_uid(hash, position)``, the dataset-hash UID.
 
         Args:
             idx (int): Global index into the combined dataset
                 (``0 <= idx < len(self)``).
 
         Returns:
-            str: The UID for this index -- ``str(idx)`` when this instance
+            str: The id for this index -- ``str(idx)`` when this instance
             was built without ``uid_prefixes`` (backward compatibility);
-            otherwise ``"<hash>-<position>"``, or (only for an unshardable
-            shard whose ``shard()`` result exposes no ``indices``)
-            ``"<hash>@s<shard_idx>:<shard-local position>"``, which is not a
-            well-formed UID (``parse_uid`` returns ``None`` for it) and is
-            only a unique label for the preprocessor/collator.
+            otherwise one of the three forms above, or (only for an
+            unshardable shard whose ``shard()`` result exposes no
+            ``indices``) ``"<hash>@s<shard_idx>:<shard-local position>"``,
+            which is not a well-formed UID (``parse_uid`` returns ``None``
+            for it) and is only a unique label for the preprocessor/collator.
 
         Raises:
             IndexError: If ``idx`` is negative or out of range.
+
+        Examples:
+            >>> combined.get_uid(0)
+            'a1b2c3d4-0'
         """
         dataset_idx, ds_idx = self._resolve_global_index(idx)
         if self._uid_prefixes is None:
@@ -425,6 +481,12 @@ class CombinedDataset:
             return f"{self._uid_prefixes[dataset_idx]}@s{self._shard_index}:{ds_idx}"
         else:
             pos = position_map[ds_idx]
+        get_utt_id = getattr(self._base_datasets[dataset_idx], "get_utt_id", None)
+        if get_utt_id is not None:
+            return check_utt_id(get_utt_id(pos))
+        keys = self._dataset_key_lists[dataset_idx]
+        if keys is not None:
+            return keys[pos]
         return format_uid(self._uid_prefixes[dataset_idx], pos)
 
     @property
@@ -537,6 +599,7 @@ class CombinedDataset:
         )
         result._position_maps = position_maps
         result._shard_index = shard_idx
+        result._base_datasets = self._base_datasets
         result.use_espnet_collator = self.use_espnet_collator
         return result
 
