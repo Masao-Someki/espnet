@@ -15,7 +15,11 @@ from omegaconf import DictConfig, OmegaConf
 
 from espnet2.fileio.npy_scp import NpyScpWriter
 from espnet2.train.collate_fn import CommonCollateFn
-from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+from espnet3.components.data.dataset_uid import (
+    DatasetUidEntry,
+    item_uid,
+    write_uid_table,
+)
 from espnet3.parallel.base_runner import BaseRunner, concatenate_shard_files
 from espnet3.parallel.env_provider import EnvironmentProvider
 from espnet3.parallel.parallel import set_parallel
@@ -36,8 +40,9 @@ def _resolve_uid_and_sample(dataset, i: int) -> Tuple[str, Any]:
     what ``dataset[i]`` actually returns, never from a separate config flag such
     as ``use_espnet_preprocessor``/``use_espnet_collator`` -- those flags only
     control collation, not what ``__getitem__`` yields. The authoritative uid is
-    ``dataset.get_uid(i)`` when the dataset exposes it (the ``CombinedDataset``
-    contract), falling back to ``str(i)`` for datasets without stable ids.
+    ``item_uid(dataset, i)`` (``dataset.get_uid(i)`` when the dataset exposes it,
+    else ``str(i)``), the one naming rule ``collect_stats``, training batches,
+    ``infer`` and ``measure`` all share.
 
     Args:
         dataset: A dataset providing ``__getitem__`` and, optionally, ``get_uid``.
@@ -48,17 +53,17 @@ def _resolve_uid_and_sample(dataset, i: int) -> Tuple[str, Any]:
 
     Raises:
         RuntimeError: If ``dataset[i]`` returns a ``(uid, sample)`` tuple whose
-            uid disagrees with ``dataset.get_uid(i)``, meaning the dataset's uid
-            source is internally inconsistent.
+            uid disagrees with ``item_uid(dataset, i)``, meaning the dataset's
+            uid source is internally inconsistent.
     """
     item = dataset[i]
-    uid = dataset.get_uid(i) if hasattr(dataset, "get_uid") else str(i)
+    uid = item_uid(dataset, i)
     if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
-        item_uid, sample = item
-        if item_uid != uid:
+        embedded_uid, sample = item
+        if embedded_uid != uid:
             raise RuntimeError(
-                f"Dataset item uid {item_uid!r} at index {i} does not match "
-                f"dataset.get_uid({i}) = {uid!r}; the dataset's uid source is "
+                f"Dataset item uid {embedded_uid!r} at index {i} does not match "
+                f"item_uid(dataset, {i}) = {uid!r}; the dataset's uid source is "
                 "inconsistent."
             )
         return uid, sample
@@ -74,7 +79,31 @@ def collect_stats_batch(
     write_collected_feats: bool = False,
     collect_stats_kwargs: Optional[Dict[str, Any]] = None,
 ):
-    """Process a batch of dataset indices and compute feature statistics."""
+    """Process a batch of dataset indices and compute feature statistics.
+
+    Args:
+        idxs: Integer indices into ``dataset``, one batch's worth.
+        model: Model whose ``collect_feats(**tensors)`` extracts features.
+        dataset: A dataset providing ``__getitem__`` and, optionally,
+            ``get_uid`` (see ``_resolve_uid_and_sample``).
+        collate_fn: Collates ``[(uid, sample), ...]`` into
+            ``(uids, batch_dict)``.
+        device: Device the batch tensors are moved to before
+            ``collect_feats``.
+        write_collected_feats: Also return the raw extracted features.
+        collect_stats_kwargs: Extra keyword arguments forwarded to
+            ``collect_feats`` alongside the batch tensors.
+
+    Returns:
+        A ``(stats, shape_info)`` pair -- running sum/sum-of-squares/count
+        per feature key, and each item's uid mapped to its feature shape --
+        or ``(stats, shape_info, feats)`` when ``write_collected_feats``.
+
+    Examples:
+        >>> stats, shape_info = collect_stats_batch(
+        ...     idxs=[0, 1], model=model, dataset=dataset, collate_fn=collate_fn
+        ... )
+    """
     structured_items: List[Tuple[str, Any]] = [
         _resolve_uid_and_sample(dataset, i) for i in idxs
     ]
@@ -557,7 +586,25 @@ class CollectStatsRunner(BaseRunner):
             )
 
     def merge(self, shard_dirs: List[Path]) -> Dict[str, Any]:
-        """Merge shard outputs into aggregated statistics for one split."""
+        """Merge shard outputs into aggregated statistics for one split.
+
+        Concatenates each shard's shape files and (when configured)
+        collected-feature SCPs into ``self.output_dir / self.mode``, and
+        writes the split's ``dataset_uids.json`` there when
+        ``self.uid_entries`` is set.
+
+        Args:
+            shard_dirs: One directory per shard, each holding that shard's
+                ``*_stats.npz``, ``*_shape``, and tracking ``.txt`` files.
+
+        Returns:
+            ``{"sum": ..., "sq": ..., "count": ...}``, each keyed by feature
+            name, summed across all shards.
+
+        Examples:
+            >>> runner.merge(shard_dirs)["count"]
+            {'feats': 100}
+        """
         shape_keys: set = set()
         feat_keys_written: set = set()
         stats_keys: set = set()
@@ -697,6 +744,15 @@ def collect_stats(
 
     Returns:
         None: Aggregated statistics are saved under ``output_dir / mode``.
+
+    Examples:
+        >>> collect_stats(
+        ...     model_config=model_config,
+        ...     dataset_config=dataset_config,
+        ...     dataloader_config=dataloader_config,
+        ...     mode="train",
+        ...     output_dir=Path("exp/stats"),
+        ... )
     """
     mode_config = getattr(dataloader_config, mode, None)
     if mode_config is not None and hasattr(mode_config, "multiple_iterator"):

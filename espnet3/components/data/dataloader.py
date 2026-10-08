@@ -215,6 +215,10 @@ class DataLoaderBuilder:
                 use the standard DataLoader path
                 (``dataloader.<mode>.iter_factory: null``) together with
                 ``trainer.use_distributed_sampler: false``.
+
+        Examples:
+            >>> builder = DataLoaderBuilder(config, dataset)
+            >>> train_loader = builder.build("train")
         """
         mode_config = getattr(self.config.dataloader, mode, DictConfig({}))
 

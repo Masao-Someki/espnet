@@ -1249,6 +1249,9 @@ class ESPnetLightningModule(lightning.LightningModule):
 
         Raises:
             AssertionError: If `config.stats_dir` is not provided.
+
+        Examples:
+            >>> module.collect_stats()
         """
         assert hasattr(self.config, "stats_dir"), "config.stats_dir must be defined"
 

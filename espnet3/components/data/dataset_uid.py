@@ -65,6 +65,10 @@ def strip_dir_keys(obj: Any) -> Any:
         Any: ``obj`` with keys ending in ``_dir`` removed from every mapping
         at any nesting depth. Non-mapping, non-sequence values are returned
         unchanged (not copied).
+
+    Examples:
+        >>> strip_dir_keys({"data_src": "x", "recipe_dir": "/a/b"})
+        {'data_src': 'x'}
     """
     if isinstance(obj, Mapping):
         return {
@@ -114,6 +118,10 @@ def canonicalize_entry(entry: Mapping[str, Any]) -> str:
     Raises:
         TypeError: If ``entry`` contains a value that is not JSON-serializable
             and not a ``Path``/``Enum`` (see ``_json_default``).
+
+    Examples:
+        >>> canonicalize_entry({"b": 1, "a": 2, "recipe_dir": "/x"})
+        '{"a":2,"b":1}'
     """
     return json.dumps(
         strip_dir_keys(entry),
@@ -137,6 +145,13 @@ def compute_entry_hash(entry: Mapping[str, Any]) -> str:
         canonical JSON (i.e. equal ignoring ``*_dir`` keys) always produce
         the same prefix; unrelated entries collide only with 32-bit
         probability (see ``check_entry_hashes``).
+
+    Examples:
+        >>> prefix = compute_entry_hash({"data_src": "mini_an4"})
+        >>> len(prefix)
+        8
+        >>> prefix == compute_entry_hash({"data_src": "mini_an4"})
+        True
     """
     digest = hashlib.sha256(canonicalize_entry(entry).encode("utf-8")).hexdigest()
     return digest[:UID_HASH_LENGTH]
@@ -216,6 +231,11 @@ class DatasetUidEntry:
         config (Dict[str, Any]): The entry with ``*_dir`` keys removed
             (``strip_dir_keys(entry)``), stored so a mismatch can be
             explained with a field-level diff.
+
+    Examples:
+        >>> entry = DatasetUidEntry("a1b2c3d4", "mini_an4", 100, {"data_src": "x"})
+        >>> entry.uid_prefix, entry.num_items
+        ('a1b2c3d4', 100)
     """
 
     uid_prefix: str
@@ -242,6 +262,11 @@ def write_uid_table(
     Returns:
         Path: The path the table was written to
         (``split_dir / UID_TABLE_FILENAME``).
+
+    Examples:
+        >>> entry = DatasetUidEntry("a1b2c3d4", "mini_an4", 100, {"data_src": "x"})
+        >>> write_uid_table(stats_dir / "train", [entry]).name
+        'dataset_uids.json'
     """
     split_dir = Path(split_dir)
     split_dir.mkdir(parents=True, exist_ok=True)
@@ -286,6 +311,11 @@ def load_uid_table(
     Raises:
         RuntimeError: If the file exists but cannot be parsed as JSON, has
             an unsupported ``"format"``, or is missing expected fields.
+
+    Examples:
+        >>> entries = load_uid_table(stats_dir / "train")
+        >>> entries[0].uid_prefix if entries else None
+        'a1b2c3d4'
     """
     split_dir = Path(split_dir)
     target = split_dir / UID_TABLE_FILENAME
@@ -338,6 +368,9 @@ def check_entry_hashes(entries: Sequence[Tuple[str, str, str]]) -> None:
             ``canonical_json``, i.e. the same data listed twice -- possibly
             differing only in ``*_dir`` keys) from a genuine 32-bit hash
             collision between two different configurations.
+
+    Examples:
+        >>> check_entry_hashes([("a1b2c3d4", '{"x":1}', "one")])
     """
     seen: Dict[str, Tuple[str, str]] = {}
     for prefix, canonical, label in entries:
@@ -465,6 +498,9 @@ def validate_against_uid_table(
             configuration changed, was added, or was removed); or a
             dataset present in both has a different ``num_items`` (its
             contents changed without a configuration change).
+
+    Examples:
+        >>> validate_against_uid_table(stats_dir / "train", dataset.uid_entries)
     """
     if current is None:
         return

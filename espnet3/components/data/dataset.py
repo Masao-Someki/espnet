@@ -496,6 +496,10 @@ class CombinedDataset:
         ``None`` when built without ``uid_prefixes`` (backward compatibility);
         ``collect_stats`` then does not write a UID table and training does
         not validate against one.
+
+        Examples:
+            >>> combined.uid_entries[0].label
+            'mini_an4'
         """
         return self._uid_entries
 
@@ -575,6 +579,11 @@ class CombinedDataset:
 
         Raises:
             RuntimeError: If any dataset does not support sharding.
+
+        Examples:
+            >>> shard0 = combined.shard(0)
+            >>> len(shard0) <= len(combined)
+            True
         """
         if not all(isinstance(dataset, ShardedDataset) for dataset in self.datasets):
             raise RuntimeError(

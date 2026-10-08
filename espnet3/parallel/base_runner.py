@@ -73,6 +73,14 @@ class BaseRunner(ABC):
         - In parallel sync mode (when a Dask cluster is configured), tasks are
           submitted via ``parallel_map`` and results are gathered in order.
         - In async mode, the results will be written on async_result_dir.
+
+    Examples:
+        >>> class MyRunner(BaseRunner):
+        ...     @staticmethod
+        ...     def forward(idx, dataset, model, **env):
+        ...         return model(dataset[idx])
+        >>> runner = MyRunner(provider, batch_size=4)
+        >>> results = runner(list(range(len(dataset))))
     """
 
     # TODO(Masao) Add detailed description on Runner/Provider in the document.
