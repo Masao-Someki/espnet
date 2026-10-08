@@ -25,10 +25,10 @@ Inference is a stream of chunks in and chunks out; the one-shot call is
 the stream of one chunk, and a batch is several one-shot calls that a
 model may choose to run together.
 
-What a field can hold is a :class:`Kind` registered in :data:`KINDS`
-(``espnet3.api.inference.kinds``); ``audio``, ``text`` and ``segments`` are
-built in, and a new modality is one subclass passed to
-:func:`register_kind` - from a system, or from a recipe's own ``src/``.
+What a field can hold is a :class:`Kind` (``espnet3.api.inference.kinds``);
+``AudioKind``, ``TextKind`` and ``SegmentsKind`` are built in, and a new
+modality is one subclass passed directly as a :class:`Field`'s ``kind`` -
+from a system, or from a recipe's own ``src/``.
 
 This package is for whoever calls a model. It asks nothing of the rest
 of ESPnet3 - no recipe, no stage, no dataset, no cluster - and depends on
@@ -95,13 +95,11 @@ from __future__ import annotations
 from espnet3.api.inference.base import InferenceAPI, check_contract, gather
 from espnet3.api.inference.field import Field
 from espnet3.api.inference.kinds import (
-    KINDS,
     Audio,
     AudioKind,
     Kind,
     SegmentsKind,
     TextKind,
-    register_kind,
 )
 from espnet3.api.inference.loading import (
     SYSTEM_ALIASES,
@@ -116,7 +114,6 @@ from espnet3.api.inference.loading import (
 )
 
 __all__ = [
-    "KINDS",
     "SYSTEM_ALIASES",
     "Audio",
     "AudioKind",
@@ -135,5 +132,4 @@ __all__ = [
     "gather",
     "load",
     "locate_pack",
-    "register_kind",
 ]

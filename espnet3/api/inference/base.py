@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, ClassVar, Iterable, Iterator, Mapping, Optional, Sequence
 
 from espnet3.api.inference.field import Field
-from espnet3.api.inference.kinds import KINDS
 
 
 def check_contract(cls: type) -> None:
@@ -314,7 +313,7 @@ class InferenceAPI(ABC):
         values = self._collect(args, kwargs)
         fields = {f.name: f for f in self.inputs}
         if values and all(
-            KINDS[fields[name].kind].is_batch(v, fields[name], self)
+            fields[name].kind.is_batch(v, fields[name], self)
             for name, v in values.items()
         ):
             lengths = {len(v) for v in values.values()}
@@ -447,7 +446,7 @@ class InferenceAPI(ABC):
 
     def _check(self, f: Field, value: Any, *, output: bool) -> Any:
         """Convert and check one value by its field's kind."""
-        return KINDS[f.kind].check(value, f, self, output=output)
+        return f.kind.check(value, f, self, output=output)
 
 
 def gather(fields: tuple[Field, ...], chunks: Iterable[Mapping[str, Any]]) -> dict:
@@ -472,7 +471,7 @@ def gather(fields: tuple[Field, ...], chunks: Iterable[Mapping[str, Any]]) -> di
         >>> gather((Field("text", "text"),), [{"text": "hel"}, {"text": "lo"}])
         {'text': 'hello'}
     """
-    kinds = {f.name: KINDS[f.kind] for f in fields}
+    kinds = {f.name: f.kind for f in fields}
     acc: dict[str, Any] = {}
     for chunk in chunks:
         for name, piece in chunk.items():
