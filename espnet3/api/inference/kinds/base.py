@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from espnet3.api.inference.base import InferenceAPI
@@ -15,10 +15,14 @@ class Kind(ABC):
 
     A kind turns what a caller gives into what a hook receives, checks
     what a hook returns, and says how pieces of a stream join. The
-    built-in kinds are ``audio``, ``text`` and ``segments``; a new
-    modality - a conversation, video, a JSON document - is a subclass
-    passed to :func:`register_kind`, and needs no change to
+    built-in kinds are ``AudioKind``, ``TextKind`` and ``SegmentsKind``; a
+    new modality - a conversation, video, a JSON document - is a subclass
+    passed directly as a ``Field``'s ``kind``, and needs no change to
     :class:`InferenceAPI`.
+
+    Kinds are stateless: two instances of one subclass are equal, and a
+    subclass gets a lowercase ``name`` from its own name (``AudioKind`` ->
+    ``"audio"``) unless it sets one itself.
 
     Examples:
         >>> class Messages(Kind):
@@ -26,10 +30,31 @@ class Kind(ABC):
         ...         if not isinstance(value, list):
         ...             raise TypeError(f"{field.name} must be a list of turns")
         ...         return value
-        >>> register_kind("messages", Messages())
-        >>> Field("messages", "messages").kind
+        >>> Messages.name
         'messages'
+        >>> Field(name="messages", kind=Messages).kind == Messages()
+        True
     """
+
+    name: ClassVar[str]
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Give a subclass a default ``name`` unless it sets its own."""
+        super().__init_subclass__(**kwargs)
+        if "name" not in cls.__dict__:
+            cls.name = cls.__name__.removesuffix("Kind").lower()
+
+    def __eq__(self, other: Any) -> bool:
+        """Kinds are stateless: equal when of the same class."""
+        return type(self) is type(other)
+
+    def __hash__(self) -> int:
+        """Hash by class, matching :meth:`__eq__`."""
+        return hash(type(self))
+
+    def __repr__(self) -> str:
+        """Show the class name, since a kind carries no state."""
+        return f"{type(self).__name__}()"
 
     @abstractmethod
     def check(
