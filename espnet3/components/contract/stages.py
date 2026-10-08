@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 CONFIG_ROLES = ("training", "inference", "metrics", "publication", "demo")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class StageSpec:
     """One stage of a system: its method name, config role, and log path.
 
@@ -23,7 +23,7 @@ class StageSpec:
             ``None`` falls back to the system's own default log directory.
 
     Examples:
-        >>> StageSpec("train", "training", "exp_dir")
+        >>> StageSpec(name="train", config="training", log_dir="exp_dir")
         StageSpec(name='train', config='training', log_dir='exp_dir')
     """
 
@@ -115,7 +115,7 @@ def stage_names(system_cls: type) -> list[str]:
 
     Examples:
         >>> class ExampleSystem:
-        ...     stages = (StageSpec("train", "training"),)
+        ...     stages = (StageSpec(name="train", config="training"),)
         >>> stage_names(ExampleSystem)
         ['train']
     """
@@ -130,7 +130,9 @@ def stage_spec(system_cls: type, name: str) -> StageSpec:
 
     Examples:
         >>> class ExampleSystem:
-        ...     stages = (StageSpec("train", "training", "exp_dir"),)
+        ...     stages = (
+        ...         StageSpec(name="train", config="training", log_dir="exp_dir"),
+        ...     )
         >>> stage_spec(ExampleSystem, "train").config
         'training'
     """
@@ -154,7 +156,9 @@ def stage_log_dir(system: Any, name: str) -> Path:
     Examples:
         >>> from omegaconf import OmegaConf
         >>> class ExampleSystem:
-        ...     stages = (StageSpec("train", "training", "exp_dir"),)
+        ...     stages = (
+        ...         StageSpec(name="train", config="training", log_dir="exp_dir"),
+        ...     )
         ...     training_config = OmegaConf.create({"exp_dir": "exp"})
         ...     _default_log_dir = Path("logs")
         >>> stage_log_dir(ExampleSystem(), "train")
@@ -193,7 +197,7 @@ def check_requested_stages(
 
     Examples:
         >>> class ExampleSystem:
-        ...     stages = (StageSpec("train", "training"),)
+        ...     stages = (StageSpec(name="train", config="training"),)
         >>> check_requested_stages(ExampleSystem, ["train"], {"training": object()})
     """
     names = {s.name: s for s in system_cls.stages}

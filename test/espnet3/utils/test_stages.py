@@ -13,8 +13,8 @@ from espnet3.utils.stages_utils import _RANK_ENV_KEYS, resolve_stages, run_stage
 
 class DummySystem:
     stages: ClassVar[tuple[StageSpec, ...]] = (
-        StageSpec("stage_a", "training"),
-        StageSpec("stage_b", "training"),
+        StageSpec(name="stage_a", config="training"),
+        StageSpec(name="stage_b", config="training"),
     )
     _default_log_dir = None
 
@@ -68,7 +68,9 @@ def test_run_stages_missing_method_raises():
 
 def test_run_stages_typeerror_wrapped():
     class BadSystem(BaseSystem):
-        stages: ClassVar[tuple[StageSpec, ...]] = (StageSpec("stage_a", "training"),)
+        stages: ClassVar[tuple[StageSpec, ...]] = (
+            StageSpec(name="stage_a", config="training"),
+        )
 
         def stage_a(self, arg):
             return arg
@@ -83,7 +85,9 @@ def test_run_stages_typeerror_wrapped():
 
 def test_run_stages_reraises_exception(monkeypatch):
     class CrashSystem(BaseSystem):
-        stages: ClassVar[tuple[StageSpec, ...]] = (StageSpec("stage_a", "training"),)
+        stages: ClassVar[tuple[StageSpec, ...]] = (
+            StageSpec(name="stage_a", config="training"),
+        )
 
         def stage_a(self):
             raise ValueError("boom")
@@ -99,8 +103,8 @@ def test_run_stages_reraises_exception(monkeypatch):
 def test_run_stages_writes_stage_logs(tmp_path):
     class LoggingSystem:
         stages: ClassVar[tuple[StageSpec, ...]] = (
-            StageSpec("stage_a", "training"),
-            StageSpec("stage_b", "training"),
+            StageSpec(name="stage_a", config="training"),
+            StageSpec(name="stage_b", config="training"),
         )
 
         def __init__(self, log_dir):
@@ -140,7 +144,9 @@ def test_run_stages_train_uses_per_rank_log_filename(monkeypatch, tmp_path):
     seen = {}
 
     class TrainingSystem:
-        stages: ClassVar[tuple[StageSpec, ...]] = (StageSpec("train", "training"),)
+        stages: ClassVar[tuple[StageSpec, ...]] = (
+            StageSpec(name="train", config="training"),
+        )
 
         def __init__(self):
             self._default_log_dir = tmp_path
@@ -208,7 +214,9 @@ def test_run_stages_train_unknown_log_mode_falls_back_to_rank0(
     seen = {}
 
     class TrainingSystem:
-        stages: ClassVar[tuple[StageSpec, ...]] = (StageSpec("train", "training"),)
+        stages: ClassVar[tuple[StageSpec, ...]] = (
+            StageSpec(name="train", config="training"),
+        )
 
         def __init__(self):
             self._default_log_dir = tmp_path

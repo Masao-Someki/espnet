@@ -17,6 +17,16 @@ from espnet3.components.contract.stages import (
 )
 
 # ---------------------------------------------------------------------------
+# StageSpec: keyword-only construction
+# ---------------------------------------------------------------------------
+
+
+def test_stagespec_rejects_positional_arguments():
+    with pytest.raises(TypeError):
+        StageSpec("train", "training")
+
+
+# ---------------------------------------------------------------------------
 # check_stage_contract: definition-time errors
 # ---------------------------------------------------------------------------
 
@@ -42,7 +52,10 @@ def test_check_stage_contract_rejects_non_stagespec_elements():
 
 def test_check_stage_contract_rejects_duplicate_names():
     class Duplicate:
-        stages = (StageSpec("train", "training"), StageSpec("train", "training"))
+        stages = (
+            StageSpec(name="train", config="training"),
+            StageSpec(name="train", config="training"),
+        )
 
         def train(self):
             pass
@@ -53,7 +66,7 @@ def test_check_stage_contract_rejects_duplicate_names():
 
 def test_check_stage_contract_rejects_unknown_config_role():
     class BadRole:
-        stages = (StageSpec("train", "not_a_role"),)
+        stages = (StageSpec(name="train", config="not_a_role"),)
 
         def train(self):
             pass
@@ -64,7 +77,7 @@ def test_check_stage_contract_rejects_unknown_config_role():
 
 def test_check_stage_contract_rejects_non_str_log_dir():
     class BadLogDir:
-        stages = (StageSpec("train", "training", 123),)
+        stages = (StageSpec(name="train", config="training", log_dir=123),)
 
         def train(self):
             pass
@@ -75,7 +88,7 @@ def test_check_stage_contract_rejects_non_str_log_dir():
 
 def test_check_stage_contract_rejects_stage_with_no_method():
     class MissingMethod:
-        stages = (StageSpec("train", "training"),)
+        stages = (StageSpec(name="train", config="training"),)
 
     with pytest.raises(StageContractError, match="defines no method"):
         check_stage_contract(MissingMethod)
@@ -83,7 +96,7 @@ def test_check_stage_contract_rejects_stage_with_no_method():
 
 def test_check_stage_contract_rejects_public_method_not_a_stage():
     class ExtraPublicMethod:
-        stages = (StageSpec("train", "training"),)
+        stages = (StageSpec(name="train", config="training"),)
 
         def train(self):
             pass
@@ -97,7 +110,7 @@ def test_check_stage_contract_rejects_public_method_not_a_stage():
 
 def test_check_stage_contract_allows_private_helpers():
     class WithPrivateHelper:
-        stages = (StageSpec("train", "training"),)
+        stages = (StageSpec(name="train", config="training"),)
 
         def train(self):
             pass
@@ -111,8 +124,8 @@ def test_check_stage_contract_allows_private_helpers():
 def test_check_stage_contract_accepts_valid_declaration():
     class Good:
         stages = (
-            StageSpec("create_dataset", "training", "data_dir"),
-            StageSpec("pack_model", "publication"),
+            StageSpec(name="create_dataset", config="training", log_dir="data_dir"),
+            StageSpec(name="pack_model", config="publication"),
         )
 
         def create_dataset(self):
@@ -131,8 +144,8 @@ def test_check_stage_contract_accepts_valid_declaration():
 
 class _ExampleSystem:
     stages = (
-        StageSpec("train", "training"),
-        StageSpec("pack_model", "publication"),
+        StageSpec(name="train", config="training"),
+        StageSpec(name="pack_model", config="publication"),
     )
 
     def train(self):
@@ -184,7 +197,7 @@ def test_stage_spec_raises_for_unknown_name():
 
 def test_stage_log_dir_reads_the_configured_path(tmp_path):
     class WithConfig:
-        stages = (StageSpec("train", "training", "exp_dir"),)
+        stages = (StageSpec(name="train", config="training", log_dir="exp_dir"),)
         training_config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
         _default_log_dir = tmp_path / "logs"
 
@@ -196,7 +209,7 @@ def test_stage_log_dir_reads_the_configured_path(tmp_path):
 
 def test_stage_log_dir_falls_back_when_config_is_none():
     class NoConfig:
-        stages = (StageSpec("train", "training", "exp_dir"),)
+        stages = (StageSpec(name="train", config="training", log_dir="exp_dir"),)
         training_config = None
         _default_log_dir = Path("logs")
 
@@ -208,7 +221,7 @@ def test_stage_log_dir_falls_back_when_config_is_none():
 
 def test_stage_log_dir_falls_back_when_log_dir_is_none():
     class NoLogDir:
-        stages = (StageSpec("pack_model", "publication"),)
+        stages = (StageSpec(name="pack_model", config="publication"),)
         publication_config = OmegaConf.create({"out_dir": "somewhere"})
         _default_log_dir = Path("logs")
 
