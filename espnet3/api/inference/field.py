@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
-from espnet3.api.inference.kinds import KINDS
+from espnet3.api.inference.kinds.base import Kind
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class Field:
     """One input or output of a system.
 
@@ -19,50 +19,59 @@ class Field:
     Args:
         name: The keyword the value is passed or returned as, such as
             ``speech`` or ``text``. Must be a Python identifier.
-        kind: A name in :data:`~espnet3.api.inference.kinds.KINDS`. Decides
-            how a value is converted
-            and checked (``audio`` becomes an :class:`Audio` at the model's
-            rate, ``text`` must be a ``str``) and, for a front end, which
-            widget or argument type shows it.
+        kind: A :class:`Kind` subclass or instance. Decides how a value is
+            converted and checked (``AudioKind`` becomes an :class:`Audio`
+            at the model's rate, ``TextKind`` must be a ``str``) and, for a
+            front end, which widget or argument type shows it. A subclass
+            is instantiated.
         label: What a page calls the field. Defaults to the name with
             underscores spaced and the first letter capitalised.
         optional: An input the caller may leave out; the hook then does
             not receive it. Outputs are never optional.
-        channels: For ``audio`` only: how many channels the hook sees.
+        channels: For ``AudioKind`` only: how many channels the hook sees.
             ``1`` (the default) gives the reference channel as a 1-D
             array, what a single-channel backend takes; ``None`` gives
             every channel as ``(channels, samples)``; a count ``N`` demands
             exactly ``N``. Other kinds ignore it.
 
     Raises:
-        ValueError: If ``kind`` is not registered in :data:`KINDS`,
-            ``name`` is not an identifier, or ``channels`` is below 1.
+        TypeError: If ``kind`` is not a :class:`Kind` subclass or instance.
+        ValueError: If ``name`` is not an identifier, or ``channels`` is
+            below 1.
 
     Examples:
-        >>> Field("speech", "audio")
-        Field(name='speech', kind='audio', label='Speech', optional=False, channels=1)
-        >>> Field("reference_speech", "audio", optional=True).label
+        >>> Field(name="speech", kind=AudioKind).kind   # a class is instantiated
+        AudioKind()
+        >>> Field(name="reference_speech", kind=AudioKind, optional=True).label
         'Reference speech'
-        >>> Field("text", "text", "Transcription").label
+        >>> Field(name="text", kind=TextKind, label="Transcription").label
         'Transcription'
-        >>> Field("mixture", "audio", channels=None).channels   # a multichannel model
-        >>> Field("speech", "audio").channels                   # the reference channel
+        >>> mixture = Field(name="mixture", kind=AudioKind, channels=None)
+        >>> mixture.channels   # a multichannel model
+        >>> Field(name="speech", kind=AudioKind).channels  # the reference channel
         1
+        >>> same_kind = Field(name="speech", kind=AudioKind())
+        >>> Field(name="speech", kind=AudioKind) == same_kind
+        True
     """
 
     name: str
-    kind: str
+    kind: Union[Kind, type[Kind]]
     label: str = ""
     optional: bool = False
     channels: Optional[int] = 1
 
     def __post_init__(self) -> None:
-        """Check the kind and the name, and fill in the label."""
-        if self.kind not in KINDS:
-            raise ValueError(
-                f"Field {self.name!r} has kind {self.kind!r}; "
-                f"known kinds are {sorted(KINDS)}"
+        """Instantiate a ``kind`` class, then check the kind and the name."""
+        kind = self.kind
+        if isinstance(kind, type) and issubclass(kind, Kind):
+            kind = kind()
+        if not isinstance(kind, Kind):
+            raise TypeError(
+                f"Field {self.name!r}: kind must be a Kind class or instance, "
+                f"not {kind!r}"
             )
+        object.__setattr__(self, "kind", kind)
         if not self.name.isidentifier():
             raise ValueError(f"Field name {self.name!r} must be a Python identifier")
         if self.channels is not None and self.channels < 1:
