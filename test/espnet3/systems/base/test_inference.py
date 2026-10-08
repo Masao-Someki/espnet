@@ -122,6 +122,8 @@ class ModelOutputProvider(InferenceProvider):
 
 
 class AsyncLikeRunner:
+    hyp_key = []
+
     def __init__(self, provider, **_kwargs):
         self.provider = provider
 
@@ -130,6 +132,8 @@ class AsyncLikeRunner:
 
 
 class LegacyListRunner:
+    hyp_key = []
+
     def __init__(self, provider, **_kwargs):
         self.provider = provider
 
@@ -281,7 +285,7 @@ def test_inference_without_output_fn_uses_model_output(tmp_path, monkeypatch):
     ]
 
 
-def test_inference_without_idx_key_uses_default_utt_id(tmp_path, monkeypatch):
+def test_inference_writes_scp_keyed_by_utt_id(tmp_path, monkeypatch):
     cfg = OmegaConf.create(
         {
             "parallel": {"env": "local"},
@@ -289,29 +293,6 @@ def test_inference_without_idx_key_uses_default_utt_id(tmp_path, monkeypatch):
             "dataset": {"test": [{"name": "test_a"}]},
             "input_key": "speech",
             "output_fn": f"{__name__}.dummy_output_fn",
-            "mock_dataset_length": 1,
-            "provider": {"_target_": f"{__name__}.DummyProvider"},
-            "runner": {"_target_": f"{__name__}.DummyRunner"},
-        }
-    )
-    DummyRunner.results = [{"utt_id": "utt1", "hyp": "h1"}]
-
-    monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
-
-    inference_mod.infer(cfg)
-
-    assert _read_scp(tmp_path / "infer" / "test_a" / "hyp.scp") == ["utt1 h1"]
-
-
-def test_inference_ignores_a_configured_idx_key(tmp_path, monkeypatch):
-    """The record's id key is always `utt_id`; `idx_key` in config has no effect."""
-    cfg = OmegaConf.create(
-        {
-            "parallel": {"env": "local"},
-            "inference_dir": str(tmp_path / "infer"),
-            "dataset": {"test": [{"name": "test_a"}]},
-            "input_key": "speech",
-            "idx_key": "sample_id",
             "mock_dataset_length": 1,
             "provider": {"_target_": f"{__name__}.DummyProvider"},
             "runner": {"_target_": f"{__name__}.DummyRunner"},

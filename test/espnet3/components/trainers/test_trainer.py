@@ -519,9 +519,10 @@ def sharded_dataset_config():
 def test_distributed_sampler_disabled_for_sharded_standard_dataloader(
     monkeypatch, base_trainer_config, model_config, sharded_dataset_config
 ):
-    """T6: standard DataLoader + ShardedDataset(total_shards>1) disables
-    trainer.use_distributed_sampler to avoid double sharding with Lightning's
-    DistributedSampler."""
+    """T6: sharded standard DataLoader disables use_distributed_sampler.
+
+    Avoids double sharding with Lightning's own DistributedSampler.
+    """
     monkeypatch.setattr(
         data_organizer_module,
         "instantiate_dataset_reference",
@@ -541,8 +542,10 @@ def test_distributed_sampler_disabled_for_sharded_standard_dataloader(
 def test_distributed_sampler_untouched_for_plain_standard_dataloader(
     base_trainer_config, model_config, dummy_dataset_config
 ):
-    """T6: a non-sharded dataset with the standard DataLoader path leaves
-    use_distributed_sampler at Lightning's own default (unset here)."""
+    """T6: a non-sharded dataset leaves use_distributed_sampler untouched.
+
+    It stays at Lightning's own default (unset here).
+    """
     model_config = OmegaConf.create(model_config)
     model_config.dataset = dummy_dataset_config
     trainer_config = OmegaConf.create(base_trainer_config)
@@ -557,8 +560,11 @@ def test_distributed_sampler_untouched_for_plain_standard_dataloader(
 def test_distributed_sampler_explicit_true_untouched_for_plain_standard_dataloader(
     base_trainer_config, model_config, dummy_dataset_config
 ):
-    """T6: an explicit use_distributed_sampler=True is not overwritten when the
-    dataset is not sharded and the standard DataLoader path is used."""
+    """T6: an explicit use_distributed_sampler=True is not overwritten.
+
+    True even when the dataset is not sharded and the standard DataLoader
+    path is used.
+    """
     model_config = OmegaConf.create(model_config)
     model_config.dataset = dummy_dataset_config
     trainer_config = OmegaConf.create(base_trainer_config)
@@ -577,10 +583,13 @@ def test_distributed_sampler_untouched_for_sharded_iter_factory(
     model_config_espnet_sampler,
     sharded_dataset_config,
 ):
-    """T6: total_shards>1 combined with iter_factory is already routed through
+    """T6: the trainer-level auto-disable must not fire for this case.
+
+    total_shards>1 combined with iter_factory is already routed through
     the is_espnet_sampler branch (invariant 4 rejects this combination one
-    layer up in DataLoaderBuilder.build); the trainer-level auto-disable must
-    not additionally fire from a stale reading of total_shards in that case."""
+    layer up in DataLoaderBuilder.build), so it must not additionally fire
+    from a stale reading of total_shards here.
+    """
     monkeypatch.setattr(
         data_organizer_module,
         "instantiate_dataset_reference",
