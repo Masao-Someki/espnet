@@ -13,9 +13,11 @@ from omegaconf import OmegaConf
 
 import espnet3.api.inference.loading as loading
 from espnet3.api.inference import (
+    AudioKind,
     Field,
     InferenceAPI,
     ModelTagError,
+    TextKind,
     build_model,
     load,
     load_model,
@@ -29,8 +31,8 @@ from espnet3.systems.base.inference_provider import InferenceProvider
 class Echo(InferenceAPI):
     """An Inference a bundle may name as its model."""
 
-    inputs = (Field("speech", "audio"),)
-    outputs = (Field("text", "text"),)
+    inputs = (Field(name="speech", kind=AudioKind),)
+    outputs = (Field(name="text", kind=TextKind),)
 
     def __init__(self, device="cpu", prefix=""):
         self.device = device
@@ -86,10 +88,11 @@ def _pack(
         (root / "src").mkdir()
         (root / "src" / "__init__.py").write_text("")
         (root / "src" / "code.py").write_text(
-            "from espnet3.api.inference import Field, InferenceAPI\n"
+            "from espnet3.api.inference import "
+            "AudioKind, Field, InferenceAPI, TextKind\n"
             "class Local(InferenceAPI):\n"
-            "    inputs = (Field('speech', 'audio'),)\n"
-            "    outputs = (Field('text', 'text'),)\n"
+            "    inputs = (Field(name='speech', kind=AudioKind),)\n"
+            "    outputs = (Field(name='text', kind=TextKind),)\n"
             "    def __init__(self, device='cpu', prefix=''):\n"
             "        self.device = device\n"
             "    @classmethod\n"

@@ -189,12 +189,12 @@ def test_from_pretrained_returns_the_bundles_own_inference(tmp_path, monkeypatch
     monkeypatch.setattr(base, "load_model", lambda p, **kw: ready)
     assert Inference.from_pretrained(tmp_path) is ready
 
-    from espnet3.api.inference import Field
+    from espnet3.api.inference import AudioKind, Field, TextKind
     from espnet3.systems.base.backend_inference import BackendInference
 
     class Other(BackendInference):
-        inputs = (Field("text", "text"),)
-        outputs = (Field("speech", "audio"),)
+        inputs = (Field(name="text", kind=TextKind),)
+        outputs = (Field(name="speech", kind=AudioKind),)
 
         def run(self, text):
             return {}

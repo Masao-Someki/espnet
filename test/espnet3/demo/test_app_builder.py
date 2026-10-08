@@ -13,15 +13,22 @@ import egs3.TEMPLATE.esp2_asr.src.app as demo_module
 import espnet3.publication.demo.assets as demo_assets_module
 import espnet3.publication.demo.session as demo_session_module
 from egs3.TEMPLATE.esp2_asr.src.app import build_demo
-from espnet3.api.inference import Audio, Field, InferenceAPI
+from espnet3.api.inference import (
+    Audio,
+    AudioKind,
+    Field,
+    InferenceAPI,
+    SegmentsKind,
+    TextKind,
+)
 from espnet3.publication.demo.session import DemoSession, load_demo_session, to_ui
 
 
 class Transcriber(InferenceAPI):
     """What a bundle's model looks like to the demo: fields and a result."""
 
-    inputs = (Field("speech", "audio", "Input Audio"),)
-    outputs = (Field("text", "text", "Transcription"),)
+    inputs = (Field(name="speech", kind=AudioKind, label="Input Audio"),)
+    outputs = (Field(name="text", kind=TextKind, label="Transcription"),)
 
     def __init__(self, device="cpu", beam_size=1):
         self.device = device
@@ -40,8 +47,14 @@ class Transcriber(InferenceAPI):
 class Enhancer(InferenceAPI):
     """Audio out, to check the Gradio conversion and the derived specs."""
 
-    inputs = (Field("speech", "audio"), Field("note", "text", optional=True))
-    outputs = (Field("speech", "audio", "Enhanced"), Field("segments", "segments"))
+    inputs = (
+        Field(name="speech", kind=AudioKind),
+        Field(name="note", kind=TextKind, optional=True),
+    )
+    outputs = (
+        Field(name="speech", kind=AudioKind, label="Enhanced"),
+        Field(name="segments", kind=SegmentsKind),
+    )
 
     def __init__(self, device="cpu"):
         self.device = device
@@ -62,8 +75,8 @@ class Enhancer(InferenceAPI):
 class Segmenter(InferenceAPI):
     """Only segments come out, a kind with no UI asset."""
 
-    inputs = (Field("speech", "audio"),)
-    outputs = (Field("segments", "segments"),)
+    inputs = (Field(name="speech", kind=AudioKind),)
+    outputs = (Field(name="segments", kind=SegmentsKind),)
 
     def __init__(self, device="cpu"):
         self.device = device

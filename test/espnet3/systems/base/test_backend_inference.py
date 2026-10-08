@@ -7,13 +7,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from espnet3.api.inference import Field
+from espnet3.api.inference import AudioKind, Field, TextKind
 from espnet3.systems.base.backend_inference import BackendInference
 
 
 class Wrapped(BackendInference):
-    inputs = (Field("speech", "audio"),)
-    outputs = (Field("text", "text"),)
+    inputs = (Field(name="speech", kind=AudioKind),)
+    outputs = (Field(name="text", kind=TextKind),)
 
     def run(self, speech):
         return {"text": str(len(speech.array))}

@@ -18,9 +18,13 @@ import torch
 import espnet3.api.inference as inference_api
 from espnet3.api.inference import (
     Audio,
+    AudioKind,
     Field,
     InferenceAPI,
+    Kind,
     ModelTagError,
+    SegmentsKind,
+    TextKind,
     check_contract,
     gather,
     load,
@@ -31,8 +35,11 @@ from espnet3.api.inference import (
 class Echo(InferenceAPI):
     """A transcriber that reports what it was given."""
 
-    inputs = (Field("speech", "audio"), Field("prompt", "text", optional=True))
-    outputs = (Field("text", "text"),)
+    inputs = (
+        Field(name="speech", kind=AudioKind),
+        Field(name="prompt", kind=TextKind, optional=True),
+    )
+    outputs = (Field(name="text", kind=TextKind),)
 
     def __init__(self, rate: int = 16000) -> None:
         self.rate = rate
@@ -54,16 +61,63 @@ class Echo(InferenceAPI):
 # --- Field and Audio -------------------------------------------------------
 
 
-def test_field_rejects_unknown_kind_and_bad_name():
-    with pytest.raises(ValueError, match="kind"):
-        Field("x", "image")
+def test_field_rejects_a_string_or_non_kind_and_a_bad_name():
+    with pytest.raises(TypeError, match="Kind"):
+        Field(name="x", kind="image")
+    with pytest.raises(TypeError, match="Kind"):
+        Field(name="x", kind=object())
     with pytest.raises(ValueError, match="identifier"):
-        Field("not a name", "text")
+        Field(name="not a name", kind=TextKind)
+
+
+def test_field_rejects_positional_arguments():
+    with pytest.raises(TypeError):
+        Field("speech", AudioKind)
 
 
 def test_field_label_defaults_to_spaced_name():
-    assert Field("reference_speech", "audio").label == "Reference speech"
-    assert Field("speech", "audio", "Mic").label == "Mic"
+    assert Field(name="reference_speech", kind=AudioKind).label == "Reference speech"
+    assert Field(name="speech", kind=AudioKind, label="Mic").label == "Mic"
+
+
+def test_field_kind_is_always_a_kind_instance():
+    # A Kind subclass passed as kind= is instantiated by Field itself.
+    assert isinstance(Field(name="speech", kind=AudioKind).kind, AudioKind)
+    # Passing an instance directly works the same way.
+    assert isinstance(Field(name="speech", kind=AudioKind()).kind, AudioKind)
+
+
+def test_field_kind_class_and_instance_are_interchangeable():
+    by_class = Field(name="speech", kind=AudioKind)
+    by_instance = Field(name="speech", kind=AudioKind())
+    assert by_class == by_instance
+    assert hash(by_class) == hash(by_instance)
+
+
+def test_kind_name_defaults_from_the_class_name():
+    assert AudioKind.name == "audio"
+    assert TextKind.name == "text"
+    assert SegmentsKind.name == "segments"
+
+    class Messages(Kind):
+        def check(self, value, field, model, *, output):
+            return value
+
+    assert Messages.name == "messages"
+
+    class Explicit(Kind):
+        name = "custom"
+
+        def check(self, value, field, model, *, output):
+            return value
+
+    assert Explicit.name == "custom"
+
+
+def test_kind_equality_is_by_class_not_identity():
+    assert AudioKind() == AudioKind()
+    assert hash(AudioKind()) == hash(AudioKind())
+    assert AudioKind() != TextKind()
 
 
 def test_audio_scales_unsigned_pcm_around_its_midpoint():
@@ -139,31 +193,37 @@ def test_contract_is_checked_when_the_class_is_defined():
 
         class NotFields(InferenceAPI):
             inputs = ["speech"]
-            outputs = (Field("text", "text"),)
+            outputs = (Field(name="text", kind=TextKind),)
 
     with pytest.raises(TypeError, match="at least one field"):
 
         class Nothing(InferenceAPI):
             inputs = ()
-            outputs = (Field("text", "text"),)
+            outputs = (Field(name="text", kind=TextKind),)
 
     with pytest.raises(TypeError, match="required fields before optional"):
 
         class OptionalFirst(InferenceAPI):
-            inputs = (Field("prompt", "text", optional=True), Field("speech", "audio"))
-            outputs = (Field("text", "text"),)
+            inputs = (
+                Field(name="prompt", kind=TextKind, optional=True),
+                Field(name="speech", kind=AudioKind),
+            )
+            outputs = (Field(name="text", kind=TextKind),)
 
     with pytest.raises(TypeError, match="repeats"):
 
         class Twice(InferenceAPI):
-            inputs = (Field("speech", "audio"), Field("speech", "audio", optional=True))
-            outputs = (Field("text", "text"),)
+            inputs = (
+                Field(name="speech", kind=AudioKind),
+                Field(name="speech", kind=AudioKind, optional=True),
+            )
+            outputs = (Field(name="text", kind=TextKind),)
 
     with pytest.raises(TypeError, match="optional"):
 
         class OptionalOut(InferenceAPI):
-            inputs = (Field("speech", "audio"),)
-            outputs = (Field("text", "text", optional=True),)
+            inputs = (Field(name="speech", kind=AudioKind),)
+            outputs = (Field(name="text", kind=TextKind, optional=True),)
 
 
 def test_an_intermediate_base_that_declares_nothing_is_allowed():
@@ -176,8 +236,8 @@ def test_an_intermediate_base_that_declares_nothing_is_allowed():
 
 def test_a_text_only_model_declares_no_task_and_no_sample_rate():
     class Chat(InferenceAPI):
-        inputs = (Field("messages", "text"),)
-        outputs = (Field("messages", "text"),)
+        inputs = (Field(name="messages", kind=TextKind),)
+        outputs = (Field(name="messages", kind=TextKind),)
 
         @classmethod
         def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -236,8 +296,8 @@ def test_call_checks_what_run_returns():
 
 def test_audio_output_is_wrapped_at_the_model_rate():
     class Enhancer(InferenceAPI):
-        inputs = (Field("speech", "audio"),)
-        outputs = (Field("speech", "audio"),)
+        inputs = (Field(name="speech", kind=AudioKind),)
+        outputs = (Field(name="speech", kind=AudioKind),)
 
         @classmethod
         def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -255,8 +315,11 @@ def test_audio_output_is_wrapped_at_the_model_rate():
 
 def test_segments_output_is_checked():
     class Aligner(InferenceAPI):
-        inputs = (Field("speech", "audio"), Field("text", "text"))
-        outputs = (Field("segments", "segments"),)
+        inputs = (
+            Field(name="speech", kind=AudioKind),
+            Field(name="text", kind=TextKind),
+        )
+        outputs = (Field(name="segments", kind=SegmentsKind),)
 
         @classmethod
         def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -283,8 +346,8 @@ def test_segments_output_is_checked():
 class Counter(InferenceAPI):
     """An online model: one text piece per audio chunk, and a tail at the end."""
 
-    inputs = (Field("speech", "audio"),)
-    outputs = (Field("text", "text"),)
+    inputs = (Field(name="speech", kind=AudioKind),)
+    outputs = (Field(name="text", kind=TextKind),)
 
     @classmethod
     def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -345,8 +408,8 @@ def test_a_system_must_implement_one_of_the_hooks():
     with pytest.raises(TypeError, match="run_stream .* or run"):
 
         class Neither(InferenceAPI):
-            inputs = (Field("speech", "audio"),)
-            outputs = (Field("text", "text"),)
+            inputs = (Field(name="speech", kind=AudioKind),)
+            outputs = (Field(name="text", kind=TextKind),)
 
             @classmethod
             def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -357,9 +420,9 @@ def test_a_system_must_implement_one_of_the_hooks():
 
 def test_gather_joins_pieces_by_kind():
     fields = (
-        Field("speech", "audio"),
-        Field("text", "text"),
-        Field("segments", "segments"),
+        Field(name="speech", kind=AudioKind),
+        Field(name="text", kind=TextKind),
+        Field(name="segments", kind=SegmentsKind),
     )
     a = Audio(np.ones(4, dtype=np.float32), 8000)
     out = gather(
@@ -385,11 +448,11 @@ def test_gather_joins_pieces_by_kind():
 def test_the_field_decides_how_many_channels_the_hook_sees():
     class Mixer(InferenceAPI):
         inputs = (
-            Field("speech", "audio"),
-            Field("mixture", "audio", channels=None, optional=True),
-            Field("pair", "audio", channels=2, optional=True),
+            Field(name="speech", kind=AudioKind),
+            Field(name="mixture", kind=AudioKind, channels=None, optional=True),
+            Field(name="pair", kind=AudioKind, channels=2, optional=True),
         )
-        outputs = (Field("text", "text"),)
+        outputs = (Field(name="text", kind=TextKind),)
 
         @classmethod
         def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -415,7 +478,7 @@ def test_the_field_decides_how_many_channels_the_hook_sees():
     with pytest.raises(TypeError, match="'pair' given with 1 channel\\(s\\), needs 2"):
         model(mono, pair=mono)
     with pytest.raises(ValueError, match="channels must be None or >= 1"):
-        Field("x", "audio", channels=0)
+        Field(name="x", kind=AudioKind, channels=0)
 
 
 # --- a model that takes any rate -------------------------------------------
@@ -424,8 +487,8 @@ def test_the_field_decides_how_many_channels_the_hook_sees():
 class AnyRate(InferenceAPI):
     """An enhancer that works at whatever rate the audio comes."""
 
-    inputs = (Field("speech", "audio"),)
-    outputs = (Field("speech", "audio"),)
+    inputs = (Field(name="speech", kind=AudioKind),)
+    outputs = (Field(name="speech", kind=AudioKind),)
 
     @classmethod
     def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -456,8 +519,8 @@ def test_a_model_with_no_fixed_rate_sees_each_audio_at_its_own(tmp_path):
 # --- kinds -----------------------------------------------------------------
 
 
-def test_a_new_kind_is_one_registered_subclass(monkeypatch):
-    from espnet3.api.inference import KINDS, Kind, register_kind
+def test_a_new_kind_is_a_class_passed_directly_to_field():
+    from espnet3.api.inference import Kind
 
     class Turns(Kind):
         def check(self, value, field, model, *, output):
@@ -468,19 +531,9 @@ def test_a_new_kind_is_one_registered_subclass(monkeypatch):
         def join(self, first, second):
             return first + second
 
-    monkeypatch.delitem(KINDS, "messages", raising=False)
-    register_kind("messages", Turns())
-    with pytest.raises(ValueError, match="already registered"):
-        register_kind("messages", Turns())
-    register_kind("messages", Turns(), replace=True)
-    with pytest.raises(TypeError, match="Kind instance"):
-        register_kind("bad", object())
-    monkeypatch.delitem(KINDS, "messages")
-    register_kind("messages", Turns())
-
     class Chat(InferenceAPI):
-        inputs = (Field("messages", "messages"),)
-        outputs = (Field("messages", "messages"),)
+        inputs = (Field(name="messages", kind=Turns),)
+        outputs = (Field(name="messages", kind=Turns),)
 
         @classmethod
         def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -504,8 +557,7 @@ def test_a_new_kind_is_one_registered_subclass(monkeypatch):
         def check(self, value, field, model, *, output):
             return value
 
-    monkeypatch.setitem(KINDS, "opaque", Opaque())
-    fields = (Field("blob", "opaque"),)
+    fields = (Field(name="blob", kind=Opaque),)
     assert gather(fields, [{"blob": 1}]) == {"blob": 1}  # one piece needs no join
     with pytest.raises(NotImplementedError, match="does not say how two pieces join"):
         gather(fields, [{"blob": 1}, {"blob": 2}])

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from omegaconf import OmegaConf
 
-from espnet3.api.inference import Audio, Field, InferenceAPI
+from espnet3.api.inference import Audio, AudioKind, Field, InferenceAPI, TextKind
 from espnet3.components.metrics.base_metric import BaseMetric
 from espnet3.systems.base.inference import infer
 from espnet3.systems.base.inference_provider import InferenceProvider
@@ -22,8 +22,11 @@ RUNNER = "espnet3.systems.base.inference_runner.InferenceRunner"
 class Echo(InferenceAPI):
     """Text out of audio, with an optional prompt and an audio echo."""
 
-    inputs = (Field("speech", "audio"), Field("prompt", "text", optional=True))
-    outputs = (Field("text", "text"), Field("echo", "audio"))
+    inputs = (
+        Field(name="speech", kind=AudioKind),
+        Field(name="prompt", kind=TextKind, optional=True),
+    )
+    outputs = (Field(name="text", kind=TextKind), Field(name="echo", kind=AudioKind))
 
     @classmethod
     def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -164,8 +167,11 @@ def test_write_record_writes_multichannel_audio_channels_last(tmp_path):
     import soundfile
 
     class Stereo(Echo):
-        inputs = (Field("speech", "audio", channels=None),)
-        outputs = (Field("text", "text"), Field("echo", "audio", channels=None))
+        inputs = (Field(name="speech", kind=AudioKind, channels=None),)
+        outputs = (
+            Field(name="text", kind=TextKind),
+            Field(name="echo", kind=AudioKind, channels=None),
+        )
 
         def run(self, speech, prompt=""):
             return {"text": str(speech.channels), "echo": speech}
