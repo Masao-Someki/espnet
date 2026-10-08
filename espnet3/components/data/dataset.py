@@ -1,13 +1,19 @@
 """Dataset classes for ESPnet3."""
 
 import copy
+import logging
 from abc import ABC
 from collections.abc import Mapping
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from torch.utils.data.dataset import Dataset
 
+from espnet3.components.data.dataset_uid import DatasetUidEntry, format_uid, parse_uid
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
+
+logger = logging.getLogger(__name__)
+
+_UNRESOLVABLE = object()
 
 
 def do_nothing(*x):
@@ -40,6 +46,23 @@ class CombinedDataset:
           organizer builds a lookup table mapping every UID to its source dataset
           while preserving DataLoader-friendly integer access.
 
+    **Dataset-hash UID protocol.** ``get_uid(idx)`` is the single source of
+    truth for the utterance ID used from ``collect_stats`` (shape-file keys)
+    through batching (the UID returned alongside each sample when
+    ``use_espnet_collator`` is set, and passed to the preprocessor). A UID has
+    the form ``"<8-hex-char dataset hash>:<position>"``: the hash identifies a
+    sub-dataset by its config (via ``espnet3.components.data.dataset_uid``,
+    ignoring keys ending in ``_dir``), and ``position`` is that item's index
+    within that sub-dataset. Because the hash depends only on the entry's own
+    config, the UID is stable across reordering or adding sibling entries --
+    it never encodes where a sub-dataset sits among its siblings.
+    ``DataOrganizer`` computes ``uid_prefixes``/``uid_entries`` from each
+    entry's config and passes them to this constructor; that is the only
+    supported way to get stable UIDs. A ``CombinedDataset`` built directly
+    without ``uid_prefixes`` (``uid_prefixes=None``, the default) falls back
+    to the legacy ``str(global_idx)`` UID, which is **not** stable across
+    reordering, for backward compatibility only.
+
     Args:
         datasets (List[Any]): A list of dataset instances. Each must implement
             `__getitem__` and `__len__`.
@@ -52,6 +75,14 @@ class CombinedDataset:
         use_espnet_preprocessor (bool): If True, applies the preprocessor as
             `preprocessor(uid, sample)`. This is used for ESPnet `AbsPreprocessor`
             compatible pipelines.
+        uid_prefixes (Optional[List[str]]): One 8-hex-char dataset hash per
+            entry in `datasets`, in the same order. Normally supplied by
+            `DataOrganizer`. `None` (the default) selects the legacy
+            `str(global_idx)` UID scheme for backward compatibility.
+        uid_entries (Optional[List[DatasetUidEntry]]): The `DatasetUidEntry`
+            per sub-dataset (same order as `datasets`/`uid_prefixes`), used to
+            write the `collect_stats` UID table and to build the fingerprint.
+            `None` when `uid_prefixes` is `None`.
 
     Note:
         At initialization, the first sample from each dataset is passed through
@@ -84,6 +115,8 @@ class CombinedDataset:
         datasets: List[Any],
         transforms: List[Tuple[Callable, Callable]],
         use_espnet_preprocessor: bool = False,
+        uid_prefixes: Optional[List[str]] = None,
+        uid_entries: Optional[List[DatasetUidEntry]] = None,
     ):
         """Initialize CombinedDataset object."""
         self.datasets = datasets
@@ -107,11 +140,21 @@ class CombinedDataset:
             self.cumulative_lengths.append(total)
 
         self._string_index_mode = False
-        self._uid_to_dataset: Dict[str, Tuple[int, Any]] = {}
+        self._string_key_to_dataset: Dict[str, Tuple[int, Any]] = {}
         self._dataset_supports_int: List[bool] = []
         self._dataset_key_lists: List[Optional[List[str]]] = []
 
         self._initialize_index_mode()
+
+        self._uid_prefixes = uid_prefixes
+        self._uid_entries = uid_entries
+        self._prefix_to_dataset: Dict[str, int] = (
+            {prefix: i for i, prefix in enumerate(uid_prefixes)}
+            if uid_prefixes is not None
+            else {}
+        )
+        self._position_maps: List[Optional[Sequence[int]]] = [None] * len(datasets)
+        self._shard_index: Optional[int] = None
 
         # Check the first sample from all dataset to ensure they all have the same keys
         sample_keys = None
@@ -180,6 +223,11 @@ class CombinedDataset:
 
     def __getitem__(self, idx):
         """Return the item at the given index from the appropriate sub-dataset."""
+        if isinstance(idx, str) and self._uid_prefixes is not None:
+            parsed = parse_uid(idx)
+            if parsed is not None:
+                return self._getitem_by_uid(idx, parsed)
+
         if self._string_index_mode:
             return self._getitem_string_mode(idx)
 
@@ -191,30 +239,56 @@ class CombinedDataset:
             else:
                 idx = numerical_idx
 
-        for i, cum_len in enumerate(self.cumulative_lengths):
-            if idx < cum_len:
-                ds_idx = idx if i == 0 else idx - self.cumulative_lengths[i - 1]
-                try:
-                    sample = self.datasets[i][ds_idx]
-                except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to access dataset at index {i} or "
-                        f"item at index {ds_idx}. "
-                        f"Original error: {e}"
-                    ) from e
+        return self._getitem_int(idx)
 
-                transformed = self.transforms[i][0](sample)  # apply transform
-                if self.use_espnet_preprocessor:
-                    transformed = self.transforms[i][1](str(idx), transformed)
-                else:
-                    transformed = self.transforms[i][1](transformed)
+    def _getitem_by_uid(self, uid: str, parsed: Tuple[str, int]):
+        """Resolve a well-formed dataset-hash UID to its item."""
+        prefix, pos = parsed
+        dataset_idx = self._prefix_to_dataset.get(prefix)
+        if dataset_idx is None:
+            raise KeyError(
+                f"UID {uid!r}: dataset hash {prefix!r} is not part of this "
+                "dataset. The shape files were produced for a different "
+                "dataset configuration; re-run collect_stats."
+            )
+        if self._position_maps[dataset_idx] is not None:
+            raise RuntimeError(
+                "UID lookup on a sharded dataset is not supported; use "
+                "integer indices for shard-local access."
+            )
+        if not 0 <= pos < self.lengths[dataset_idx]:
+            raise IndexError(
+                f"UID {uid!r}: position {pos} is out of range for dataset "
+                f"{dataset_idx} (length {self.lengths[dataset_idx]})."
+            )
+        global_idx = (
+            self.cumulative_lengths[dataset_idx - 1] if dataset_idx else 0
+        ) + pos
+        return self._getitem_int(global_idx)
 
-                if self.use_espnet_collator:
-                    return str(idx), transformed
-                else:
-                    return transformed
+    def _getitem_int(self, idx: int):
+        """Return the item at global integer index ``idx``."""
+        dataset_idx, ds_idx = self._resolve_global_index(idx)
+        try:
+            sample = self.datasets[dataset_idx][ds_idx]
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to access dataset at index {dataset_idx} or "
+                f"item at index {ds_idx}. "
+                f"Original error: {e}"
+            ) from e
 
-        raise IndexError("Index out of range in CombinedDataset")
+        transformed = self.transforms[dataset_idx][0](sample)  # apply transform
+        uid = self.get_uid(idx)
+        if self.use_espnet_preprocessor:
+            transformed = self.transforms[dataset_idx][1](uid, transformed)
+        else:
+            transformed = self.transforms[dataset_idx][1](transformed)
+
+        if self.use_espnet_collator:
+            return uid, transformed
+        else:
+            return transformed
 
     def _getitem_by_utterance_id(self, uid: str):
         if self._string_index_mode:
@@ -298,11 +372,70 @@ class CombinedDataset:
 
     def _register_dataset_keys(self, dataset_idx: int, keys: List[str]):
         for key in keys:
-            if key in self._uid_to_dataset:
+            if key in self._string_key_to_dataset:
                 raise ValueError(
                     f"Duplicate utterance ID '{key}' detected across datasets."
                 )
-            self._uid_to_dataset[key] = (dataset_idx, key)
+            self._string_key_to_dataset[key] = (dataset_idx, key)
+
+    def _resolve_global_index(self, idx: int) -> Tuple[int, int]:
+        """Resolve a global index to ``(dataset_idx, index within dataset)``.
+
+        Raises:
+            IndexError: If ``idx`` is negative or out of range.
+        """
+        if idx < 0:
+            raise IndexError("Index out of range in CombinedDataset")
+        for i, cum_len in enumerate(self.cumulative_lengths):
+            if idx < cum_len:
+                ds_idx = idx if i == 0 else idx - self.cumulative_lengths[i - 1]
+                return i, ds_idx
+        raise IndexError("Index out of range in CombinedDataset")
+
+    def get_uid(self, idx: int) -> str:
+        """Return the dataset-hash UID for a global integer index.
+
+        This is the single source of truth for the UID used consistently
+        from ``collect_stats`` (shape-file keys) through batching. See the
+        class docstring's "Dataset-hash UID protocol" section.
+
+        Args:
+            idx (int): Global index into the combined dataset
+                (``0 <= idx < len(self)``).
+
+        Returns:
+            str: The UID for this index -- ``str(idx)`` when this instance
+            was built without ``uid_prefixes`` (backward compatibility);
+            otherwise ``"<hash>:<position>"``, or (only for an unshardable
+            shard whose ``shard()`` result exposes no ``indices``)
+            ``"<hash>@s<shard_idx>:<shard-local position>"``, which is not a
+            well-formed UID (``parse_uid`` returns ``None`` for it) and is
+            only a unique label for the preprocessor/collator.
+
+        Raises:
+            IndexError: If ``idx`` is negative or out of range.
+        """
+        dataset_idx, ds_idx = self._resolve_global_index(idx)
+        if self._uid_prefixes is None:
+            return str(idx)
+        position_map = self._position_maps[dataset_idx]
+        if position_map is None:
+            pos = ds_idx
+        elif position_map is _UNRESOLVABLE:
+            return f"{self._uid_prefixes[dataset_idx]}@s{self._shard_index}:{ds_idx}"
+        else:
+            pos = position_map[ds_idx]
+        return format_uid(self._uid_prefixes[dataset_idx], pos)
+
+    @property
+    def uid_entries(self) -> Optional[List[DatasetUidEntry]]:
+        """The ``DatasetUidEntry`` list this instance was built with, if any.
+
+        ``None`` when built without ``uid_prefixes`` (backward compatibility);
+        ``collect_stats`` then does not write a UID table and training does
+        not validate against one.
+        """
+        return self._uid_entries
 
     def _select_reference_key_for_dataset(self, dataset_idx: int):
         if not self._string_index_mode or self._dataset_supports_int[dataset_idx]:
@@ -315,35 +448,20 @@ class CombinedDataset:
 
     def _resolve_string_mode_index(self, idx):
         if isinstance(idx, int):
-            if idx < 0:
-                raise IndexError("Index out of range in CombinedDataset")
-            dataset_idx = 0
-            for i, cum_len in enumerate(self.cumulative_lengths):
-                if idx < cum_len:
-                    dataset_idx = i
-                    break
-            else:
-                raise IndexError("Index out of range in CombinedDataset")
-
-            ds_idx = (
-                idx
-                if dataset_idx == 0
-                else idx - self.cumulative_lengths[dataset_idx - 1]
-            )
+            dataset_idx, ds_idx = self._resolve_global_index(idx)
             if self._dataset_supports_int[dataset_idx]:
-                uid = str(idx)
                 dataset_key = ds_idx
             else:
                 keys = self._dataset_key_lists[dataset_idx]
                 if keys is None:
                     raise RuntimeError("String dataset keys are not initialized.")
                 dataset_key = keys[ds_idx]
-                uid = dataset_key
+            uid = self.get_uid(idx)
             return uid, dataset_idx, dataset_key
 
         if isinstance(idx, str):
             try:
-                dataset_idx, dataset_key = self._uid_to_dataset[idx]
+                dataset_idx, dataset_key = self._string_key_to_dataset[idx]
             except KeyError as err:
                 raise ValueError(
                     f"Utterance ID '{idx}' is not supported by the underlying datasets."
@@ -376,6 +494,17 @@ class CombinedDataset:
         All datasets must be subclasses of `espnet3.data.dataset.ShardedDataset`,
         and implement a `shard()` method.
 
+        The returned dataset carries over ``use_espnet_collator`` from ``self``
+        (it is not reset), and ``uid_prefixes``/``uid_entries`` (dataset-hash
+        UIDs never change on sharding, only their resolution does). Per
+        sub-dataset, ``get_uid`` on the shard resolves to the *original*
+        (pre-shard) position when ``shard()`` returns an object exposing
+        ``indices`` (e.g. ``torch.utils.data.Subset``, the shape recommended
+        in the Dataset Sharding guide); otherwise ``get_uid`` returns a
+        ``"<hash>@s<shard_idx>:<local>"`` label that is not a well-formed UID
+        (see ``get_uid``) since there is no way to recover the original
+        position without an ``indices``-bearing shard.
+
         Args:
             shard_idx (int): Index of the shard to retrieve.
 
@@ -390,12 +519,26 @@ class CombinedDataset:
                 "All dataset should be the subclass of "
                 "espnet3.components.data.dataset.ShardedDataset."
             )
-        sharded_datasets = [dataset.shard(shard_idx) for dataset in self.datasets]
-        return CombinedDataset(
+        sharded_datasets = []
+        position_maps: List[Optional[Sequence[int]]] = []
+        for dataset in self.datasets:
+            sharded = dataset.shard(shard_idx)
+            if hasattr(sharded, "indices"):
+                position_maps.append(sharded.indices)
+            else:
+                position_maps.append(_UNRESOLVABLE)
+            sharded_datasets.append(sharded)
+        result = CombinedDataset(
             sharded_datasets,
             self.transforms,
             self.use_espnet_preprocessor,
+            uid_prefixes=self._uid_prefixes,
+            uid_entries=self._uid_entries,
         )
+        result._position_maps = position_maps
+        result._shard_index = shard_idx
+        result.use_espnet_collator = self.use_espnet_collator
+        return result
 
     def __repr__(self) -> str:
         """Return a concise, inspectable summary of combined datasets."""

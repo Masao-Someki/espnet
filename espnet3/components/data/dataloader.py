@@ -3,12 +3,14 @@
 import copy
 import logging
 from functools import partial
+from pathlib import Path
 
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from espnet2.samplers.build_batch_sampler import build_batch_sampler
+from espnet3.components.data.dataset_uid import validate_against_uid_table
 from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.logging_utils import _dump_attrs, build_qualified_name
 
@@ -39,6 +41,9 @@ def log_dataloader(logger: logging.Logger, loader, label: str) -> None:
         max_depth=2,
         seen=set(),
     )
+
+
+logger = logging.getLogger(__name__)
 
 
 class DataLoaderBuilder:
@@ -84,7 +89,16 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def _get_world_info(self):
-        if self.num_device > 1:
+        """Return world info.
+
+        ``num_device > 1`` alone misses the multi-node, one-GPU-per-node case
+        (world_size > 1 but num_device == 1 on each node), so this also treats
+        an already-initialized ``torch.distributed`` process group as
+        distributed.
+        """
+        if self.num_device > 1 or (
+            torch.distributed.is_available() and torch.distributed.is_initialized()
+        ):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
         else:
@@ -191,10 +205,37 @@ class DataLoaderBuilder:
 
         Raises:
             ValueError: If the provided mode is neither "train" nor "valid".
+            RuntimeError: If ``iter_factory`` is configured together with
+                ``total_shards > 1`` on the dataset. Shape-file batches are
+                keyed by the unsharded dataset's index space, so after
+                ``dataset.shard()`` they would resolve to different
+                utterances (or go out of range) instead of raising -- this
+                combination is unsupported and rejected before any batch
+                sampler is built. Set ``data_src_args.total_shards: 1``, or
+                use the standard DataLoader path
+                (``dataloader.<mode>.iter_factory: null``) together with
+                ``trainer.use_distributed_sampler: false``.
         """
         mode_config = getattr(self.config.dataloader, mode, DictConfig({}))
 
         config = copy.copy(mode_config)
+
+        total_shards = getattr(self.dataset.datasets[0], "total_shards", None)
+        if (
+            config.iter_factory is not None
+            and total_shards is not None
+            and total_shards > 1
+        ):
+            raise RuntimeError(
+                "iter_factory cannot be combined with total_shards > 1: "
+                "shape-file batches are keyed by the unsharded dataset and "
+                "would resolve to different utterances after "
+                "dataset.shard(). Set data_src_args.total_shards: 1, or use "
+                "the standard DataLoader path "
+                "(dataloader.<mode>.iter_factory: null) and set "
+                "trainer.use_distributed_sampler: false."
+            )
+
         dataset = self._maybe_shard_dataset(self.dataset)
         if hasattr(config, "multiple_iterator"):
             raise RuntimeError(
@@ -253,10 +294,38 @@ class DataLoaderBuilder:
         return loader
 
     def _build_iter_factory(self, factory_config, dataset=None, mode="train"):
+        """Build an ESPnet-style iterator factory from ``iter_factory`` config.
+
+        Before building the batch sampler, validates every referenced
+        shape-file directory's ``dataset_uids.json`` (written by
+        ``collect_stats``) against ``dataset.uid_entries``, so a dataset
+        configuration change since ``collect_stats`` was last run raises a
+        clear error instead of resolving shape-file UIDs to the wrong
+        utterances. Datasets without ``uid_entries`` (directly constructed,
+        outside ``DataOrganizer``) skip this check.
+
+        Args:
+            factory_config: The resolved ``iter_factory`` config (already
+                ``OmegaConf.to_container``-ed by :meth:`build`), including a
+                ``"batches"`` key with the batch-sampler config.
+            dataset: Dataset to build batches over; defaults to
+                ``self.dataset`` when omitted.
+            mode: One of ``"train"``/``"valid"``, used for logging only.
+        """
         if dataset is None:
             dataset = self.dataset
 
-        batches = build_batch_sampler(**factory_config.pop("batches"))
+        batches_config = factory_config.pop("batches")
+        uid_entries = getattr(dataset, "uid_entries", None)
+        validated_dirs = set()
+        for shape_file in batches_config.get("shape_files") or []:
+            split_dir = Path(shape_file).resolve().parent
+            if split_dir in validated_dirs:
+                continue
+            validated_dirs.add(split_dir)
+            validate_against_uid_table(split_dir, uid_entries)
+
+        batches = build_batch_sampler(**batches_config)
 
         if self.num_device > 1:
             batches = list(batches)

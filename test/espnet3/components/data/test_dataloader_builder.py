@@ -8,7 +8,8 @@ from torch.utils.data import BatchSampler, Sampler
 from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.data.data_organizer import DataOrganizer, do_nothing
 from espnet3.components.data.dataloader import DataLoaderBuilder
-from espnet3.components.data.dataset import ShardedDataset
+from espnet3.components.data.dataset import CombinedDataset, ShardedDataset
+from espnet3.components.data.dataset_uid import write_uid_table
 from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.config_utils import load_config_with_defaults
 
@@ -211,9 +212,18 @@ def make_standard_dataloader_config(sampler=None, batch_sampler=None, collate_fn
 
 
 def make_dataset_config(dataset_target, dataset_kwargs=None):
+    """Build a DataOrganizer config matching real recipe configs.
+
+    ``_recursive_: false`` is required here (matching every shipped recipe's
+    ``dataset:`` block): without it, Hydra's default recursive instantiate
+    would eagerly instantiate each entry's nested ``dataset: {_target_: ...}``
+    into a live object before ``DataOrganizer`` (and, once landed, its
+    dataset-hash UID computation) ever sees the raw config dict.
+    """
     dataset_kwargs = dataset_kwargs or {}
     config = {
         "_target_": "espnet3.components.data.data_organizer.DataOrganizer",
+        "_recursive_": False,
         "train": [
             {
                 "name": "train_dummy",
@@ -359,6 +369,13 @@ def test_sampler_and_batch_sampler_conflict():
 
 
 def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
+    """iter_factory + a real DataOrganizer-built dataset, whose entries now
+    always get dataset-hash UIDs. The shape file and its
+    dataset_uids.json are generated per-test from the dataset's own
+    get_uid() (not the fixed legacy "0".."9" keys, which no longer match a
+    hash-UID dataset) so this test stays a real regression check under the
+    new scheme instead of hand-waving the UID format.
+    """
     config = {
         "train": [
             {
@@ -373,7 +390,19 @@ def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
         valid=config["train"],
         preprocessor=do_nothing,
     )
-    yaml_text = """
+
+    shape_dir = tmp_path / "stats" / "train"
+    shape_dir.mkdir(parents=True)
+    shape_file = shape_dir / "stats_dummy"
+    shape_file.write_text(
+        "\n".join(
+            f"{organizer.train.get_uid(i)} 16000" for i in range(len(organizer.train))
+        )
+        + "\n"
+    )
+    _write_uid_table_if_present(shape_dir, organizer.train)
+
+    yaml_text = f"""
 dataloader:
   train:
     iter_factory:
@@ -384,7 +413,7 @@ dataloader:
         int_pad_value: -1
       batches:
         shape_files:
-          - test_utils/espnet3/stats/stats_dummy
+          - {shape_file}
         type: unsorted
         batch_size: 2
         batch_bins: 4000000
@@ -411,6 +440,9 @@ dataloader:
 def test_iter_factory_with_collate_fn(tmp_path):
     # For this case the collate_fn in configuration is used.
     # The collate_fn in DataloaderBuilder.__init__ is only used in standard dataloader.
+    # Shape file / dataset_uids.json are generated per-test from the
+    # dataset's real get_uid() -- see
+    # test_iter_factory_from_default_yaml_with_organizer's docstring for why.
     config = {
         "train": [
             {
@@ -425,7 +457,19 @@ def test_iter_factory_with_collate_fn(tmp_path):
         valid=config["train"],
         preprocessor=do_nothing,
     )
-    yaml_text = """
+
+    shape_dir = tmp_path / "stats" / "train"
+    shape_dir.mkdir(parents=True)
+    shape_file = shape_dir / "stats_dummy"
+    shape_file.write_text(
+        "\n".join(
+            f"{organizer.train.get_uid(i)} 16000" for i in range(len(organizer.train))
+        )
+        + "\n"
+    )
+    _write_uid_table_if_present(shape_dir, organizer.train)
+
+    yaml_text = f"""
 dataloader:
   train:
     iter_factory:
@@ -436,7 +480,7 @@ dataloader:
         int_pad_value: -1
       batches:
         shape_files:
-          - test_utils/espnet3/stats/stats_dummy
+          - {shape_file}
         type: unsorted
         batch_size: 2
         batch_bins: 4000000
@@ -1073,6 +1117,164 @@ def test_multiple_iter_factory_in_plain_dict_config_is_rejected():
         builder.build("train")
 
 
+# --- Invariant 4: iter_factory + total_shards > 1 is an early error ---
+
+
+class StringUidDataset:
+    """Dataset addressed only by string utterance IDs (no integer indexing)."""
+
+    def __init__(self, path=None):
+        self._data = {
+            "utt_a": {"text": "hello_a"},
+            "utt_b": {"text": "hello_b"},
+            "utt_c": {"text": "hello_c"},
+        }
+
+    def keys(self):
+        return list(self._data.keys())
+
+    def __len__(self):
+        return len(self._data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+
+STRING_UID_DATASET_TARGET = (
+    "test.espnet3.components.data.test_dataloader_builder.StringUidDataset"
+)
+
+
+class IdentityCollateFn:
+    """Returns the raw (uid, sample) batch unchanged, for assertion purposes."""
+
+    def __call__(self, batch):
+        return list(batch)
+
+
+def test_iter_factory_with_total_shards_raises_early(monkeypatch):
+    """T3: iter_factory + total_shards>1 must raise before build_batch_sampler runs."""
+    import espnet3.components.data.dataloader as dl
+
+    def _fail_if_called(**kwargs):
+        raise AssertionError("build_batch_sampler must not be called")
+
+    monkeypatch.setattr(dl, "build_batch_sampler", _fail_if_called)
+
+    organizer = build_organizer(
+        DUMMY_SHARDED_DATASET_TARGET,
+        dataset_kwargs={"total_shards": 2, "dist_world_size": 1},
+    )
+    config = _make_iter_factory_config()
+    builder = build_builder(
+        organizer.train, config, collate_fn=None, num_device=1, epoch=0
+    )
+    with pytest.raises(
+        RuntimeError, match="iter_factory cannot be combined with total_shards"
+    ):
+        builder.build("train")
+
+
+def test_iter_factory_with_total_shards_one_still_works(monkeypatch):
+    """T3: total_shards=1 does not trip the early-error guard."""
+    import espnet3.components.data.dataloader as dl
+
+    monkeypatch.setattr(dl, "build_batch_sampler", lambda **kw: [[0, 1], [2, 3]])
+
+    organizer = build_organizer(
+        DUMMY_SHARDED_DATASET_TARGET,
+        dataset_kwargs={"total_shards": 1, "dist_world_size": 1},
+    )
+    config = _make_iter_factory_config()
+    builder = build_builder(
+        organizer.train, config, collate_fn=None, num_device=1, epoch=0
+    )
+    iterator = builder.build("train")
+    assert list(iterator) == [[0, 1], [2, 3]]
+
+
+def test_world_info_uses_torch_distributed_state(monkeypatch):
+    """F-G: num_device=1 but an initialized process group is still distributed."""
+    monkeypatch.setattr(torch.distributed, "is_available", lambda: True)
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "get_world_size", lambda: 2)
+    monkeypatch.setattr(torch.distributed, "get_rank", lambda: 1)
+
+    organizer = build_organizer(DUMMY_DATASET_TARGET)
+    builder = build_builder(
+        organizer.train, DictConfig({}), collate_fn=None, num_device=1, epoch=0
+    )
+    assert builder._get_world_info() == (1, 2)
+
+
+def test_world_info_defaults_to_single_process():
+    """Without num_device>1 or an initialized process group, world_size is 1."""
+    organizer = build_organizer(DUMMY_DATASET_TARGET)
+    builder = build_builder(
+        organizer.train, DictConfig({}), collate_fn=None, num_device=1, epoch=0
+    )
+    assert builder._get_world_info() == (0, 1)
+
+
+def test_iter_factory_resolves_shape_file_uids_to_same_sample(tmp_path):
+    """T2 (iter_factory side): a shape file keyed by stable utterance IDs makes
+    SequenceIterFactory batches resolve to the same sample the dataset itself
+    returns for that UID.
+
+    This exercises the string-index-mode lookup path (a Mapping-keyed
+    dataset addressed by its own string keys), which is independent of the
+    dataset-hash UID scheme -- but any DataOrganizer-built dataset now
+    always has uid_entries, so the shape file's directory still needs a
+    matching dataset_uids.json for the training-side validation to pass.
+    """
+    shape_file = tmp_path / "uid_shape"
+    shape_file.write_text("utt_a 1\nutt_b 1\nutt_c 1\n")
+
+    organizer = build_organizer(STRING_UID_DATASET_TARGET)
+    _write_uid_table_if_present(shape_file.parent, organizer.train)
+    organizer.train.use_espnet_collator = True
+    config = OmegaConf.create(
+        {
+            "dataloader": {
+                "train": {
+                    "iter_factory": {
+                        "_target_": (
+                            "espnet2.iterators.sequence_iter_factory."
+                            "SequenceIterFactory"
+                        ),
+                        "shuffle": False,
+                        "collate_fn": {
+                            "_target_": (
+                                "test.espnet3.components.data."
+                                "test_dataloader_builder.IdentityCollateFn"
+                            )
+                        },
+                        "batches": {
+                            "type": "unsorted",
+                            "shape_files": [str(shape_file)],
+                            "batch_size": 1,
+                            "batch_bins": 1000000,
+                        },
+                    }
+                }
+            }
+        }
+    )
+    builder = build_builder(
+        organizer.train, config, collate_fn=None, num_device=1, epoch=0
+    )
+    loader = builder.build("train")
+
+    seen = {}
+    for batch in loader:
+        for uid, sample in batch:
+            seen[uid] = sample
+
+    assert seen.keys() == {"utt_a", "utt_b", "utt_c"}
+    for uid, sample in seen.items():
+        assert sample["text"] == organizer.train[uid][1]["text"]
+
+
 def test_build_iter_factory_defaults_to_the_builder_dataset(monkeypatch):
     """_build_iter_factory falls back to the builder's own dataset."""
     import espnet3.components.data.dataloader as dl
@@ -1095,3 +1297,199 @@ def test_build_iter_factory_defaults_to_the_builder_dataset(monkeypatch):
     }
     loader = builder._build_iter_factory(factory_config)  # dataset=None path
     assert list(loader) == [[0], [1]]
+
+
+# --- training-side validation against collect_stats' uid table ---
+
+
+class _DummyUidTableDataset:
+    """Minimal dataset exposing only ``uid_entries``/``datasets`` for the
+    DataLoaderBuilder training-side validation tests -- decoupled from the
+    real ``CombinedDataset``."""
+
+    def __init__(self, uid_entries):
+        self.uid_entries = uid_entries
+        self.datasets = [self]
+
+
+def _write_uid_table_if_present(shape_dir, dataset):
+    """Write dataset_uids.json for ``dataset`` into ``shape_dir`` iff it has
+    uid_entries.
+
+    ``CombinedDataset.uid_entries`` is not yet present on every branch this
+    test file is developed against, so this stays a no-op (matching the
+    pre-dataset-hash-UID backward-compat behavior validate_against_uid_table
+    itself falls back to) until that support lands -- at which point it
+    starts writing a real, matching table so these tests keep passing
+    without modification.
+    """
+    uid_entries = getattr(dataset, "uid_entries", None)
+    if uid_entries is not None:
+        write_uid_table(shape_dir, uid_entries)
+
+
+def _make_shape_file_iter_factory_config(shape_file):
+    return OmegaConf.create(
+        {
+            "dataloader": {
+                "train": {
+                    "iter_factory": {
+                        "_target_": (
+                            "test.espnet3.components.data."
+                            "test_dataloader_builder.DummyIterFactory"
+                        ),
+                        "batches": {
+                            "type": "unsorted",
+                            "shape_files": [str(shape_file)],
+                            "batch_size": 1,
+                            "batch_bins": 1000000,
+                        },
+                    }
+                }
+            }
+        }
+    )
+
+
+def test_iter_factory_accepts_matching_uid_table(tmp_path, monkeypatch):
+    """(d)/(f): a current dataset config matching the on-disk table builds
+    successfully."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    entries = [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})]
+    write_uid_table(shape_dir, entries)
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: [[0, 1], [2]],
+    )
+    dataset = _DummyUidTableDataset(entries)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    iterator = builder.build("train")
+    assert list(iterator) == [[0, 1], [2]]
+
+
+def test_iter_factory_rejects_missing_uid_table(tmp_path, monkeypatch):
+    """(d): no dataset_uids.json in the shape-file directory -> RuntimeError
+    naming collect_stats, raised before build_batch_sampler runs."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry
+
+    def _fail_if_called(**kwargs):
+        raise AssertionError("build_batch_sampler must not be called")
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler", _fail_if_called
+    )
+    entries = [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(entries)
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="collect_stats"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_unknown_dataset_hash(tmp_path, monkeypatch):
+    """(d): current config has a dataset hash the table doesn't know about."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    write_uid_table(
+        shape_dir,
+        [DatasetUidEntry("deadbeef", "train_old", 3, {"data_src": "dummy/old"})],
+    )
+    current = [DatasetUidEntry("a1b2c3d4", "train_new", 3, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_new"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_stale_dataset_in_table(tmp_path, monkeypatch):
+    """(d): the table has an entry the current config no longer has."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    entries = [
+        DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/a"}),
+        DatasetUidEntry("deadbeef", "train_b", 2, {"data_src": "dummy/b"}),
+    ]
+    write_uid_table(shape_dir, entries)
+    current = [entries[0]]  # train_b no longer configured
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_b"):
+        builder.build("train")
+
+
+def test_iter_factory_rejects_changed_num_items(tmp_path, monkeypatch):
+    """(d): same dataset hash, but its item count changed since collect_stats."""
+    from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
+
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: (_ for _ in ()).throw(
+            AssertionError("build_batch_sampler must not be called")
+        ),
+    )
+    shape_dir = tmp_path / "train"
+    shape_dir.mkdir()
+    write_uid_table(
+        shape_dir,
+        [DatasetUidEntry("a1b2c3d4", "train_a", 3, {"data_src": "dummy/asr"})],
+    )
+    current = [DatasetUidEntry("a1b2c3d4", "train_a", 5, {"data_src": "dummy/asr"})]
+    dataset = _DummyUidTableDataset(current)
+    config = _make_shape_file_iter_factory_config(shape_dir / "mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+
+    with pytest.raises(RuntimeError, match="train_a"):
+        builder.build("train")
+
+
+def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
+    """A directly-constructed CombinedDataset (bypassing DataOrganizer, so
+    uid_prefixes/uid_entries stay None -- backward compatibility) skips the
+    training-side validation entirely.
+
+    Note: any dataset built *through* DataOrganizer always gets uid_entries
+    now, so this "no uid_entries" case can only arise from constructing
+    CombinedDataset directly, not from build_organizer(...).
+    """
+    monkeypatch.setattr(
+        "espnet3.components.data.dataloader.build_batch_sampler",
+        lambda **kw: [[0, 1]],
+    )
+    dataset = CombinedDataset([DummyDataset()], [(do_nothing, do_nothing)])
+    # getattr, not a direct attribute access: CombinedDataset.uid_entries is
+    # not yet present on every branch this file is developed against; it
+    # will exist and return None here once it lands.
+    assert getattr(dataset, "uid_entries", None) is None
+    config = _make_shape_file_iter_factory_config("/nonexistent/mel_shape")
+    builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
+    iterator = builder.build("train")
+    assert list(iterator) == [[0, 1]]
