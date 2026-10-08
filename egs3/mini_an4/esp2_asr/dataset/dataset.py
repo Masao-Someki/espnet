@@ -109,6 +109,10 @@ class MiniAn4Dataset(TorchDataset):
     def __len__(self) -> int:
         return len(self._entries)
 
+    def get_utt_id(self, idx: int) -> str:
+        """Return the manifest's utterance id for ``idx`` without loading audio."""
+        return self._entries[int(idx)].utt_id
+
     def __getitem__(self, idx: int) -> dict[str, Any]:
         entry = self._entries[int(idx)]
         array, _sr = sf.read(str(entry.wav_path))
