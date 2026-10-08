@@ -464,12 +464,19 @@ def test_measure_succeeds_for_wer_against_a_declared_inference_model(tmp_path):
     assert results[expected_key][test_name] == {"WER": 0.0}
 
 
+class _ItemsWithUid(list):
+    """A list of items whose id comes from the dataset, not the item dict."""
+
+    def get_uid(self, idx):
+        return self[idx]["utt_id"]
+
+
 class _DatasetTextProvider:
     """A minimal provider whose test set has only a `text` column."""
 
     @staticmethod
     def build_dataset(config):
-        return [{"utt_id": "utt1", "text": "hello world"}]
+        return _ItemsWithUid([{"utt_id": "utt1", "text": "hello world"}])
 
     @staticmethod
     def build_model(config):
@@ -521,3 +528,7 @@ def test_measure_succeeds_for_wer_with_dataset_and_scp_inputs(tmp_path):
 
     expected_key = get_class_path(WER())
     assert results[expected_key][test_name] == {"WER": 0.0}
+    # the written dataset/text.scp is keyed by the dataset's own get_uid(),
+    # not the item's position, so it lines up with the hyp .scp above.
+    written = inference_dir / test_name / "dataset" / "text.scp"
+    assert written.read_text(encoding="utf-8") == "utt1 hello world\n"

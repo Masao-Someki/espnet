@@ -67,15 +67,26 @@ class MatchAudio(Match):
     inputs = (Field("ref", "text"), Field("hyp", "audio"))
 
 
+class _Items(list):
+    """A list of inference items that also knows each item's own id.
+
+    Mirrors how a real recipe dataset's `get_uid()` (via `get_utt_id()`)
+    names an item, rather than the item carrying its own `utt_id` field.
+    """
+
+    def get_uid(self, idx: int) -> str:
+        return self[idx]["utt_id"]
+
+
 def _items(n=3):
-    return [
+    return _Items(
         {
             "utt_id": f"utt{i}",
             "speech": np.zeros(100 * (i + 1), dtype=np.float32),
             "text": f"ref{i}",
         }
         for i in range(n)
-    ]
+    )
 
 
 def test_declared_input_names_reads_the_class_without_building_it():
@@ -134,7 +145,7 @@ def test_forward_says_what_is_missing_or_wrong():
 def test_write_record_writes_audio_as_wav_and_lists_as_json(tmp_path):
     writers = InferenceRunner.open_writers(tmp_path)
     result = InferenceRunner.forward([0, 1], dataset=_items(), model=Echo())
-    InferenceRunner.write_record(writers, result, {}, idx_key="utt_id")
+    InferenceRunner.write_record(writers, result, {})
     InferenceRunner.close_writers(writers, {})
     assert (tmp_path / "text.scp").read_text() == "utt0 100\nutt1 200\n"
     assert not (tmp_path / "ref.scp").exists()
@@ -157,7 +168,7 @@ def test_write_record_writes_each_audio_at_its_own_rate(tmp_path):
         {"utt_id": "a", "echo": Audio(np.zeros(80, dtype=np.float32), 8000)},
         {"utt_id": "b", "echo": Audio(np.zeros(160, dtype=np.float32), 16000)},
     ]
-    InferenceRunner.write_record(writers, records, {}, idx_key="utt_id")
+    InferenceRunner.write_record(writers, records, {})
     InferenceRunner.close_writers(writers, {})
     rates = [
         soundfile.read(line.split(" ", 1)[1])[1]
@@ -176,7 +187,7 @@ def test_write_record_writes_multichannel_audio_channels_last(tmp_path):
         def run(self, speech, prompt=""):
             return {"text": str(speech.channels), "echo": speech}
 
-    data = [{"utt_id": "s", "speech": np.zeros((2, 100), dtype=np.float32)}]
+    data = _Items([{"utt_id": "s", "speech": np.zeros((2, 100), dtype=np.float32)}])
     writers = InferenceRunner.open_writers(tmp_path)
     InferenceRunner.write_record(
         writers, InferenceRunner.forward(0, dataset=data, model=Stereo()), {}
@@ -211,17 +222,52 @@ def test_infer_runs_end_to_end_from_the_declaration(tmp_path):
 
 
 @pytest.mark.parametrize("utt_id", ["../escape", "a/b", "", "..", "utt 1", "utt\\n1"])
-def test_write_record_refuses_an_id_that_is_a_path_or_breaks_a_line(tmp_path, utt_id):
-    writers = InferenceRunner.open_writers(tmp_path)
-    data = [{"utt_id": utt_id, "speech": np.zeros(8, dtype=np.float32)}]
-    result = InferenceRunner.forward(0, dataset=data, model=Echo())
+def test_forward_refuses_an_id_that_is_a_path_or_breaks_a_line(utt_id):
+    """id validation happens once, inside item_uid, at forward() time."""
+
+    class _BadIdDataset(list):
+        def get_uid(self, idx):
+            return utt_id
+
+    data = _BadIdDataset([{"speech": np.zeros(8, dtype=np.float32)}])
     with pytest.raises(ValueError, match="plain token"):
-        InferenceRunner.write_record(writers, result, {}, idx_key="utt_id")
-    InferenceRunner.close_writers(writers, {})
-    # nothing was written: no line, no artifact, nowhere
-    assert not (tmp_path.parent / "escape.wav").exists()
-    assert not (tmp_path / "text.scp").exists()
-    assert not (tmp_path / "echo").exists()
+        InferenceRunner.forward(0, dataset=data, model=Echo())
+
+
+def test_forward_rejects_an_output_fn_that_supplies_its_own_id():
+    """The id comes from the dataset (item_uid), not the output_fn."""
+
+    def leaking_output_fn(*, data, model_output, idx):
+        del data, model_output, idx
+        return {"utt_id": "nope", "hyp": "h"}
+
+    def model(speech):
+        del speech
+        return {"ok": True}
+
+    with pytest.raises(ValueError, match="utt_id"):
+        InferenceRunner.forward(
+            0,
+            dataset=_items(1),
+            model=model,
+            input_key="speech",
+            output_fn=leaking_output_fn,
+        )
+
+
+def test_forward_with_output_fn_takes_the_id_from_item_uid():
+    def output_fn(*, data, model_output, idx):
+        del data, idx
+        return {"hyp": model_output["ok"]}
+
+    def model(speech):
+        del speech
+        return {"ok": "h1"}
+
+    out = InferenceRunner.forward(
+        0, dataset=_items(1), model=model, input_key="speech", output_fn=output_fn
+    )
+    assert out == {"utt_id": "utt0", "hyp": "h1"}
 
 
 def test_measure_reads_the_reference_from_the_test_set(tmp_path):
@@ -349,7 +395,7 @@ def test_write_record_writes_an_empty_segments_list(tmp_path):
     """A silent utterance's `[]` is a JSON document, not an unsupported list."""
     writers = InferenceRunner.open_writers(tmp_path)
     result = InferenceRunner.forward(0, dataset=_items(1), model=Silent())
-    InferenceRunner.write_record(writers, result, {}, idx_key="utt_id")
+    InferenceRunner.write_record(writers, result, {})
     InferenceRunner.close_writers(writers, {})
     path = (tmp_path / "segments.scp").read_text().split(" ", 1)[1].strip()
     assert json.loads(Path(path).read_text()) == {"segments": []}

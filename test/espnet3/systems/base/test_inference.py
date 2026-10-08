@@ -19,8 +19,9 @@ def dummy_output_fn(*, data, model_output, idx):
 
 def streaming_output_fn(*, data, model_output, idx):
     del model_output, idx
+    # the id is not the output_fn's to give; _record takes it from the
+    # dataset (item_uid), and raises if an output_fn's result has one too.
     return {
-        "utt_id": data["utt_id"],
         "hyp": data["hyp"],
         "audio": np.asarray(data["audio"], dtype=np.float32),
     }
@@ -36,16 +37,6 @@ def custom_npy_writer(*, value, output_path: Path, scale: float = 1.0) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     np.save(target, np.asarray(value) * scale)
     return target
-
-
-class NoIdxKeyRunner:
-    """A runner that lacks the idx_key attribute, used to test validation."""
-
-    def __init__(self, provider, **_):
-        pass
-
-    def __call__(self, _indices):
-        return []
 
 
 class DummyProvider(InferenceProvider):
@@ -93,12 +84,19 @@ class CaptureProvider(InferenceProvider):
         return lambda **kwargs: None
 
 
+class _ItemsWithUid(list):
+    """A list of items whose id comes from the dataset, not the item dict."""
+
+    def get_uid(self, idx):
+        return self[idx]["utt_id"]
+
+
 class StreamingProvider(InferenceProvider):
     def __init__(self, inference_config, params):
         super().__init__(inference_config, params=params)
 
     def build_dataset(self, _config):
-        return list(_config.mock_dataset)
+        return _ItemsWithUid(_config.mock_dataset)
 
     @staticmethod
     def build_model(_config):
@@ -124,8 +122,6 @@ class ModelOutputProvider(InferenceProvider):
 
 
 class AsyncLikeRunner:
-    idx_key = "idx"
-
     def __init__(self, provider, **_kwargs):
         self.provider = provider
 
@@ -134,8 +130,6 @@ class AsyncLikeRunner:
 
 
 class LegacyListRunner:
-    idx_key = "utt_id"
-
     def __init__(self, provider, **_kwargs):
         self.provider = provider
 
@@ -160,15 +154,14 @@ def test_inference_writes_scp_outputs(tmp_path, monkeypatch):
             "dataset": {"test": [{"name": "test_a"}, {"name": "test_b"}]},
             "input_key": "speech",
             "output_fn": f"{__name__}.dummy_output_fn",
-            "idx_key": "idx",
             "mock_dataset_length": 2,
             "provider": {"_target_": f"{__name__}.DummyProvider"},
             "runner": {"_target_": f"{__name__}.DummyRunner"},
         }
     )
     results = [
-        {"idx": 0, "hyp": "h0", "ref": "r0"},
-        {"idx": 1, "hyp": "h1", "ref": "r1"},
+        {"utt_id": 0, "hyp": "h0", "ref": "r0"},
+        {"utt_id": 1, "hyp": "h1", "ref": "r1"},
     ]
     calls = {}
 
@@ -214,7 +207,6 @@ def test_inference_rejects_runner_without_shard_outputs(tmp_path, monkeypatch):
             "dataset": {"test": [{"name": "test_a"}]},
             "input_key": "speech",
             "output_fn": f"{__name__}.dummy_output_fn",
-            "idx_key": "idx",
             "mock_dataset_length": 1,
             "provider": {"_target_": f"{__name__}.DummyProvider"},
             "runner": {"_target_": f"{__name__}.AsyncLikeRunner"},
@@ -235,7 +227,6 @@ def test_inference_passes_provider_params(tmp_path, monkeypatch):
             "dataset": {"test": [{"name": "test_a"}]},
             "input_key": "speech",
             "output_fn": f"{__name__}.dummy_output_fn",
-            "idx_key": "idx",
             "mock_dataset_length": 1,
             "provider": {
                 "_target_": f"{__name__}.CaptureProvider",
@@ -244,7 +235,7 @@ def test_inference_passes_provider_params(tmp_path, monkeypatch):
             "runner": {"_target_": f"{__name__}.DummyRunner"},
         }
     )
-    results = [{"idx": 0, "hyp": "h0", "ref": "r0"}]
+    results = [{"utt_id": 0, "hyp": "h0", "ref": "r0"}]
     CaptureProvider.last_params = None
     DummyRunner.results = results
 
@@ -256,7 +247,6 @@ def test_inference_passes_provider_params(tmp_path, monkeypatch):
         "beam": 5,
         "lang": "en",
         "input_key": "speech",
-        "idx_key": "idx",
         "output_keys": None,
         "output_fn_path": f"{__name__}.dummy_output_fn",
         "output_artifacts": {},
@@ -313,7 +303,8 @@ def test_inference_without_idx_key_uses_default_utt_id(tmp_path, monkeypatch):
     assert _read_scp(tmp_path / "infer" / "test_a" / "hyp.scp") == ["utt1 h1"]
 
 
-def test_inference_with_explicit_idx_key_override(tmp_path, monkeypatch):
+def test_inference_ignores_a_configured_idx_key(tmp_path, monkeypatch):
+    """The record's id key is always `utt_id`; `idx_key` in config has no effect."""
     cfg = OmegaConf.create(
         {
             "parallel": {"env": "local"},
@@ -326,13 +317,13 @@ def test_inference_with_explicit_idx_key_override(tmp_path, monkeypatch):
             "runner": {"_target_": f"{__name__}.DummyRunner"},
         }
     )
-    DummyRunner.results = [{"sample_id": "sample-1", "hyp": "h1"}]
+    DummyRunner.results = [{"utt_id": "utt1", "hyp": "h1"}]
 
     monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
 
     inference_mod.infer(cfg)
 
-    assert _read_scp(tmp_path / "infer" / "test_a" / "hyp.scp") == ["sample-1 h1"]
+    assert _read_scp(tmp_path / "infer" / "test_a" / "hyp.scp") == ["utt1 h1"]
 
 
 def test_materialize_output_value_rejects_top_level_list(tmp_path: Path):
@@ -673,24 +664,6 @@ def test_infer_rejects_missing_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
 
     with pytest.raises(RuntimeError, match="runner must be set"):
-        inference_mod.infer(cfg)
-
-
-def test_infer_rejects_runner_without_idx_key_attr(tmp_path, monkeypatch):
-    cfg = OmegaConf.create(
-        {
-            "parallel": {"env": "local"},
-            "inference_dir": str(tmp_path / "infer"),
-            "dataset": {"test": [{"name": "test_a"}]},
-            "input_key": "speech",
-            "mock_dataset_length": 1,
-            "provider": {"_target_": f"{__name__}.DummyProvider"},
-            "runner": {"_target_": f"{__name__}.NoIdxKeyRunner"},
-        }
-    )
-    monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
-
-    with pytest.raises(TypeError, match="must provide inference runner attributes"):
         inference_mod.infer(cfg)
 
 

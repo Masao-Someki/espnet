@@ -5,6 +5,7 @@ import pytest
 
 from espnet3.components.data import dataset_uid as du
 from espnet3.components.data.dataset_uid import (
+    UID_SEPARATOR,
     UID_TABLE_FILENAME,
     UID_TABLE_FORMAT,
     DatasetUidEntry,
@@ -12,6 +13,7 @@ from espnet3.components.data.dataset_uid import (
     check_entry_hashes,
     compute_entry_hash,
     format_uid,
+    item_uid,
     load_uid_table,
     parse_uid,
     strip_dir_keys,
@@ -137,19 +139,23 @@ def test_json_default_stringifies_path_and_rejects_arbitrary_objects():
 # ===============================================================
 
 
+def test_uid_separator_is_a_hyphen():
+    assert UID_SEPARATOR == "-"
+
+
 def test_format_and_parse_uid_round_trip():
     uid = format_uid("a1b2c3d4", 123)
-    assert uid == "a1b2c3d4:123"
+    assert uid == "a1b2c3d4-123"
     assert parse_uid(uid) == ("a1b2c3d4", 123)
 
 
 @pytest.mark.parametrize(
     "uid",
     [
-        "abc:1",  # prefix too short
-        "a1b2c3d4:-1",  # negative position
-        "a1b2c3d4:1x",  # non-numeric position
-        "A1B2C3D4:1",  # uppercase hex not accepted
+        "abc-1",  # prefix too short
+        "a1b2c3d4--1",  # negative position
+        "a1b2c3d4-1x",  # non-numeric position
+        "A1B2C3D4-1",  # uppercase hex not accepted
         "a1b2c3d4",  # missing position
         "a1b2c3d4@s1:5",  # shard-local label, not a resolvable UID
         "",
@@ -157,6 +163,35 @@ def test_format_and_parse_uid_round_trip():
 )
 def test_parse_uid_rejects_malformed_strings(uid):
     assert parse_uid(uid) is None
+
+
+# ===============================================================
+# item_uid
+# ===============================================================
+
+
+def test_item_uid_uses_the_dataset_get_uid_when_present():
+    class _DatasetWithUid:
+        def get_uid(self, idx):
+            return f"a1b2c3d4-{idx}"
+
+    assert item_uid(_DatasetWithUid(), 3) == "a1b2c3d4-3"
+
+
+def test_item_uid_falls_back_to_the_plain_index_without_get_uid():
+    class _PlainDataset:
+        pass
+
+    assert item_uid(_PlainDataset(), 7) == "7"
+
+
+def test_item_uid_rejects_an_unusable_id():
+    class _BadDataset:
+        def get_uid(self, idx):
+            return "a/b"
+
+    with pytest.raises(ValueError, match="cannot head an SCP line"):
+        item_uid(_BadDataset(), 0)
 
 
 # ===============================================================

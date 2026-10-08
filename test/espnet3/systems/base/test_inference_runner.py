@@ -3,36 +3,16 @@ import pytest
 from espnet3.systems.base.inference_runner import InferenceRunner, _load_output_fn
 
 
-class DummyProvider:
-    pass
+def test_write_record_does_not_validate_the_id(tmp_path):
+    """write_record no longer validates the id.
 
-
-class DummyRunner(InferenceRunner):
-    @staticmethod
-    def forward(idx, *, dataset, model, **env):
-        return {"idx": idx, "hyp": "h", "ref": "r"}
-
-
-def test_resolve_idx_key_uses_default_utt_id():
-    runner = DummyRunner(DummyProvider())
-
-    assert runner.resolve_idx_key({"utt_id": "u1", "hyp": "h", "ref": "r"}) == "utt_id"
-
-
-def test_resolve_idx_key_uses_explicit_configured_key():
-    runner = DummyRunner(DummyProvider(), idx_key="sample_id")
-
-    assert (
-        runner.resolve_idx_key({"sample_id": "u1", "hyp": "h", "ref": "r"})
-        == "sample_id"
-    )
-
-
-def test_resolve_idx_key_rejects_missing_configured_key():
-    runner = DummyRunner(DummyProvider(), idx_key="sample_id")
-
-    with pytest.raises(ValueError, match="idx_key='sample_id'"):
-        runner.resolve_idx_key({"utt_id": "u1", "hyp": "h", "ref": "r"})
+    id validation now happens once, inside item_uid; write_record just
+    writes whatever id the record already carries.
+    """
+    writers = InferenceRunner.open_writers(tmp_path)
+    InferenceRunner.write_record(writers, {"utt_id": "a/b", "hyp": "h"}, {})
+    InferenceRunner.close_writers(writers, {})
+    assert (tmp_path / "hyp.scp").read_text() == "a/b h\n"
 
 
 def test_load_output_fn_rejects_missing_module():

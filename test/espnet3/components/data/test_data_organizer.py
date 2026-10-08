@@ -1330,7 +1330,7 @@ def test_combined_dataset_uid_lookup_rejects_unknown_hash():
         train=[_labeled_entry("only")], valid=[_labeled_entry("only")]
     )
     with pytest.raises(KeyError, match="is not part of this dataset"):
-        organizer.train["deadbeef:0"]
+        organizer.train["deadbeef-0"]
 
 
 def test_combined_dataset_uid_lookup_rejects_out_of_range_position():
@@ -1340,7 +1340,7 @@ def test_combined_dataset_uid_lookup_rejects_out_of_range_position():
     uid = organizer.train.get_uid(0)
     prefix, _ = parse_uid(uid)
     with pytest.raises(IndexError, match="out of range"):
-        organizer.train[f"{prefix}:99"]
+        organizer.train[f"{prefix}-99"]
 
 
 # -----------------------------------------------------------------------

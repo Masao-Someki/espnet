@@ -9,7 +9,7 @@ from espnet3.components.data import data_organizer as data_organizer_module
 from espnet3.components.data.data_organizer import DataOrganizer, do_nothing
 from espnet3.components.data.dataloader import DataLoaderBuilder
 from espnet3.components.data.dataset import CombinedDataset, ShardedDataset
-from espnet3.components.data.dataset_uid import write_uid_table
+from espnet3.components.data.dataset_uid import parse_uid, write_uid_table
 from espnet3.components.data.epoch_sync_iterator import EpochSyncIterator
 from espnet3.utils.config_utils import load_config_with_defaults
 
@@ -1493,3 +1493,73 @@ def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
     builder = build_builder(dataset, config, collate_fn=None, num_device=1, epoch=0)
     iterator = builder.build("train")
     assert list(iterator) == [[0, 1]]
+
+
+# ===============================================================
+# get_utt_id (tier 1 of get_uid) and _utt_id_index
+# ===============================================================
+
+
+class DummyUtteranceIdDataset:
+    """A sub-dataset whose items carry a manifest-given utterance id."""
+
+    def __init__(self, ids):
+        self._ids = list(ids)
+
+    def __len__(self):
+        return len(self._ids)
+
+    def __getitem__(self, idx):
+        return {"text": self._ids[idx]}
+
+    def get_utt_id(self, idx: int) -> str:
+        return self._ids[idx]
+
+
+def test_get_uid_prefers_a_sub_datasets_get_utt_id():
+    """A sub-dataset exposing get_utt_id wins over the hash-position UID."""
+    ds = DummyUtteranceIdDataset(["spk1_utt1", "spk1_utt2"])
+    combined = CombinedDataset(
+        [ds], [(do_nothing, do_nothing)], uid_prefixes=["a1b2c3d4"]
+    )
+
+    assert combined.get_uid(0) == "spk1_utt1"
+    assert combined.get_uid(1) == "spk1_utt2"
+    # Not a well-formed hash-position UID.
+    assert parse_uid(combined.get_uid(0)) is None
+
+
+def test_getitem_resolves_by_the_sub_datasets_utterance_id():
+    ds = DummyUtteranceIdDataset(["spk1_utt1", "spk1_utt2"])
+    combined = CombinedDataset(
+        [ds], [(do_nothing, do_nothing)], uid_prefixes=["a1b2c3d4"]
+    )
+
+    assert combined["spk1_utt2"]["text"] == combined[1]["text"]
+
+
+def test_utt_id_index_is_built_once_on_the_first_string_lookup():
+    ds = DummyUtteranceIdDataset(["spk1_utt1", "spk1_utt2"])
+    combined = CombinedDataset(
+        [ds], [(do_nothing, do_nothing)], uid_prefixes=["a1b2c3d4"]
+    )
+
+    assert not combined._utt_id_index
+    combined["spk1_utt1"]
+    assert combined._utt_id_index
+    index_after_first_lookup = combined._utt_id_index
+    combined["spk1_utt2"]
+    assert combined._utt_id_index is index_after_first_lookup
+
+
+def test_utt_id_index_rejects_duplicate_utterance_ids():
+    ds_a = DummyUtteranceIdDataset(["dup"])
+    ds_b = DummyUtteranceIdDataset(["dup"])
+    combined = CombinedDataset(
+        [ds_a, ds_b],
+        [(do_nothing, do_nothing), (do_nothing, do_nothing)],
+        uid_prefixes=["a1b2c3d4", "deadbeef"],
+    )
+
+    with pytest.raises(ValueError, match="dup"):
+        combined["dup"]

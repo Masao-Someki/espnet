@@ -202,7 +202,7 @@ class _DummyHashUidDataset:
         return self.n
 
     def get_uid(self, idx: int) -> str:
-        return f"{self.uid_prefix}:{idx}"
+        return f"{self.uid_prefix}-{idx}"
 
     def __getitem__(self, idx):
         T = self.lengths[idx]
@@ -646,7 +646,7 @@ def test_resolve_uid_and_sample_uses_get_uid_for_plain_sample():
     uid, sample = _resolve_uid_and_sample(dataset, 1)
     expected = dataset[1]
 
-    assert uid == "cafe1234:1"
+    assert uid == "cafe1234-1"
     assert sample["length"] == expected["length"]
     assert torch.equal(sample["x"], expected["x"])
 
@@ -715,7 +715,7 @@ def test_collect_stats_batch_all_collator_preprocessor_combinations(
 
 def test_collect_stats_batch_uid_matches_dataset_get_uid():
     """T2 (collect_stats side): shape_info keys equal dataset.get_uid(i) and
-    follow the dataset-hash UID format '<8-hex-prefix>:<position>'."""
+    follow the dataset-hash UID format '<8-hex-prefix>-<position>'."""
     dataset = _DummyHashUidDataset(n=4, base_len=2, dim=3, uid_prefix="a1b2c3d4")
     model = DummyModel(scale=1.0)
     collate = DummyCollate()
@@ -731,7 +731,7 @@ def test_collect_stats_batch_uid_matches_dataset_get_uid():
 
     assert set(shape_info["mel"].keys()) == {dataset.get_uid(i) for i in idxs}
     for uid in shape_info["mel"]:
-        assert re.fullmatch(r"[0-9a-f]{8}:[0-9]+", uid), uid
+        assert re.fullmatch(r"[0-9a-f]{8}-[0-9]+", uid), uid
 
 
 def test_collect_stats_batch_rejects_uid_mismatch():
@@ -755,7 +755,7 @@ def test_collect_stats_batch_rejects_uid_mismatch():
 @pytest.mark.execution_timeout(30)
 def test_collect_stats_writes_hash_uids_and_uid_table(tmp_path: Path):
     """T2/(f) (collect_stats side): shape file keys follow the dataset-hash
-    UID format '<8-hex-prefix>:<position>' and merge() writes
+    UID format '<8-hex-prefix>-<position>' and merge() writes
     dataset_uids.json into the same split directory, sourced from
     ``dataset.uid_entries`` -- without ever hashing a per-utterance list.
     """
@@ -787,7 +787,7 @@ def test_collect_stats_writes_hash_uids_and_uid_table(tmp_path: Path):
     assert written_uids == {dataset.get_uid(i) for i in range(len(dataset))}
     assert len(lines) == len(dataset)
     for uid in written_uids:
-        assert re.fullmatch(r"[0-9a-f]{8}:[0-9]+", uid), uid
+        assert re.fullmatch(r"[0-9a-f]{8}-[0-9]+", uid), uid
 
     uid_table_path = mode_dir / "dataset_uids.json"
     assert uid_table_path.is_file()
