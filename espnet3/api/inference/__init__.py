@@ -26,7 +26,7 @@ the stream of one chunk, and a batch is several one-shot calls that a
 model may choose to run together.
 
 What a field can hold is a :class:`Kind` registered in :data:`KINDS`
-(``espnet3.api.inference.kinds``); ``audio``, ``text`` and ``segments`` are
+(``espnet3.components.contract.kinds``); ``audio``, ``text`` and ``segments`` are
 built in, and a new modality is one subclass passed to
 :func:`register_kind` - from a system, or from a recipe's own ``src/``.
 
@@ -93,16 +93,6 @@ resume and writers. The contract and that pair divide the work like this:
 from __future__ import annotations
 
 from espnet3.api.inference.base import InferenceAPI, check_contract, gather
-from espnet3.api.inference.field import Field
-from espnet3.api.inference.kinds import (
-    KINDS,
-    Audio,
-    AudioKind,
-    Kind,
-    SegmentsKind,
-    TextKind,
-    register_kind,
-)
 from espnet3.api.inference.loading import (
     SYSTEM_ALIASES,
     ModelTagError,
@@ -113,6 +103,16 @@ from espnet3.api.inference.loading import (
     locate_pack,
     read_bundle,
     read_meta,
+)
+from espnet3.components.contract.field import Field
+from espnet3.components.contract.kinds import (
+    KINDS,
+    Audio,
+    AudioKind,
+    Kind,
+    SegmentsKind,
+    TextKind,
+    register_kind,
 )
 
 __all__ = [
