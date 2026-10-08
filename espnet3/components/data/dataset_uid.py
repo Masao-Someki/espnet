@@ -1,7 +1,7 @@
 """Dataset-hash UID generation, on-disk table, and cross-run validation.
 
 ESPnet3's stable identifier for a dataset item is ``"<8-hex-char dataset
-hash>:<integer position within that dataset>"`` (see ``format_uid``). The
+hash>-<integer position within that dataset>"`` (see ``format_uid``). The
 hash identifies *which dataset configuration* produced the item, not the
 item itself, so generating and resolving UIDs never requires a structure
 sized to the number of items in a dataset -- only one entry per dataset.
@@ -38,10 +38,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 UID_HASH_LENGTH = 8
+UID_SEPARATOR = "-"
 EXCLUDED_KEY_SUFFIX = "_dir"
 UID_TABLE_FILENAME = "dataset_uids.json"
 UID_TABLE_FORMAT = 1
-_UID_PATTERN = re.compile(r"^([0-9a-f]{8}):([0-9]+)$")
+_UID_PATTERN = re.compile(r"^([0-9a-f]{8})" + re.escape(UID_SEPARATOR) + r"([0-9]+)$")
 _MAX_DIFF_ITEMS = 5
 
 
@@ -140,8 +141,13 @@ def compute_entry_hash(entry: Mapping[str, Any]) -> str:
 
 
 def format_uid(prefix: str, position: int) -> str:
-    """Return the UID string for a dataset hash prefix and item position."""
-    return f"{prefix}:{position}"
+    """Return the UID string for a dataset hash prefix and item position.
+
+    Examples:
+        >>> format_uid("a1b2c3d4", 123)
+        'a1b2c3d4-123'
+    """
+    return f"{prefix}{UID_SEPARATOR}{position}"
 
 
 def parse_uid(uid: str) -> Optional[Tuple[str, int]]:
@@ -152,9 +158,15 @@ def parse_uid(uid: str) -> Optional[Tuple[str, int]]:
 
     Returns:
         Optional[Tuple[str, int]]: ``(prefix, position)`` if ``uid`` matches
-        ``"<8 lowercase hex chars>:<non-negative integer>"``, else ``None``
+        ``"<8 lowercase hex chars>-<non-negative integer>"``, else ``None``
         (e.g. for a shard-local label such as ``"a1b2c3d4@s1:5"``, a plain
         integer-index string, or an unrelated string-mode key).
+
+    Examples:
+        >>> parse_uid("a1b2c3d4-123")
+        ('a1b2c3d4', 123)
+        >>> parse_uid("not-a-uid") is None
+        True
     """
     match = _UID_PATTERN.fullmatch(uid)
     if match is None:

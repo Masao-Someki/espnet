@@ -50,7 +50,7 @@ class CombinedDataset:
     truth for the utterance ID used from ``collect_stats`` (shape-file keys)
     through batching (the UID returned alongside each sample when
     ``use_espnet_collator`` is set, and passed to the preprocessor). A UID has
-    the form ``"<8-hex-char dataset hash>:<position>"``: the hash identifies a
+    the form ``"<8-hex-char dataset hash>-<position>"``: the hash identifies a
     sub-dataset by its config (via ``espnet3.components.data.dataset_uid``,
     ignoring keys ending in ``_dir``), and ``position`` is that item's index
     within that sub-dataset. Because the hash depends only on the entry's own
@@ -406,7 +406,7 @@ class CombinedDataset:
         Returns:
             str: The UID for this index -- ``str(idx)`` when this instance
             was built without ``uid_prefixes`` (backward compatibility);
-            otherwise ``"<hash>:<position>"``, or (only for an unshardable
+            otherwise ``"<hash>-<position>"``, or (only for an unshardable
             shard whose ``shard()`` result exposes no ``indices``)
             ``"<hash>@s<shard_idx>:<shard-local position>"``, which is not a
             well-formed UID (``parse_uid`` returns ``None`` for it) and is
