@@ -40,9 +40,10 @@ stage machinery and stops at this package, which that machinery adapts
 to, never the reverse.)
 
 The package is laid out by what a reader looks for: :mod:`.base` holds
-:class:`InferenceAPI`, :mod:`.field` the :class:`Field` declaration,
-:mod:`.kinds` the kinds, and :mod:`.loading` :func:`load`. Everything is
-importable from here.
+:class:`InferenceAPI`, :mod:`espnet3.components.contract.field` the
+:class:`Field` declaration, :mod:`espnet3.components.contract.kinds` the
+kinds, and :mod:`.loading` :func:`load`. Everything is importable from
+here.
 
 A system says nothing about *what task* it performs; it says what goes in
 and what comes out. A front end that offers ``transcribe`` looks for a
