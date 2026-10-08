@@ -1,7 +1,5 @@
 """Tests for espnet3.components.contract.stages."""
 
-from pathlib import Path
-
 import pytest
 from omegaconf import OmegaConf
 
@@ -11,7 +9,7 @@ from espnet3.components.contract.stages import (
     check_requested_stages,
     check_stage_contract,
     roles,
-    stage_log_dir,
+    stage_log_dir_of,
     stage_names,
     stage_spec,
 )
@@ -200,6 +198,14 @@ def test_check_requested_stages_accepts_satisfied_request():
     )
 
 
+def test_check_requested_stages_allows_a_missing_config_when_exp_dir_is_given():
+    # The stage's config may come from its baked file under exp_dir; a
+    # missing CLI config is not an error in that case.
+    check_requested_stages(
+        _ExampleSystem, ["train"], {"training": None}, exp_dir="./exp/my_run"
+    )
+
+
 # ---------------------------------------------------------------------------
 # stage_names / stage_spec / stage_log_dir
 # ---------------------------------------------------------------------------
@@ -218,69 +224,55 @@ def test_stage_spec_raises_for_unknown_name():
         stage_spec(_ExampleSystem, "decode")
 
 
-def test_stage_log_dir_reads_the_configured_path(tmp_path):
-    class WithConfig:
-        stages = (StageSpec(name="train", config="training", log_dir="exp_dir"),)
-        training_config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
-        _default_log_dir = tmp_path / "logs"
+def test_stage_log_dir_of_reads_the_configured_path(tmp_path):
+    spec = StageSpec(name="train", config="training", log_dir="exp_dir")
+    config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
 
-        def train(self):
-            pass
-
-    assert stage_log_dir(WithConfig(), "train") == tmp_path / "exp"
+    assert stage_log_dir_of(config, spec) == tmp_path / "exp"
 
 
-def test_stage_log_dir_falls_back_when_config_is_none():
-    class NoConfig:
-        stages = (StageSpec(name="train", config="training", log_dir="exp_dir"),)
-        training_config = None
-        _default_log_dir = Path("logs")
+def test_stage_log_dir_of_is_none_when_config_is_none():
+    spec = StageSpec(name="train", config="training", log_dir="exp_dir")
 
-        def train(self):
-            pass
-
-    assert stage_log_dir(NoConfig(), "train") == Path("logs")
+    assert stage_log_dir_of(None, spec) is None
 
 
-def test_stage_log_dir_falls_back_when_log_dir_is_none():
-    class NoLogDir:
-        stages = (StageSpec(name="pack_model", config="publication"),)
-        publication_config = OmegaConf.create({"out_dir": "somewhere"})
-        _default_log_dir = Path("logs")
+def test_stage_log_dir_of_is_none_when_spec_has_no_log_dir():
+    spec = StageSpec(name="pack_model", config="publication")
+    config = OmegaConf.create({"out_dir": "somewhere"})
 
-        def pack_model(self):
-            pass
-
-    assert stage_log_dir(NoLogDir(), "pack_model") == Path("logs")
+    assert stage_log_dir_of(config, spec) is None
 
 
-# ---------------------------------------------------------------------------
-# roles: config roles derived from a system's own stages
-# ---------------------------------------------------------------------------
+def test_stage_log_dir_of_is_none_when_the_key_is_absent():
+    spec = StageSpec(name="train", config="training", log_dir="exp_dir")
+    config = OmegaConf.create({"other": "value"})
+
+    assert stage_log_dir_of(config, spec) is None
 
 
-def test_roles_preserves_first_seen_stage_order():
+def test_roles_derives_from_declared_stages_without_duplicates():
     assert roles(_ExampleSystem) == ("training", "publication")
 
 
-def test_roles_drops_duplicates_keeping_first_occurrence():
-    class RepeatingRoles:
+def test_roles_preserves_stage_order_of_first_appearance():
+    class System:
         stages = (
             StageSpec(name="train", config="training"),
-            StageSpec(name="collect_stats", config="training"),
             StageSpec(name="infer", config="inference"),
+            StageSpec(name="measure", config="inference"),
         )
 
         def train(self):
             pass
 
-        def collect_stats(self):
-            pass
-
         def infer(self):
             pass
 
-    assert roles(RepeatingRoles) == ("training", "inference")
+        def measure(self):
+            pass
+
+    assert roles(System) == ("training", "inference")
 
 
 def test_roles_is_empty_for_a_system_with_no_stages_declared():

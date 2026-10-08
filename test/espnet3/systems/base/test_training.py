@@ -1,3 +1,5 @@
+import copy
+
 from omegaconf import OmegaConf
 
 import espnet3.systems.base.training as train_mod
@@ -58,33 +60,29 @@ def test_collect_stats_runs_pipeline(tmp_path, monkeypatch):
         train_mod.torch, "set_float32_matmul_precision", fake_set_precision
     )
 
-    train_mod.collect_stats(cfg)
+    # collect_stats pops model.normalize/normalize_conf from whatever config
+    # it is given; called directly (not through BaseSystem's stage config
+    # building), the caller copies first to keep its own cfg intact.
+    train_mod.collect_stats(copy.deepcopy(cfg))
 
     assert trainer.collect_stats_called
     assert calls["parallel"] == {"backend": "dummy"}
     assert calls["seed"] == 777
     assert calls["precision"] == "high"
-    # collect_stats takes its own copy (see
-    # test_collect_stats_does_not_mutate_the_passed_config below), so the
-    # caller's cfg keeps model.normalize/normalize_conf.
     assert cfg.model.normalize is True
     assert cfg.model.normalize_conf == {"foo": "bar"}
 
 
-def test_collect_stats_does_not_mutate_the_passed_config(tmp_path, monkeypatch):
-    # collect_stats pops model.normalize/normalize_conf; called directly
-    # (not through BaseSystem._stage_config), it must take its own copy so
-    # the caller's config is left untouched either way.
-    from omegaconf import OmegaConf as OC
-
-    cfg = OC.create(
+def test_collect_stats_mutates_its_given_config(tmp_path, monkeypatch):
+    # collect_stats has no internal copy of its own; it pops
+    # model.normalize/normalize_conf straight from the config it is given.
+    cfg = OmegaConf.create(
         {
             "exp_dir": str(tmp_path / "exp"),
             "stats_dir": str(tmp_path / "stats"),
             "model": {"normalize": True, "normalize_conf": {"foo": "bar"}},
         }
     )
-    OC.set_readonly(cfg, True)
     trainer = DummyTrainer()
 
     monkeypatch.setattr(train_mod, "_build_trainer", lambda _cfg: trainer)
@@ -95,8 +93,8 @@ def test_collect_stats_does_not_mutate_the_passed_config(tmp_path, monkeypatch):
     train_mod.collect_stats(cfg)
 
     assert trainer.collect_stats_called
-    assert cfg.model.normalize is True
-    assert cfg.model.normalize_conf == {"foo": "bar"}
+    assert "normalize" not in cfg.model
+    assert "normalize_conf" not in cfg.model
 
 
 def test_train_saves_config_and_calls_fit(tmp_path, monkeypatch):

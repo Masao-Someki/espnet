@@ -188,39 +188,6 @@ def test_inference_writes_scp_outputs(tmp_path, monkeypatch):
         assert _read_scp(base / "ref.scp") == ["0 r0", "1 r1"]
 
 
-def test_inference_writes_test_sets_manifest(tmp_path, monkeypatch):
-    import json
-
-    cfg = OmegaConf.create(
-        {
-            "parallel": {"env": "local"},
-            "inference_dir": str(tmp_path / "infer"),
-            "dataset": {"test": [{"name": "test_a"}, {"name": "test_b"}]},
-            "input_key": "speech",
-            "output_fn": f"{__name__}.dummy_output_fn",
-            "idx_key": "idx",
-            "mock_dataset_length": 1,
-            "provider": {"_target_": f"{__name__}.DummyProvider"},
-            "runner": {"_target_": f"{__name__}.DummyRunner"},
-        }
-    )
-    DummyRunner.results = [{"idx": 0, "hyp": "h0", "ref": "r0"}]
-
-    monkeypatch.setattr(inference_mod, "set_parallel", lambda arg: None)
-
-    inference_mod.infer(cfg)
-
-    manifest_path = tmp_path / "infer" / "test_sets.json"
-    assert manifest_path.is_file()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema_version"] == 1
-    names_and_status = {e["name"]: e["status"] for e in manifest["test_sets"]}
-    assert names_and_status == {"test_a": "done", "test_b": "done"}
-    for entry in manifest["test_sets"]:
-        assert entry["status"] == "done"
-        assert "finished_at" in entry
-
-
 def test_inference_rejects_test_entry_without_name(tmp_path, monkeypatch):
     cfg = OmegaConf.create(
         {

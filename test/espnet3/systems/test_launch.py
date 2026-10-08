@@ -1,8 +1,6 @@
 """Tests for espnet3.systems.launch: build_parser, launch, default_conf_package."""
 
 import logging
-from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from omegaconf import OmegaConf
@@ -25,9 +23,11 @@ class _RecordingSystem(BaseSystem):
     )
     instances: list = []
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, configs, exp_dir=None, stages_to_run=None):
+        self.configs = configs
+        self.exp_dir = exp_dir
+        self.stages_to_run = stages_to_run
         self.calls = []
-        self._default_log_dir = None
         type(self).instances.append(self)
 
     def train(self):
@@ -39,12 +39,12 @@ class _RecordingSystem(BaseSystem):
 
 @pytest.fixture
 def stub_config_loading(monkeypatch):
-    """Replace config loading and experiment-context wiring with no-ops.
+    """Replace config loading with a no-op; record what role it was for.
 
     ``launch()``'s own orchestration (stage resolution, contract checks,
     system instantiation, delegating to ``run_stages``) is what these tests
-    exercise; loading real packaged config files and validating experiment
-    context are independently tested elsewhere.
+    exercise; loading real packaged config files is independently tested
+    elsewhere.
     """
     import espnet3.systems.launch as launch_module
 
@@ -54,15 +54,8 @@ def stub_config_loading(monkeypatch):
         config_path, config_name, default_package=None, **kwargs
     ):
         captured.setdefault("default_package", default_package)
+        captured.setdefault("loaded_for", []).append(config_name)
         return OmegaConf.create({})
-
-    def fake_build_experiment_context(**kwargs):
-        captured["build_experiment_context_kwargs"] = kwargs
-        return SimpleNamespace(exp_dir=kwargs.get("exp_dir") or "./exp/stub")
-
-    def fake_save_experiment_context(exp_dir, context, **kwargs):
-        captured["save_experiment_context_args"] = (exp_dir, context, kwargs)
-        return Path(exp_dir) / "config" / "context.yaml"
 
     monkeypatch.setattr(
         launch_module, "load_and_merge_config", fake_load_and_merge_config
@@ -70,20 +63,7 @@ def stub_config_loading(monkeypatch):
     monkeypatch.setattr(
         launch_module, "configure_logging", lambda *a, **k: logging.getLogger("test")
     )
-    # Note: apply_training_experiment_context is called from inside
-    # build_experiment_context (espnet3.utils.experiment_context), not
-    # imported into launch_module directly - stubbing
-    # build_experiment_context below already covers it.
-    monkeypatch.setattr(
-        launch_module, "validate_experiment_context", lambda *a, **k: None
-    )
-    monkeypatch.setattr(launch_module, "resolve_loaded_configs", lambda *a, **k: None)
-    monkeypatch.setattr(
-        launch_module, "build_experiment_context", fake_build_experiment_context
-    )
-    monkeypatch.setattr(
-        launch_module, "save_experiment_context", fake_save_experiment_context
-    )
+    monkeypatch.setattr(launch_module, "run_stages", lambda *a, **k: None)
     return captured
 
 
@@ -114,15 +94,15 @@ def test_build_parser_rejects_unknown_stage_name():
         parser.parse_args(["--stages", "decode"])
 
 
-def test_build_parser_has_exp_dir_and_overwrite_context_args():
+def test_build_parser_has_exp_dir_and_dry_run_args():
     parser = build_parser(_RecordingSystem)
     args = parser.parse_args(["--stages", "train", "--training_config", "a.yaml"])
 
     assert args.exp_dir is None
-    assert args.overwrite_context is False
+    assert args.dry_run is False
 
 
-def test_build_parser_accepts_exp_dir_and_overwrite_context():
+def test_build_parser_accepts_exp_dir_and_dry_run():
     parser = build_parser(_RecordingSystem)
     args = parser.parse_args(
         [
@@ -132,17 +112,17 @@ def test_build_parser_accepts_exp_dir_and_overwrite_context():
             "a.yaml",
             "--exp_dir",
             "./exp/my_run",
-            "--overwrite_context",
+            "--dry_run",
         ]
     )
 
     assert args.exp_dir == "./exp/my_run"
-    assert args.overwrite_context is True
+    assert args.dry_run is True
 
 
-def test_launch_passes_exp_dir_and_overwrite_context_through(
-    stub_config_loading, tmp_path
-):
+def test_launch_passes_configs_and_exp_dir(stub_config_loading, tmp_path):
+    _RecordingSystem.instances.clear()
+
     launch(
         _RecordingSystem,
         argv=[
@@ -152,38 +132,54 @@ def test_launch_passes_exp_dir_and_overwrite_context_through(
             str(tmp_path / "training.yaml"),
             "--exp_dir",
             str(tmp_path / "exp" / "my_run"),
-            "--overwrite_context",
         ],
     )
 
-    build_kwargs = stub_config_loading["build_experiment_context_kwargs"]
-    assert build_kwargs["exp_dir"] == str(tmp_path / "exp" / "my_run")
-    _, _, save_kwargs = stub_config_loading["save_experiment_context_args"]
-    assert save_kwargs["overwrite_context"] is True
+    system = _RecordingSystem.instances[-1]
+    assert system.exp_dir == str(tmp_path / "exp" / "my_run")
+    assert "training" in system.configs
+    assert system.configs["training"] is not None
 
 
-def test_launch_builds_roles_from_requested_stages(stub_config_loading, tmp_path):
+def test_launch_passes_none_for_a_role_with_no_cli_config(
+    stub_config_loading, tmp_path
+):
+    _RecordingSystem.instances.clear()
+
     launch(
         _RecordingSystem,
         argv=[
             "--stages",
             "train",
-            "infer",
             "--training_config",
             str(tmp_path / "training.yaml"),
-            "--inference_config",
-            str(tmp_path / "inference.yaml"),
+            "--exp_dir",
+            str(tmp_path / "exp" / "my_run"),
         ],
     )
 
-    build_kwargs = stub_config_loading["build_experiment_context_kwargs"]
-    # _RecordingSystem declares train -> training, infer -> inference.
-    assert build_kwargs["roles"] == ("training", "inference")
+    system = _RecordingSystem.instances[-1]
+    assert system.configs.get("inference") is None
 
 
-def test_launch_requires_config_for_requested_stage(stub_config_loading):
+def test_launch_requires_config_or_exp_dir_for_requested_stage(stub_config_loading):
     with pytest.raises(StageContractError, match="train runs on the training config"):
         launch(_RecordingSystem, argv=["--stages", "train"])
+
+
+def test_launch_allows_a_missing_config_when_exp_dir_is_given(
+    stub_config_loading, tmp_path
+):
+    # The stage's config may come from its baked file under --exp_dir;
+    # check_requested_stages must not demand a CLI config in that case.
+    _RecordingSystem.instances.clear()
+
+    launch(
+        _RecordingSystem,
+        argv=["--stages", "train", "--exp_dir", str(tmp_path / "exp" / "my_run")],
+    )
+
+    assert _RecordingSystem.instances[-1].stages_to_run == ["train"]
 
 
 def test_launch_dry_run_does_not_run_stages(stub_config_loading, tmp_path):

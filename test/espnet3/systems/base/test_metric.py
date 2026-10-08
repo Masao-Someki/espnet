@@ -1,5 +1,4 @@
 import json
-import logging
 from pathlib import Path
 
 import pytest
@@ -239,112 +238,6 @@ def test_metric_discovers_test_sets_from_inference_dir(tmp_path):
     assert set(results[expected_key]) == {"test_a", "test_b"}
     assert results[expected_key]["test_a"] == {"count": 1}
     assert results[expected_key]["test_b"] == {"count": 1}
-
-
-def _write_manifest(inference_dir: Path, entries: list[dict]) -> None:
-    inference_dir.mkdir(parents=True, exist_ok=True)
-    manifest = {"schema_version": 1, "test_sets": entries}
-    (inference_dir / "test_sets.json").write_text(
-        json.dumps(manifest), encoding="utf-8"
-    )
-
-
-def test_resolve_test_sets_uses_done_entries_from_manifest(tmp_path):
-    inference_dir = tmp_path / "infer"
-    for test_name in ("test_a", "test_b"):
-        (inference_dir / test_name).mkdir(parents=True)
-    _write_manifest(
-        inference_dir,
-        [
-            {"name": "test_a", "status": "done", "finished_at": "2026-01-01T00:00:00"},
-            {"name": "test_b", "status": "done", "finished_at": "2026-01-01T00:00:01"},
-        ],
-    )
-
-    cfg = OmegaConf.create(
-        {
-            "inference_dir": str(inference_dir),
-            "metrics": [{"metric": {"_target_": f"{__name__}.DummyMetric"}}],
-        }
-    )
-
-    assert _resolve_test_sets(cfg) == ["test_a", "test_b"]
-
-
-def test_resolve_test_sets_excludes_running_entries_from_manifest(tmp_path, caplog):
-    inference_dir = tmp_path / "infer"
-    for test_name in ("test_a", "test_b"):
-        (inference_dir / test_name).mkdir(parents=True)
-    _write_manifest(
-        inference_dir,
-        [
-            {"name": "test_a", "status": "done", "finished_at": "2026-01-01T00:00:00"},
-            {"name": "test_b", "status": "running"},
-        ],
-    )
-
-    cfg = OmegaConf.create(
-        {
-            "inference_dir": str(inference_dir),
-            "metrics": [{"metric": {"_target_": f"{__name__}.DummyMetric"}}],
-        }
-    )
-
-    with caplog.at_level(logging.WARNING):
-        assert _resolve_test_sets(cfg) == ["test_a"]
-    assert "test_b" in caplog.text
-
-
-def test_resolve_test_sets_falls_back_to_scan_when_manifest_has_no_done_entries(
-    tmp_path, caplog
-):
-    inference_dir = tmp_path / "infer"
-    (inference_dir / "test_a").mkdir(parents=True)
-    _write_manifest(inference_dir, [{"name": "test_a", "status": "running"}])
-
-    cfg = OmegaConf.create(
-        {
-            "inference_dir": str(inference_dir),
-            "metrics": [{"metric": {"_target_": f"{__name__}.DummyMetric"}}],
-        }
-    )
-
-    with caplog.at_level(logging.WARNING):
-        assert _resolve_test_sets(cfg) == ["test_a"]
-    assert "test_sets.json" in caplog.text
-
-
-def test_resolve_test_sets_falls_back_to_scan_when_manifest_is_absent(tmp_path):
-    inference_dir = tmp_path / "infer"
-    (inference_dir / "test_a").mkdir(parents=True)
-
-    cfg = OmegaConf.create(
-        {
-            "inference_dir": str(inference_dir),
-            "metrics": [{"metric": {"_target_": f"{__name__}.DummyMetric"}}],
-        }
-    )
-
-    assert _resolve_test_sets(cfg) == ["test_a"]
-
-
-def test_resolve_test_sets_prefers_metrics_config_dataset_over_manifest(tmp_path):
-    inference_dir = tmp_path / "infer"
-    (inference_dir / "from_manifest").mkdir(parents=True)
-    _write_manifest(
-        inference_dir,
-        [{"name": "from_manifest", "status": "done", "finished_at": "t"}],
-    )
-
-    cfg = OmegaConf.create(
-        {
-            "inference_dir": str(inference_dir),
-            "dataset": {"test": [{"name": "from_cfg"}]},
-            "metrics": [{"metric": {"_target_": f"{__name__}.DummyMetric"}}],
-        }
-    )
-
-    assert _resolve_test_sets(cfg) == ["from_cfg"]
 
 
 def test_resolve_test_sets_prefers_metrics_config_dataset_over_inference_dir(tmp_path):

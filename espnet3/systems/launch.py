@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -11,16 +10,10 @@ from espnet3.components.contract.stages import (
     check_requested_stages,
     roles,
     stage_names,
-    stage_spec,
 )
 from espnet3.utils.config_utils import load_and_merge_config
-from espnet3.utils.experiment_context import (
-    build_experiment_context,
-    save_experiment_context,
-)
 from espnet3.utils.logging_utils import configure_logging
-from espnet3.utils.run_utils import resolve_loaded_configs, validate_experiment_context
-from espnet3.utils.stages_utils import _get_process_rank, resolve_stages, run_stages
+from espnet3.utils.stages_utils import resolve_stages, run_stages
 
 
 def build_parser(system_cls: type) -> argparse.ArgumentParser:
@@ -33,8 +26,8 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
     Returns:
         A parser with ``--stages``, one ``--<role>_config`` per
         :func:`~espnet3.components.contract.stages.roles` of
-        ``system_cls``, ``--exp_dir``, ``--overwrite_context``,
-        ``--dry_run``, and ``--write_requirements``.
+        ``system_cls``, ``--exp_dir``, ``--dry_run``, and
+        ``--write_requirements``.
 
     Examples:
         >>> from espnet3.systems.esp2_asr.system import ASRSystem
@@ -63,12 +56,9 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
         "--exp_dir",
         default=None,
         type=str,
-        help="Experiment directory for a standalone run with no training_config.",
-    )
-    parser.add_argument(
-        "--overwrite_context",
-        action="store_true",
-        help="Allow this run's identity to replace a saved context.yaml.",
+        help="Experiment directory to bake stage configs under and read "
+        "earlier baked configs from. Required for a standalone run whose "
+        "own config has no exp_dir of its own.",
     )
     parser.add_argument(
         "--dry_run",
@@ -108,11 +98,11 @@ def launch(
 ) -> None:
     """Parse CLI args, build ``system_cls``, and run its requested stages.
 
-    Loads each config role, builds and validates the experiment context
-    (identity such as ``exp_tag``/``exp_dir`` propagated across roles, or
-    recovered from a saved ``context.yaml`` for a standalone run), resolves
-    interpolations, builds ``system_cls``, saves the run's context once (rank
-    0, unless ``--dry_run``), and runs the requested stages.
+    Loads each config role's own config (the default plus whatever the
+    caller gave, not yet resolved), passes them to ``system_cls`` to build
+    each requested stage's merged, resolved config (see
+    :class:`~espnet3.systems.base.system.BaseSystem`), then runs the
+    requested stages, baking each stage's own config before it runs.
 
     Args:
         system_cls: The system class to instantiate and run.
@@ -124,9 +114,9 @@ def launch(
 
     Raises:
         espnet3.components.contract.stages.StageContractError: A requested
-            stage is not declared, or its config role was not given.
-        espnet3.utils.run_utils.ExperimentContextError: The configs lack
-            enough experiment identity for the requested stages.
+            stage is not declared.
+        RuntimeError: No ``--exp_dir`` is given and no role's own config
+            has a self-resolving ``exp_dir``.
 
     Examples:
         ```python
@@ -142,73 +132,33 @@ def launch(
     names = stage_names(system_cls)
     stages_to_run = resolve_stages(args.stages, names)
     system_roles = roles(system_cls)
+    cli_paths = {role: getattr(args, f"{role}_config") for role in system_roles}
     check_requested_stages(
-        system_cls,
-        stages_to_run,
-        provided={role: getattr(args, f"{role}_config") for role in system_roles},
+        system_cls, stages_to_run, provided=cli_paths, exp_dir=args.exp_dir
     )
 
     package = conf_package or default_conf_package(system_cls)
     configs = {
-        role: load_and_merge_config(
-            getattr(args, f"{role}_config"),
-            config_name=f"{role}.yaml",
-            default_package=package,
-            resolve=False,
+        role: (
+            load_and_merge_config(
+                cli_paths[role],
+                config_name=f"{role}.yaml",
+                default_package=package,
+                resolve=False,
+            )
+            if cli_paths[role] is not None
+            else None
         )
         for role in system_roles
     }
 
     logger = configure_logging()
-    requested_roles = tuple(
-        dict.fromkeys(stage_spec(system_cls, s).config for s in stages_to_run)
-    )
-    context = build_experiment_context(
-        training_config=configs.get("training"),
-        inference_config=configs.get("inference"),
-        metrics_config=configs.get("metrics"),
-        publication_config=configs.get("publication"),
-        demo_config=configs.get("demo"),
-        exp_dir=args.exp_dir,
-        roles=requested_roles,
-        log=logger,
-    )
-    validate_experiment_context(
-        training_config=configs.get("training"),
-        inference_config=configs.get("inference"),
-        metrics_config=configs.get("metrics"),
-        publication_config=configs.get("publication"),
-        demo_config=configs.get("demo"),
-        stages_to_run=stages_to_run,
-    )
-    resolve_loaded_configs(
-        training=configs.get("training"),
-        inference=configs.get("inference"),
-        metrics=configs.get("metrics"),
-        publication=configs.get("publication"),
-        demo=configs.get("demo"),
-    )
-
     system = system_cls(
-        training_config=configs.get("training"),
-        inference_config=configs.get("inference"),
-        metrics_config=configs.get("metrics"),
-        publication_config=configs.get("publication"),
-        demo_config=configs.get("demo"),
+        configs=configs, exp_dir=args.exp_dir, stages_to_run=stages_to_run
     )
 
     logger.info("System: %s", system_cls.__name__)
     logger.info("Requested stages: %s", args.stages)
     logger.info("Resolved stages: %s", stages_to_run)
-
-    if not args.dry_run and _get_process_rank() == 0:
-        save_experiment_context(
-            context.exp_dir,
-            context,
-            overwrite_context=args.overwrite_context,
-            stages=stages_to_run,
-            argv=list(argv) if argv is not None else sys.argv,
-            log=logger,
-        )
 
     run_stages(system=system, stages_to_run=stages_to_run, args=args, log=logger)

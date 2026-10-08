@@ -168,41 +168,39 @@ def stage_spec(system_cls: type, name: str) -> StageSpec:
     )
 
 
-def stage_log_dir(system: Any, name: str) -> Path:
-    """Return the log directory for stage ``name`` on ``system``.
+def stage_log_dir_of(config: Any, spec: StageSpec) -> Path | None:
+    """Return a stage's log directory from its own merged config, if any.
 
-    Reads the stage's declared ``config`` role's config object off
-    ``system`` (e.g. ``system.training_config``) and its ``log_dir``
-    dotted key, falling back to ``system._default_log_dir`` when the
-    config, the key, or its value is absent.
+    A pure function: reads ``spec.log_dir`` (a dotted key, e.g.
+    ``"exp_dir"``, ``"pack.out_dir"``) off ``config``. Returns ``None``
+    when ``spec.log_dir`` is unset or the key has no value in ``config``,
+    leaving the fallback (the system's experiment directory, then a
+    generic default) to the caller.
 
     Examples:
         >>> from omegaconf import OmegaConf
-        >>> class ExampleSystem:
-        ...     stages = (
-        ...         StageSpec(name="train", config="training", log_dir="exp_dir"),
-        ...     )
-        ...     training_config = OmegaConf.create({"exp_dir": "exp"})
-        ...     _default_log_dir = Path("logs")
-        >>> stage_log_dir(ExampleSystem(), "train")
+        >>> spec = StageSpec(name="train", config="training", log_dir="exp_dir")
+        >>> stage_log_dir_of(OmegaConf.create({"exp_dir": "exp"}), spec)
         PosixPath('exp')
+        >>> stage_log_dir_of(OmegaConf.create({}), spec) is None
+        True
     """
     from omegaconf import OmegaConf
 
-    spec = stage_spec(type(system), name)
-    config = getattr(system, f"{spec.config}_config", None)
-    value = (
-        OmegaConf.select(config, spec.log_dir)
-        if (config is not None and spec.log_dir)
-        else None
-    )
-    return Path(value) if value else system._default_log_dir
+    if config is None or not spec.log_dir:
+        return None
+    value = OmegaConf.select(config, spec.log_dir)
+    return Path(value) if value else None
 
 
 def check_requested_stages(
-    system_cls: type, requested: Sequence[str], provided: Mapping[str, Any]
+    system_cls: type,
+    requested: Sequence[str],
+    provided: Mapping[str, Any],
+    *,
+    exp_dir: Any | None = None,
 ) -> None:
-    """Raise unless each requested stage is declared and its config is given.
+    """Raise unless each requested stage is declared and can get a config.
 
     Checked once, right after ``resolve_stages`` expands the requested
     stage list, before any config is loaded.
@@ -213,10 +211,16 @@ def check_requested_stages(
         provided: Config role -> the config passed for that role (or
             ``None``/absent when not given), e.g. ``{"training": cfg,
             "inference": None}``.
+        exp_dir: The experiment directory, when given. A stage whose role
+            config is missing is not an error when ``exp_dir`` is given:
+            it may inherit that role from an earlier run's baked config
+            instead; a config missing there too surfaces later, from
+            config inheritance, not from this check.
 
     Raises:
-        StageContractError: A requested name is not declared, or a
-            declared stage's config role was not given.
+        StageContractError: A requested name is not declared, or (only
+            when ``exp_dir`` is not given) a declared stage's config role
+            was not given either.
 
     Examples:
         >>> class ExampleSystem:
@@ -230,13 +234,16 @@ def check_requested_stages(
             f"{system_cls.__name__} has no stage {unknown}; declared stages "
             f"are {list(names)}"
         )
+    if exp_dir is not None:
+        return
     missing = [
         (s, names[s].config) for s in requested if provided.get(names[s].config) is None
     ]
     if missing:
         lines = "\n".join(f"  - {s} runs on the {role} config" for s, role in missing)
         raise StageContractError(
-            f"config not provided for requested stage(s):\n{lines}"
+            f"config not provided for requested stage(s) (pass --exp_dir to "
+            f"inherit from an earlier run instead):\n{lines}"
         )
 
 
@@ -246,7 +253,7 @@ __all__ = [
     "check_requested_stages",
     "check_stage_contract",
     "roles",
-    "stage_log_dir",
+    "stage_log_dir_of",
     "stage_names",
     "stage_spec",
 ]

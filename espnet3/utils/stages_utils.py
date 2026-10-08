@@ -9,13 +9,13 @@ import time
 from pathlib import Path
 from typing import Any, Iterable, List, Sequence
 
-from espnet3.components.contract.stages import stage_log_dir
-from espnet3.utils.experiment_context import save_stage_config
+from espnet3.components.contract.stages import stage_log_dir_of, stage_spec
 from espnet3.utils.logging_utils import (
     log_stage,
     log_stage_metadata,
     set_stage_log_handler,
 )
+from espnet3.utils.stage_configs import bake
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +47,11 @@ def _get_process_rank() -> int:
 
 
 def _get_stage_log_mode(system: Any) -> str:
-    """Return normalized stage_log_mode from training_config, defaulting to rank0."""
+    """Return normalized stage_log_mode from the train stage's config."""
     mode = "rank0"
-    training_config = getattr(system, "training_config", None)
-    if training_config is not None:
-        mode = getattr(training_config, "stage_log_mode", mode)
+    train_config = getattr(system, "stage_configs", {}).get("train")
+    if train_config is not None:
+        mode = getattr(train_config, "stage_log_mode", mode)
     return str(mode).lower()
 
 
@@ -93,14 +93,16 @@ def run_stages(
 
     Examples:
         >>> from espnet3.components.contract.stages import StageSpec
+        >>> from omegaconf import OmegaConf
         >>> class ExampleSystem:
         ...     stages = (StageSpec(name="train", config="training"),)
-        ...     _default_log_dir = None
-        ...     exp_dir = None
-        ...     training_config = None
+        ...     exp_dir = Path(".")
+        ...     stage_configs = {"train": OmegaConf.create({})}
+        ...     own_keys = {"train": ()}
         ...     def train(self):
         ...         print("training ran")
-        >>> run_stages(ExampleSystem(), ["train"])
+        >>> dry_run_args = argparse.Namespace(dry_run=True)
+        >>> run_stages(ExampleSystem(), ["train"], args=dry_run_args)
         training ran
     """
     log = log or logger
@@ -112,13 +114,19 @@ def run_stages(
 
         with log_stage(stage):
             rank = _get_process_rank()
-            save_stage_config(system, stage, dry_run=dry_run, rank=rank, log=log)
+            config = system.stage_configs[stage]
+
+            if not dry_run and rank == 0:
+                bake(system.exp_dir, stage, config, own_keys=system.own_keys[stage])
 
             if dry_run:
                 log.info("[DRY RUN] would run stage: %s", stage)
                 continue
 
-            log_dir = stage_log_dir(system, stage)
+            spec = stage_spec(type(system), stage)
+            log_dir = (
+                stage_log_dir_of(config, spec) or system.exp_dir or Path.cwd() / "logs"
+            )
             filename = f"{stage}.log"
 
             if stage == "train":
@@ -147,7 +155,7 @@ def run_stages(
                 Path(log_dir) if log_dir else None,
                 filename=filename,
             )
-            log_stage_metadata(log, system=system, args=args)
+            log_stage_metadata(log, stage=stage, config=config, args=args)
 
             start = time.perf_counter()
             log.info("=== [START] stage: %s ===", stage)
