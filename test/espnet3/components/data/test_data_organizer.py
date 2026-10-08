@@ -333,8 +333,10 @@ def _entry(name: str, *, transform: bool = False, data_src: str = DUMMY_DATA_SRC
 
 
 def _labeled_entry(name: str, n: int = 1):
-    """Entry routed (via patch_dataset_reference's "dataset" key) to a
-    LabeledDataset whose items are distinguishable by ``name``."""
+    """Entry routed to a LabeledDataset whose items are named by ``name``.
+
+    Routed via patch_dataset_reference's "dataset" key.
+    """
     return {
         "name": name,
         "dataset": {"_target_": LABELED_DATASET_TARGET, "label": name, "n": n},
@@ -1286,8 +1288,10 @@ def test_combined_dataset_uid_prefixes_none_falls_back_to_str_index():
 
 
 def test_uid_points_to_same_sample_after_reorder_and_append():
-    """(a) Same UID -> same sample after the entries are reordered and a new
-    entry is appended; the appended entry gets a brand-new UID prefix."""
+    """(a) Same UID -> same sample after the entries are reordered.
+
+    A newly appended entry gets a brand-new UID prefix.
+    """
     entry_a = _labeled_entry("A")
     entry_b = _labeled_entry("B")
     entry_c = _labeled_entry("C")
@@ -1369,8 +1373,10 @@ def test_sharded_combined_dataset_keeps_collator_flag():
 
 
 def test_shard_preserves_original_uid_position_for_subset():
-    """shard() returning a Subset (exposing .indices) keeps get_uid pointing
-    at the item's original (pre-shard) position within the dataset."""
+    """A Subset shard (exposing .indices) keeps get_uid pointing correctly.
+
+    It points at the item's original (pre-shard) position in the dataset.
+    """
     entry = _labeled_sharded_entry("sharded", ["a", "b", "c", "d"], total_shards=2)
     organizer = DataOrganizer(train=[entry], valid=[entry])
     full_uids = [organizer.train.get_uid(i) for i in range(4)]
@@ -1389,8 +1395,10 @@ def test_shard_preserves_original_uid_position_for_subset():
 
 
 def test_shard_without_indices_uses_at_s_label():
-    """shard() returning an object with no .indices -> "<hash>@s<k>:<local>"
-    label, which is not a well-formed UID (parse_uid returns None for it)."""
+    """shard() with no .indices falls back to an "<hash>@s<k>:<local>" label.
+
+    That label is not a well-formed UID (parse_uid returns None for it).
+    """
     entry = _unresolvable_sharded_entry("unresolvable", ["a"])
     organizer = DataOrganizer(train=[entry], valid=[entry])
 

@@ -369,8 +369,9 @@ def test_sampler_and_batch_sampler_conflict():
 
 
 def test_iter_factory_from_default_yaml_with_organizer(tmp_path):
-    """iter_factory + a real DataOrganizer-built dataset, whose entries now
-    always get dataset-hash UIDs. The shape file and its
+    """iter_factory, plus a real DataOrganizer-built dataset.
+
+    Its entries now always get dataset-hash UIDs. The shape file and its
     dataset_uids.json are generated per-test from the dataset's own
     get_uid() (not the fixed legacy "0".."9" keys, which no longer match a
     hash-UID dataset) so this test stays a real regression check under the
@@ -1217,9 +1218,10 @@ def test_world_info_defaults_to_single_process():
 
 
 def test_iter_factory_resolves_shape_file_uids_to_same_sample(tmp_path):
-    """T2 (iter_factory side): a shape file keyed by stable utterance IDs makes
-    SequenceIterFactory batches resolve to the same sample the dataset itself
-    returns for that UID.
+    """T2 (iter_factory side): a shape file keyed by stable utterance IDs.
+
+    This makes SequenceIterFactory batches resolve to the same sample the
+    dataset itself returns for that UID.
 
     This exercises the string-index-mode lookup path (a Mapping-keyed
     dataset addressed by its own string keys), which is independent of the
@@ -1303,9 +1305,11 @@ def test_build_iter_factory_defaults_to_the_builder_dataset(monkeypatch):
 
 
 class _DummyUidTableDataset:
-    """Minimal dataset exposing only ``uid_entries``/``datasets`` for the
-    DataLoaderBuilder training-side validation tests -- decoupled from the
-    real ``CombinedDataset``."""
+    """Minimal dataset exposing only ``uid_entries``/``datasets``.
+
+    Used by the DataLoaderBuilder training-side validation tests --
+    decoupled from the real ``CombinedDataset``.
+    """
 
     def __init__(self, uid_entries):
         self.uid_entries = uid_entries
@@ -1313,8 +1317,7 @@ class _DummyUidTableDataset:
 
 
 def _write_uid_table_if_present(shape_dir, dataset):
-    """Write dataset_uids.json for ``dataset`` into ``shape_dir`` iff it has
-    uid_entries.
+    """Write dataset_uids.json for ``dataset`` into ``shape_dir``, if any.
 
     ``CombinedDataset.uid_entries`` is not yet present on every branch this
     test file is developed against, so this stays a no-op (matching the
@@ -1352,8 +1355,7 @@ def _make_shape_file_iter_factory_config(shape_file):
 
 
 def test_iter_factory_accepts_matching_uid_table(tmp_path, monkeypatch):
-    """(d)/(f): a current dataset config matching the on-disk table builds
-    successfully."""
+    """(d)/(f): a current dataset config matching the on-disk table builds."""
     from espnet3.components.data.dataset_uid import DatasetUidEntry, write_uid_table
 
     shape_dir = tmp_path / "train"
@@ -1374,8 +1376,10 @@ def test_iter_factory_accepts_matching_uid_table(tmp_path, monkeypatch):
 
 
 def test_iter_factory_rejects_missing_uid_table(tmp_path, monkeypatch):
-    """(d): no dataset_uids.json in the shape-file directory -> RuntimeError
-    naming collect_stats, raised before build_batch_sampler runs."""
+    """(d): a missing dataset_uids.json -> RuntimeError naming collect_stats.
+
+    Raised before build_batch_sampler runs.
+    """
     from espnet3.components.data.dataset_uid import DatasetUidEntry
 
     def _fail_if_called(**kwargs):
@@ -1472,9 +1476,11 @@ def test_iter_factory_rejects_changed_num_items(tmp_path, monkeypatch):
 
 
 def test_iter_factory_skips_validation_without_uid_entries(monkeypatch):
-    """A directly-constructed CombinedDataset (bypassing DataOrganizer, so
-    uid_prefixes/uid_entries stay None -- backward compatibility) skips the
-    training-side validation entirely.
+    """A directly-constructed CombinedDataset skips the training validation.
+
+    Bypassing DataOrganizer leaves uid_prefixes/uid_entries at None
+    (backward compatibility), which skips the training-side validation
+    entirely.
 
     Note: any dataset built *through* DataOrganizer always gets uid_entries
     now, so this "no uid_entries" case can only arise from constructing
