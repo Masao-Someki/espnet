@@ -93,7 +93,7 @@ def run_stages(
     Examples:
         >>> from espnet3.components.contract.stages import StageSpec
         >>> class ExampleSystem:
-        ...     stages = (StageSpec("train", "training"),)
+        ...     stages = (StageSpec(name="train", config="training"),)
         ...     _default_log_dir = None
         ...     def train(self):
         ...         print("training ran")

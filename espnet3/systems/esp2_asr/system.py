@@ -31,16 +31,18 @@ class ASRSystem(BaseSystem):
     """
 
     stages: ClassVar[tuple[StageSpec, ...]] = (
-        StageSpec("create_dataset", "training", "data_dir"),
-        StageSpec("train_tokenizer", "training", "tokenizer.save_path"),
-        StageSpec("collect_stats", "training", "stats_dir"),
-        StageSpec("train", "training", "exp_dir"),
-        StageSpec("infer", "inference", "inference_dir"),
-        StageSpec("measure", "metrics", "inference_dir"),
-        StageSpec("pack_model", "publication"),
-        StageSpec("upload_model", "publication"),
-        StageSpec("pack_demo", "demo", "pack.out_dir"),
-        StageSpec("upload_demo", "demo", "pack.out_dir"),
+        StageSpec(name="create_dataset", config="training", log_dir="data_dir"),
+        StageSpec(
+            name="train_tokenizer", config="training", log_dir="tokenizer.save_path"
+        ),
+        StageSpec(name="collect_stats", config="training", log_dir="stats_dir"),
+        StageSpec(name="train", config="training", log_dir="exp_dir"),
+        StageSpec(name="infer", config="inference", log_dir="inference_dir"),
+        StageSpec(name="measure", config="metrics", log_dir="inference_dir"),
+        StageSpec(name="pack_model", config="publication"),
+        StageSpec(name="upload_model", config="publication"),
+        StageSpec(name="pack_demo", config="demo", log_dir="pack.out_dir"),
+        StageSpec(name="upload_demo", config="demo", log_dir="pack.out_dir"),
     )
 
     def train(self, *args, **kwargs):

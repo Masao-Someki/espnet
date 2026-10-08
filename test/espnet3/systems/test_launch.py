@@ -22,8 +22,8 @@ class _RecordingSystem(BaseSystem):
     """
 
     stages = (
-        StageSpec("train", "training", "exp_dir"),
-        StageSpec("infer", "inference", "inference_dir"),
+        StageSpec(name="train", config="training", log_dir="exp_dir"),
+        StageSpec(name="infer", config="inference", log_dir="inference_dir"),
     )
     instances: list = []
 
