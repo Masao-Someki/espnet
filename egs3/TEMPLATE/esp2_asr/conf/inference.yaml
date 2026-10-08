@@ -109,18 +109,10 @@ model:
 # Only the fields listed here are written as SCP files under
 # `${inference_dir}/<test_name>/`.
 # If omitted, keys are inferred from the first returned sample except for
-# `idx_key`. Set this explicitly when you want stable SCP filenames.
+# `utt_id`. Set this explicitly when you want stable SCP filenames.
 #
 # output_keys:
 #   - hyp
-
-# Sample identifier field name expected in the final inference output dict.
-# Inference uses `utt_id` by default, and the final output dict must contain it
-# unless you explicitly override `idx_key`.
-# This value becomes the first column in generated SCP files and is used to map
-# each inference result back to the corresponding dataset sample.
-#
-#idx_key: utt_id
 
 # Number of utterances decoded per model call. Consecutive dataset items form a
 # batch and are passed to the model as a list per input key.

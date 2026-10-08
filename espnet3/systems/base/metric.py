@@ -12,11 +12,12 @@ from espnet3.components.contract.metrics import (
     check_metric_inputs,
     check_metric_output,
 )
+from espnet3.components.data.dataset_uid import item_uid
 from espnet3.components.metrics.base_metric import BaseMetric
 from espnet3.systems.base.inference_provider import InferenceProvider
 from espnet3.systems.base.inference_runner import _materialize_output_value
 from espnet3.utils.logging_utils import log_component
-from espnet3.utils.scp_utils import check_utt_id, get_class_path, load_scp_paths
+from espnet3.utils.scp_utils import get_class_path, load_scp_paths
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,6 @@ def _dataset_column_scp(
     inference_dir: Path,
     test_name: str,
     column: str,
-    idx_key: str,
     artifact_config: dict | None = None,
 ) -> Path:
     """Write a test set's column as ``<inference_dir>/<test>/dataset/<column>.scp``.
@@ -72,8 +72,6 @@ def _dataset_column_scp(
         inference_dir: The inference directory.
         test_name: The test set.
         column: The dataset field to write, such as ``text``.
-        idx_key: The item field holding the utterance id; the item's index
-            when absent, as the ``infer`` stage does.
         artifact_config: How a value that is not a scalar is written (the
             ``infer`` stage's ``output_artifacts`` form: ``type: wav`` with
             ``sample_rate``, ``npy``, ``pickle``, or a custom ``writer``);
@@ -123,7 +121,7 @@ def _dataset_column_scp(
                     f"test set {test_name!r} item {idx} has no {column!r}; "
                     f"it has {sorted(item)}"
                 )
-            utt_id = check_utt_id(item.get(idx_key, str(idx)))
+            utt_id = item_uid(dataset, idx)
             value = _materialize_output_value(
                 idx_value=utt_id,
                 field_key=column,
@@ -157,11 +155,6 @@ def _resolve_inputs(
         if from_scp
         else {}
     )
-    idx_key = (
-        inference_config.get("idx_key", "utt_id")
-        if inference_config is not None
-        else "utt_id"
-    )
     artifacts = metrics_config.get("dataset_artifacts") or {}
     for alias, source in input_map.items():
         if str(source).startswith(DATASET_PREFIX):
@@ -172,7 +165,6 @@ def _resolve_inputs(
                 inference_dir,
                 test_name,
                 column,
-                idx_key,
                 (
                     OmegaConf.to_container(artifact_config, resolve=True)
                     if OmegaConf.is_config(artifact_config)

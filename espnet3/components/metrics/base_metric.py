@@ -299,7 +299,9 @@ class BaseMetric(ABC):
                 for key in keys[1:]:
                     assert rows[key][0] == utt_id, (
                         f"UID mismatch between {keys[0]} and {key}: "
-                        f"{utt_id} != {rows[key][0]}"
+                        f"{utt_id} != {rows[key][0]}. ids are taken from the "
+                        "dataset; delete `<test>/dataset/` after changing "
+                        "the dataset and run measure again"
                     )
                 yield utt_id, {key: rows[key][1] for key in keys}
         finally:

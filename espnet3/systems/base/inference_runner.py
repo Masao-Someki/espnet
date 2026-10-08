@@ -16,10 +16,12 @@ from omegaconf import ListConfig
 
 from espnet2.torch_utils.device_funcs import is_out_of_memory_error
 from espnet3.api.inference import Audio, InferenceAPI
+from espnet3.components.data.dataset_uid import item_uid
 from espnet3.parallel.base_runner import BaseRunner, concatenate_shard_files
 from espnet3.parallel.env_provider import EnvironmentProvider
-from espnet3.utils.scp_utils import check_utt_id
 from espnet3.utils.writer_utils import write_artifact
+
+UID_FIELD = "utt_id"
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +105,19 @@ def _declared_fields(model: InferenceAPI, data: Mapping[str, Any]) -> Dict[str, 
     return fields
 
 
-def _record(
-    output: Mapping[str, Any], data: Mapping[str, Any], idx: Any, idx_key: str
-) -> Dict[str, Any]:
-    """One result as the writers take it: the id first, then the outputs."""
-    record: Dict[str, Any] = {idx_key: data.get(idx_key, str(idx))}
-    record.update(output)
-    return record
+def _record(output: Mapping[str, Any], uid: str) -> Dict[str, Any]:
+    """One result as the writers take it: the id first, then the outputs.
+
+    Raises:
+        ValueError: If ``output`` already has a ``"utt_id"`` entry: the id
+            comes only from the dataset, never from the model or output_fn.
+    """
+    if UID_FIELD in output:
+        raise ValueError(
+            f"output must not set {UID_FIELD!r} itself; the id comes from "
+            "the dataset"
+        )
+    return {UID_FIELD: uid, **output}
 
 
 def _writable(
@@ -149,7 +157,6 @@ def _forward_inference(
     dataset,
     model: InferenceAPI,
     *,
-    idx_key: str,
     model_kwargs: Mapping[str, Any],
     output_fn: Any,
 ):
@@ -158,11 +165,11 @@ def _forward_inference(
     The declared inputs are picked out of each item (optional ones when
     present), the model is called through its own entry points -
     ``model(**fields)`` for one item, ``model.batch(items)`` for a batch -
-    and the sample id comes from the item (``idx_key``, else the index).
-    Only what the model produced is written; a reference for scoring is
-    read from the data by ``measure`` (bind ``ref`` to ``dataset:text``
-    in the metrics config's ``inputs:``). A configured ``output_fn`` is
-    refused rather than ignored: the declaration fixes the outputs.
+    and the sample id comes from the dataset (``item_uid``). Only what the
+    model produced is written; a reference for scoring is read from the
+    data by ``measure`` (bind ``ref`` to ``dataset:text`` in the metrics
+    config's ``inputs:``). A configured ``output_fn`` is refused rather
+    than ignored: the declaration fixes the outputs.
     """
     if model_kwargs:
         raise TypeError(
@@ -181,8 +188,8 @@ def _forward_inference(
     fields = [_declared_fields(model, data) for data in items]
     outputs = model.batch(fields) if batched else [model(**fields[0])]
     records = [
-        _record(out, data, i, idx_key)
-        for out, data, i in zip(outputs, items, indices, strict=True)
+        _record(out, item_uid(dataset, i))
+        for out, i in zip(outputs, indices, strict=True)
     ]
     return records if batched else records[0]
 
@@ -196,7 +203,6 @@ def _materialize_output_value(
 ):
     if isinstance(value, (str, int, float, bool)):
         return value
-    idx_value = check_utt_id(idx_value)
 
     if isinstance(value, np.generic):
         return value.item()
@@ -247,16 +253,16 @@ class InferenceRunner(BaseRunner):
     ``model.batch(items)``, and writes each declared output by its kind;
     no ``input_key`` or ``output_fn`` is used. For any other model it
     passes the ``input_key`` fields and shapes the result with the
-    recipe's ``output_fn``. The key names are configurable via ``idx_key`` and
-    ``hyp_key``/``ref_key``. ``hyp_key`` and ``ref_key`` may be a single
+    recipe's ``output_fn``. The sample identifier always comes from the
+    dataset (``item_uid``) under the fixed ``"utt_id"`` key; ``hyp_key``
+    and ``ref_key`` name the other output fields and may be a single
     string or a list of strings to support multiple hypothesis/reference
-    fields. ``idx_key`` is the key used to map each inference result to
-    its source dataset index when writing SCP files.
+    fields.
 
     Output format requirements:
         - The result is a dict with the configured keys plus any extra fields.
-        - A sample identifier key must exist under ``idx_key`` so SCP outputs
-          can map each result back to the corresponding dataset sample.
+        - A ``"utt_id"`` key must exist so SCP outputs can map each result
+          back to the corresponding dataset sample.
         - The sample identifier must be a single value, not a list or tuple.
         - ``hyp_key`` and ``ref_key`` values may be scalars or lists/tuples.
           If lists are returned, each entry is written to its own SCP file
@@ -266,7 +272,6 @@ class InferenceRunner(BaseRunner):
     def __init__(
         self,
         provider: EnvironmentProvider,
-        idx_key: str = "utt_id",
         hyp_key: str | Sequence[str] = "hyp",
         ref_key: str | Sequence[str] = "ref",
         **kwargs,
@@ -275,15 +280,11 @@ class InferenceRunner(BaseRunner):
 
         Args:
             provider: Environment provider that supplies dataset/model/env.
-            idx_key: Output dict key used as the sample identifier written in
-                the first column of each SCP line. This ties each inference
-                result back to its dataset sample. Defaults to ``"utt_id"``.
             hyp_key: Hypothesis key or keys expected in the output dict.
             ref_key: Reference key or keys expected in the output dict.
             **kwargs: Forwarded to ``BaseRunner``.
         """
         super().__init__(provider, **kwargs)
-        self.idx_key = idx_key
         self.hyp_key = (
             list(hyp_key) if isinstance(hyp_key, (list, tuple, ListConfig)) else hyp_key
         )
@@ -291,20 +292,9 @@ class InferenceRunner(BaseRunner):
             list(ref_key) if isinstance(ref_key, (list, tuple, ListConfig)) else ref_key
         )
 
-    def resolve_idx_key(self, output: Dict[str, Any]) -> str:
-        """Validate that the configured sample-identifier key exists in output."""
-        if self.idx_key not in output:
-            raise ValueError(
-                "Inference output must include the configured sample identifier "
-                "key used to map SCP results back to dataset samples. "
-                f"idx_key={self.idx_key!r}"
-            )
-        return self.idx_key
-
     @staticmethod
     def _validate_output_with_keys(
         output: Dict[str, Any],
-        idx_key: str,
         hyp_key,
         ref_key,
     ) -> None:
@@ -315,13 +305,12 @@ class InferenceRunner(BaseRunner):
 
         hyp_keys = _normalize_key_list(hyp_key)
         ref_keys = _normalize_key_list(ref_key)
-        if idx_key not in output:
+        if UID_FIELD not in output:
             raise ValueError(
-                "Inference output must include the configured sample identifier "
-                "key used to map SCP results back to dataset samples. "
-                f"idx_key={idx_key!r}"
+                "Inference output must include the sample identifier key "
+                f"{UID_FIELD!r} used to map SCP results back to dataset samples."
             )
-        expected = {idx_key, *hyp_keys, *ref_keys}
+        expected = {UID_FIELD, *hyp_keys, *ref_keys}
         actual = set(output.keys())
         missing = expected - actual
         if missing:
@@ -330,20 +319,18 @@ class InferenceRunner(BaseRunner):
                 f"missing={sorted(missing)}"
             )
 
-        idx_value = output[idx_key]
+        idx_value = output[UID_FIELD]
         if isinstance(idx_value, (list, tuple)):
             raise TypeError(
-                f"'{idx_key}' must be a single value, not {type(idx_value).__name__}"
+                f"'{UID_FIELD}' must be a single value, not {type(idx_value).__name__}"
             )
 
     @staticmethod
-    def _resolve_output_keys(
-        output: Dict[str, Any], idx_key: str, output_keys
-    ) -> List[str]:
+    def _resolve_output_keys(output: Dict[str, Any], output_keys) -> List[str]:
         keys = _normalize_key_list(output_keys)
         if keys:
             return keys
-        return [key for key in output.keys() if key != idx_key]
+        return [key for key in output.keys() if key != UID_FIELD]
 
     @staticmethod
     def forward(idx, dataset=None, model=None, **kwargs):
@@ -353,9 +340,10 @@ class InferenceRunner(BaseRunner):
             idx: Integer index or an iterable of integer indices into the dataset.
             dataset: Dataset providing inference entries.
             model: Inference model callable on the configured input.
-            **kwargs: For an ``InferenceAPI``, ``idx_key`` only: the
-                declaration gives the inputs and outputs. For any other
-                model, ``input_key`` and optionally ``output_fn_path``;
+            **kwargs: For an ``InferenceAPI``, none needed: the declaration
+                gives the inputs and outputs, and the id comes from
+                ``item_uid(dataset, idx)``. For any other model,
+                ``input_key`` and optionally ``output_fn_path``;
                 ``model_kwargs`` passes extra keyword arguments to it.
 
         Returns:
@@ -397,7 +385,6 @@ class InferenceRunner(BaseRunner):
                 idx,
                 dataset,
                 model,
-                idx_key=kwargs.get("idx_key") or "utt_id",
                 model_kwargs=model_kwargs,
                 output_fn=kwargs.get("output_fn") or kwargs.get("output_fn_path"),
             )
@@ -426,7 +413,8 @@ class InferenceRunner(BaseRunner):
             model_output = model(**inputs_dict, **model_kwargs)
             if output_fn is None:
                 return model_output
-            return output_fn(data=data, model_output=model_output, idx=idx)
+            result = output_fn(data=data, model_output=model_output, idx=idx)
+            return _record(result, item_uid(dataset, idx))
 
         indices = list(idx)
         data_batch = [dataset[i] for i in indices]
@@ -441,7 +429,11 @@ class InferenceRunner(BaseRunner):
             model_output = model(**inputs_dict, **model_kwargs)
             if output_fn is None:
                 return model_output
-            return output_fn(data=data_batch, model_output=model_output, idx=indices)
+            results = output_fn(data=data_batch, model_output=model_output, idx=indices)
+            return [
+                _record(r, item_uid(dataset, i))
+                for r, i in zip(results, indices, strict=True)
+            ]
         except Exception as exc:  # noqa: BLE001
             if is_out_of_memory_error(exc):
                 # the generic advice below would be wrong here: the model does
@@ -499,7 +491,6 @@ class InferenceRunner(BaseRunner):
         writers: Dict[str, Any],
         result: Any,
         state: Dict[str, Any],
-        idx_key: str = "utt_id",
         output_keys=None,
         hyp_key=None,
         ref_key=None,
@@ -518,20 +509,18 @@ class InferenceRunner(BaseRunner):
             output, own_configs = _writable(output, writers["artifact_configs"])
             InferenceRunner._validate_output_with_keys(
                 output,
-                idx_key=idx_key,
                 hyp_key=hyp_key,
                 ref_key=ref_key,
             )
 
             field_keys = InferenceRunner._resolve_output_keys(
                 output,
-                idx_key=idx_key,
                 output_keys=resolved_output_keys,
             )
             writers["field_keys"].update(field_keys)
 
             # the id heads every SCP line and names every artifact file
-            idx_value = check_utt_id(output[idx_key])
+            idx_value = output[UID_FIELD]
             for field_key in field_keys:
                 value = _materialize_output_value(
                     idx_value=idx_value,
@@ -623,9 +612,7 @@ class InferenceRunner(BaseRunner):
             RuntimeError: If no output keys are found after all shards finish.
 
         Example:
-            >>> runner = InferenceRunner(
-            ...     provider, output_dir="/exp/decode", idx_key="utt_id"
-            ... )
+            >>> runner = InferenceRunner(provider, output_dir="/exp/decode")
             >>> runner(range(len(test_dataset)))
             True
             >>> # one .scp per output (text.scp for ASR) under /exp/decode

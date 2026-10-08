@@ -20,8 +20,8 @@ def infer(config: DictConfig):
     """Run inference over all configured test sets and write SCP files.
 
     This entrypoint expects each inference result to be a dict containing a
-    sample identifier under ``utt_id`` (or the configured ``idx_key``), plus
-    one value per output field. The final SCP files are always written under:
+    sample identifier under ``utt_id``, taken from the dataset, plus one
+    value per output field. The final SCP files are always written under:
 
     .. code-block:: text
 
@@ -149,7 +149,6 @@ def infer(config: DictConfig):
             if not output_keys:
                 raise RuntimeError("inference_config.output_keys must not be empty.")
 
-        idx_key = getattr(config, "idx_key", "utt_id")
         output_dir = Path(config.inference_dir) / test_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -164,7 +163,6 @@ def infer(config: DictConfig):
             provider_params = dict(raw_params)
 
         provider_params["input_key"] = input_key
-        provider_params["idx_key"] = idx_key
         provider_params["output_keys"] = output_keys
         if output_fn_path:
             provider_params["output_fn_path"] = output_fn_path
@@ -187,14 +185,13 @@ def infer(config: DictConfig):
 
         runner_kwargs = {
             "provider": provider,
-            "idx_key": idx_key,
             "hyp_key": hyp_keys,
             "ref_key": [],
             "batch_size": batch_size,
             "output_dir": output_dir,
         }
         runner = instantiate(runner_config, **runner_kwargs)
-        if not hasattr(runner, "idx_key"):
+        if not hasattr(runner, "hyp_key"):
             raise TypeError(
                 f"{type(runner).__name__} must provide inference runner attributes"
             )
