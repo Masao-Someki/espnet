@@ -79,7 +79,13 @@ def _read_manifest(manifest_path: Path) -> list[ManifestEntry]:
 
 
 class MiniAn4Dataset(TorchDataset):
-    """Mini AN4 dataset that returns ``{\"speech\", \"text\"}`` samples."""
+    r"""Mini AN4 dataset that returns ``{"speech", "text"}`` samples.
+
+    Examples:
+        >>> dataset = MiniAn4Dataset(split="train")
+        >>> sorted(dataset[0])
+        ['speech', 'text']
+    """
 
     def __init__(self, split: str, recipe_dir: str | Path | None = None) -> None:
         self.split = split
@@ -110,7 +116,13 @@ class MiniAn4Dataset(TorchDataset):
         return len(self._entries)
 
     def get_utt_id(self, idx: int) -> str:
-        """Return the manifest's utterance id for ``idx`` without loading audio."""
+        """Return the manifest's utterance id for ``idx`` without loading audio.
+
+        Examples:
+            >>> dataset = MiniAn4Dataset(split="train")
+            >>> isinstance(dataset.get_utt_id(0), str)
+            True
+        """
         return self._entries[int(idx)].utt_id
 
     def __getitem__(self, idx: int) -> dict[str, Any]:

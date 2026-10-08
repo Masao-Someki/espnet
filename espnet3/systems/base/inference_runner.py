@@ -267,6 +267,11 @@ class InferenceRunner(BaseRunner):
         - ``hyp_key`` and ``ref_key`` values may be scalars or lists/tuples.
           If lists are returned, each entry is written to its own SCP file
           (e.g., ``hyp0.scp``, ``hyp1.scp``).
+
+    Examples:
+        >>> runner = InferenceRunner(provider, output_dir="/exp/decode")
+        >>> runner(range(len(test_dataset)))
+        True
     """
 
     def __init__(
@@ -496,7 +501,15 @@ class InferenceRunner(BaseRunner):
         ref_key=None,
         **env,
     ) -> None:
-        """Validate one forward result and stream it into shard-local SCP files."""
+        """Validate one forward result and stream it into shard-local SCP files.
+
+        Examples:
+            >>> writers = InferenceRunner.open_writers(Path("/exp/decode"))
+            >>> InferenceRunner.write_record(
+            ...     writers, {"utt_id": "utt1", "hyp": "hello"}, {}
+            ... )
+            >>> InferenceRunner.close_writers(writers, {})
+        """
         resolved_output_keys = output_keys
         if resolved_output_keys is None:
             resolved_output_keys = [
