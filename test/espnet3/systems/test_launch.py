@@ -7,11 +7,7 @@ from types import SimpleNamespace
 import pytest
 from omegaconf import OmegaConf
 
-from espnet3.components.contract.stages import (
-    CONFIG_ROLES,
-    StageContractError,
-    StageSpec,
-)
+from espnet3.components.contract.stages import StageContractError, StageSpec, roles
 from espnet3.systems.base.system import BaseSystem
 from espnet3.systems.launch import build_parser, default_conf_package, launch
 
@@ -97,15 +93,19 @@ def test_build_parser_stages_choices_follow_declared_order():
     assert action.choices == ["train", "infer", "all"]
 
 
-def test_build_parser_has_one_config_arg_per_role():
+def test_build_parser_has_one_config_arg_per_declared_role():
     parser = build_parser(_RecordingSystem)
-    args = parser.parse_args(
-        ["--training_config", "a.yaml", "--metrics_config", "b.yaml"]
-    )
-    for role in CONFIG_ROLES:
+    args = parser.parse_args(["--training_config", "a.yaml"])
+    for role in roles(_RecordingSystem):
         assert hasattr(args, f"{role}_config")
     assert str(args.training_config) == "a.yaml"
-    assert str(args.metrics_config) == "b.yaml"
+
+
+def test_build_parser_has_no_config_arg_for_an_undeclared_role():
+    parser = build_parser(_RecordingSystem)
+    assert "metrics" not in roles(_RecordingSystem)
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--metrics_config", "b.yaml"])
 
 
 def test_build_parser_rejects_unknown_stage_name():

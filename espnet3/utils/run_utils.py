@@ -263,6 +263,7 @@ def _copy_publication_demo_context(
         )
 
 
+# TODO(config_fix): removed by the upcoming config fix PR
 def apply_training_experiment_context(
     *,
     training_config: DictConfig | None,

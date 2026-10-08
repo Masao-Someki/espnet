@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Sequence
 
 from espnet3.components.contract.stages import (
-    CONFIG_ROLES,
     check_requested_stages,
+    roles,
     stage_names,
     stage_spec,
 )
@@ -32,9 +32,9 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
 
     Returns:
         A parser with ``--stages``, one ``--<role>_config`` per
-        :data:`~espnet3.components.contract.stages.CONFIG_ROLES`,
-        ``--exp_dir``, ``--overwrite_context``, ``--dry_run``, and
-        ``--write_requirements``.
+        :func:`~espnet3.components.contract.stages.roles` of
+        ``system_cls``, ``--exp_dir``, ``--overwrite_context``,
+        ``--dry_run``, and ``--write_requirements``.
 
     Examples:
         >>> from espnet3.systems.esp2_asr.system import ASRSystem
@@ -52,7 +52,7 @@ def build_parser(system_cls: type) -> argparse.ArgumentParser:
         default=names,
         help="Which stages to run. Multiple values allowed.",
     )
-    for role in CONFIG_ROLES:
+    for role in roles(system_cls):
         parser.add_argument(
             f"--{role}_config",
             default=None,
@@ -141,10 +141,11 @@ def launch(
     args = parser.parse_args(argv)
     names = stage_names(system_cls)
     stages_to_run = resolve_stages(args.stages, names)
+    system_roles = roles(system_cls)
     check_requested_stages(
         system_cls,
         stages_to_run,
-        provided={role: getattr(args, f"{role}_config") for role in CONFIG_ROLES},
+        provided={role: getattr(args, f"{role}_config") for role in system_roles},
     )
 
     package = conf_package or default_conf_package(system_cls)
@@ -155,45 +156,45 @@ def launch(
             default_package=package,
             resolve=False,
         )
-        for role in CONFIG_ROLES
+        for role in system_roles
     }
 
     logger = configure_logging()
-    roles = tuple(
+    requested_roles = tuple(
         dict.fromkeys(stage_spec(system_cls, s).config for s in stages_to_run)
     )
     context = build_experiment_context(
-        training_config=configs["training"],
-        inference_config=configs["inference"],
-        metrics_config=configs["metrics"],
-        publication_config=configs["publication"],
-        demo_config=configs["demo"],
+        training_config=configs.get("training"),
+        inference_config=configs.get("inference"),
+        metrics_config=configs.get("metrics"),
+        publication_config=configs.get("publication"),
+        demo_config=configs.get("demo"),
         exp_dir=args.exp_dir,
-        roles=roles,
+        roles=requested_roles,
         log=logger,
     )
     validate_experiment_context(
-        training_config=configs["training"],
-        inference_config=configs["inference"],
-        metrics_config=configs["metrics"],
-        publication_config=configs["publication"],
-        demo_config=configs["demo"],
+        training_config=configs.get("training"),
+        inference_config=configs.get("inference"),
+        metrics_config=configs.get("metrics"),
+        publication_config=configs.get("publication"),
+        demo_config=configs.get("demo"),
         stages_to_run=stages_to_run,
     )
     resolve_loaded_configs(
-        training=configs["training"],
-        inference=configs["inference"],
-        metrics=configs["metrics"],
-        publication=configs["publication"],
-        demo=configs["demo"],
+        training=configs.get("training"),
+        inference=configs.get("inference"),
+        metrics=configs.get("metrics"),
+        publication=configs.get("publication"),
+        demo=configs.get("demo"),
     )
 
     system = system_cls(
-        training_config=configs["training"],
-        inference_config=configs["inference"],
-        metrics_config=configs["metrics"],
-        publication_config=configs["publication"],
-        demo_config=configs["demo"],
+        training_config=configs.get("training"),
+        inference_config=configs.get("inference"),
+        metrics_config=configs.get("metrics"),
+        publication_config=configs.get("publication"),
+        demo_config=configs.get("demo"),
     )
 
     logger.info("System: %s", system_cls.__name__)

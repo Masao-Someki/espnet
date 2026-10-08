@@ -6,10 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-#: The config roles a stage may run on; each names an ``*_config``
-#: constructor argument a system takes (``"training"`` -> ``training_config``).
-CONFIG_ROLES = ("training", "inference", "metrics", "publication", "demo")
-
 
 @dataclass(frozen=True, kw_only=True)
 class StageSpec:
@@ -17,7 +13,11 @@ class StageSpec:
 
     Args:
         name: The stage method name on the system (e.g. ``"train"``).
-        config: The config role the stage runs on, one of ``CONFIG_ROLES``.
+        config: The config role the stage runs on - any non-empty
+            identifier, naming an ``*_config`` constructor argument the
+            system takes (``"training"`` -> ``training_config``). A
+            system's full set of roles is derived from its ``stages``
+            (see :func:`roles`); there is no separate, fixed role list.
         log_dir: A dotted key inside that config whose value is the
             stage's log directory (e.g. ``"exp_dir"``, ``"pack.out_dir"``);
             ``None`` falls back to the system's own default log directory.
@@ -50,7 +50,7 @@ def check_stage_contract(cls: type) -> None:
 
     Checked once, when ``cls`` is defined (``BaseSystem.__init_subclass__``):
     ``stages`` is a non-empty tuple of :class:`StageSpec` with distinct
-    names, each naming a ``config`` role in :data:`CONFIG_ROLES` and a
+    names, each naming a non-empty identifier ``config`` role and a
     callable method of that name on ``cls``. Every public callable ``cls``
     defines (not starting with ``_``) must also be one of the declared
     stage names - a system has no other public surface.
@@ -83,10 +83,10 @@ def check_stage_contract(cls: type) -> None:
     if len(set(names)) != len(names):
         raise StageContractError(f"{cls.__qualname__}.stages repeats a name: {names}")
     for spec in stages:
-        if spec.config not in CONFIG_ROLES:
+        if not spec.config or not spec.config.isidentifier():
             raise StageContractError(
-                f"{cls.__qualname__} stage {spec.name!r}: config must be one "
-                f"of {CONFIG_ROLES}, not {spec.config!r}"
+                f"{cls.__qualname__} stage {spec.name!r}: config must be a "
+                f"non-empty identifier, not {spec.config!r}"
             )
         if spec.log_dir is not None and not isinstance(spec.log_dir, str):
             raise StageContractError(
@@ -120,6 +120,29 @@ def stage_names(system_cls: type) -> list[str]:
         ['train']
     """
     return [s.name for s in system_cls.stages]
+
+
+def roles(system_cls: type) -> tuple[str, ...]:
+    """Return ``system_cls``'s config roles, in stage order, without duplicates.
+
+    Derived from each declared stage's :attr:`StageSpec.config` - there is
+    no separate, fixed role list to keep in sync with what a system
+    actually declares.
+
+    Examples:
+        >>> class ExampleSystem:
+        ...     stages = (
+        ...         StageSpec(name="train", config="training"),
+        ...         StageSpec(name="infer", config="inference"),
+        ...         StageSpec(name="measure", config="inference"),
+        ...     )
+        >>> roles(ExampleSystem)
+        ('training', 'inference')
+    """
+    seen: dict[str, None] = {}
+    for spec in system_cls.stages:
+        seen.setdefault(spec.config, None)
+    return tuple(seen)
 
 
 def stage_spec(system_cls: type, name: str) -> StageSpec:
@@ -218,11 +241,11 @@ def check_requested_stages(
 
 
 __all__ = [
-    "CONFIG_ROLES",
     "StageContractError",
     "StageSpec",
     "check_requested_stages",
     "check_stage_contract",
+    "roles",
     "stage_log_dir",
     "stage_names",
     "stage_spec",
