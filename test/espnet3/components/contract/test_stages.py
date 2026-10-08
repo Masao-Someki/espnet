@@ -6,11 +6,11 @@ import pytest
 from omegaconf import OmegaConf
 
 from espnet3.components.contract.stages import (
-    CONFIG_ROLES,
     StageContractError,
     StageSpec,
     check_requested_stages,
     check_stage_contract,
+    roles,
     stage_log_dir,
     stage_names,
     stage_spec,
@@ -64,14 +64,37 @@ def test_check_stage_contract_rejects_duplicate_names():
         check_stage_contract(Duplicate)
 
 
-def test_check_stage_contract_rejects_unknown_config_role():
-    class BadRole:
-        stages = (StageSpec(name="train", config="not_a_role"),)
+def test_check_stage_contract_accepts_any_identifier_config_role():
+    """Roles aren't a fixed list anymore; any non-empty identifier is a role."""
+
+    class CustomRole:
+        stages = (StageSpec(name="train", config="not_a_predeclared_role"),)
 
         def train(self):
             pass
 
-    with pytest.raises(StageContractError, match="config must be one of"):
+    check_stage_contract(CustomRole)
+
+
+def test_check_stage_contract_rejects_empty_config_role():
+    class EmptyRole:
+        stages = (StageSpec(name="train", config=""),)
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="non-empty identifier"):
+        check_stage_contract(EmptyRole)
+
+
+def test_check_stage_contract_rejects_non_identifier_config_role():
+    class BadRole:
+        stages = (StageSpec(name="train", config="not-an-identifier"),)
+
+        def train(self):
+            pass
+
+    with pytest.raises(StageContractError, match="non-empty identifier"):
         check_stage_contract(BadRole)
 
 
@@ -231,5 +254,37 @@ def test_stage_log_dir_falls_back_when_log_dir_is_none():
     assert stage_log_dir(NoLogDir(), "pack_model") == Path("logs")
 
 
-def test_config_roles_are_the_five_documented_roles():
-    assert CONFIG_ROLES == ("training", "inference", "metrics", "publication", "demo")
+# ---------------------------------------------------------------------------
+# roles: config roles derived from a system's own stages
+# ---------------------------------------------------------------------------
+
+
+def test_roles_preserves_first_seen_stage_order():
+    assert roles(_ExampleSystem) == ("training", "publication")
+
+
+def test_roles_drops_duplicates_keeping_first_occurrence():
+    class RepeatingRoles:
+        stages = (
+            StageSpec(name="train", config="training"),
+            StageSpec(name="collect_stats", config="training"),
+            StageSpec(name="infer", config="inference"),
+        )
+
+        def train(self):
+            pass
+
+        def collect_stats(self):
+            pass
+
+        def infer(self):
+            pass
+
+    assert roles(RepeatingRoles) == ("training", "inference")
+
+
+def test_roles_is_empty_for_a_system_with_no_stages_declared():
+    class NoRoles:
+        stages = ()
+
+    assert roles(NoRoles) == ()
