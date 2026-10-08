@@ -331,15 +331,12 @@ def _prepare_demo_config(demo_cfg, demo_dir: Path, system) -> DictConfig:
     cfg.demo_dir = str(demo_dir)
 
     # --- validate model.dir_or_tag ---
-    # Set model.dir_or_tag in demo.yaml, or run pack_demo in the same
-    # invocation as pack_model: the pack_demo stage config then inherits
-    # pack_model.out_dir from pack_model's baked config automatically.
+    # Set model.dir_or_tag in demo.yaml. Nothing fills it in from
+    # pack_model.out_dir automatically.
     model_cfg = getattr(cfg, "model", None)
     if model_cfg is None or not model_cfg.get("dir_or_tag"):
         raise ValueError(
-            "demo_config.model.dir_or_tag is required. "
-            "Set it in demo.yaml or run pack_demo together with pack_model "
-            "so pack_model.out_dir is inherited automatically."
+            "demo_config.model.dir_or_tag is required. Set it in demo.yaml."
         )
 
     # --- normalize dir_or_tag to a relative path for portability ---

@@ -14,6 +14,16 @@ from espnet3.systems.base.system import BaseSystem
 from espnet3.utils.config_utils import load_and_merge_config
 
 
+def _system_for_demo_config(tmp_path: Path, demo_config) -> BaseSystem:
+    """A real BaseSystem exposing ``demo_config`` via ``stage_configs``."""
+    exp_dir = tmp_path / "exp"
+    training_config = OmegaConf.create({"exp_dir": str(exp_dir)})
+    return BaseSystem(
+        configs={"training": training_config, "demo": demo_config},
+        exp_dir=exp_dir,
+    )
+
+
 def test_pack_demo_writes_assets(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -41,12 +51,7 @@ def test_pack_demo_writes_assets(
     )
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-        publish_config = None
-
-    out_dir = pack_demo(DummySystem())
+    out_dir = pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
     assert out_dir == demo_dir
     assert (demo_dir / "demo.yaml").exists()
     assert (demo_dir / extra_src.name).read_text(encoding="utf-8") == "hello\n"
@@ -81,11 +86,7 @@ def test_pack_demo_writes_requirements_txt(
         }
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-
-    pack_demo(DummySystem())
+    pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     req = (demo_dir / "requirements.txt").read_text(encoding="utf-8")
     assert req == "espnet\ngradio\ngit+https://github.com/espnet/espnet@main\n"
@@ -105,11 +106,7 @@ def test_pack_demo_skips_requirements_txt_when_not_configured(
         }
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-
-    pack_demo(DummySystem())
+    pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     assert not (demo_dir / "requirements.txt").exists()
 
@@ -137,12 +134,7 @@ def test_pack_demo_skips_description_copy_when_ui_description_is_missing(
         }
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-        publish_config = None
-
-    out_dir = pack_demo(DummySystem())
+    out_dir = pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     assert out_dir == demo_dir
     assert not (demo_dir / "README.md").exists()
@@ -181,12 +173,7 @@ def test_pack_demo_supports_exclude_patterns_for_included_dirs(
         }
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-        publish_config = None
-
-    pack_demo(DummySystem())
+    pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     assert (demo_dir / "assets" / "keep.txt").read_text(encoding="utf-8") == "keep\n"
     assert not (demo_dir / "assets" / "debug.log").exists()
@@ -221,12 +208,7 @@ def test_pack_demo_expands_globbed_include_paths(
         }
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-        publish_config = None
-
-    pack_demo(DummySystem())
+    pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     assert (demo_dir / "data" / "manifest" / "train.tsv").read_text(
         encoding="utf-8"
@@ -291,12 +273,7 @@ def test_pack_demo_renders_space_readme(
         resolve=False,
     )
 
-    class DummySystem:
-        demo_config = demo_cfg
-        exp_dir = None
-        publish_config = None
-
-    pack_demo(DummySystem())
+    pack_demo(_system_for_demo_config(tmp_path, demo_cfg))
 
     readme = (demo_dir / "README.md").read_text(encoding="utf-8")
     expected_lines = [
@@ -324,8 +301,8 @@ def test_pack_demo_renders_space_readme(
 # ---------------------------------------------------------------------------
 
 
-def _make_demo_system(tmp_path: Path, upload_overrides: dict) -> object:
-    """Return a minimal system with demo_config loaded from TEMPLATE defaults."""
+def _make_demo_system(tmp_path: Path, upload_overrides: dict) -> BaseSystem:
+    """Return a real BaseSystem with demo config loaded from TEMPLATE defaults."""
     demo_dir = tmp_path / "packed_demo"
     demo_dir.mkdir()
     user_cfg_path = tmp_path / "demo.yaml"
@@ -334,6 +311,7 @@ def _make_demo_system(tmp_path: Path, upload_overrides: dict) -> object:
             OmegaConf.create(
                 {
                     "exp_tag": "test_run",
+                    "ui": {"title": "Test demo"},
                     "upload_demo": {
                         "hf_repo": "testuser/test-space",
                         **upload_overrides,
@@ -350,14 +328,7 @@ def _make_demo_system(tmp_path: Path, upload_overrides: dict) -> object:
         default_package="egs3.TEMPLATE.esp2_asr",
         resolve=False,
     )
-
-    class DummySystem:
-        pass
-
-    system = DummySystem()
-    system.demo_config = demo_cfg
-    system.exp_dir = str(tmp_path / "exp" / "test_run")
-    return system
+    return _system_for_demo_config(tmp_path, demo_cfg)
 
 
 def test_template_demo_yaml_defaults_update_false_and_delete_patterns(
@@ -365,8 +336,9 @@ def test_template_demo_yaml_defaults_update_false_and_delete_patterns(
 ) -> None:
     """TEMPLATE demo.yaml ships update: false and delete_patterns: [*] by default."""
     system = _make_demo_system(tmp_path, {})
-    assert system.demo_config.upload_demo["update"] is False
-    assert list(system.demo_config.upload_demo.delete_patterns) == ["*"]
+    upload_demo_cfg = system.stage_configs["upload_demo"]
+    assert upload_demo_cfg.upload_demo["update"] is False
+    assert list(upload_demo_cfg.upload_demo.delete_patterns) == ["*"]
 
 
 def test_upload_demo_update_true_passes_exist_ok_and_delete_patterns(

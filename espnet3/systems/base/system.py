@@ -368,7 +368,7 @@ class BaseSystem:
             "--inference_config, or --exp_dir of the run that ran infer.",
         )
         logger.info("Metrics start | inference_dir=%s", config.inference_dir)
-        result = measure(config, inference_config=config)
+        result = measure(config, inference_config=self.stage_configs["infer"])
         logger.info("results: %s", result)
         return result
 

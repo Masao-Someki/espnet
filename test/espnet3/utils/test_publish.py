@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from huggingface_hub.errors import HfHubHTTPError
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from espnet3.systems.base.system import BaseSystem
 from espnet3.systems.esp2_asr.system import ASRSystem
@@ -42,6 +42,19 @@ def _make_system(
         training_config=training_config,
         inference_config=inference_config,
         publication_config=publication_config,
+    )
+
+
+def _make_upload_model_system(
+    *, exp_dir, recipe_dir, publication_config: DictConfig
+) -> BaseSystem:
+    """A real BaseSystem exposing ``publication_config`` via ``stage_configs``."""
+    training_config = OmegaConf.create(
+        {"exp_dir": str(exp_dir), "recipe_dir": str(recipe_dir)}
+    )
+    return BaseSystem(
+        configs={"training": training_config, "publication": publication_config},
+        exp_dir=exp_dir,
     )
 
 
@@ -775,9 +788,12 @@ def test_pack_model_writes_bundle_config_with_relative_paths(tmp_path):
     )
     publication_config = OmegaConf.create({"pack_model": {"out_dir": str(out_dir)}})
     system = ASRSystem(
-        training_config=training_config,
-        inference_config=inference_config,
-        publication_config=publication_config,
+        configs={
+            "training": training_config,
+            "inference": inference_config,
+            "publication": publication_config,
+        },
+        exp_dir=exp_dir,
     )
 
     out_dir = system.pack_model()
@@ -824,9 +840,12 @@ def test_pack_model_includes_extra_data_dir(tmp_path):
         }
     )
     system = ASRSystem(
-        training_config=training_config,
-        inference_config=inference_config,
-        publication_config=publication_config,
+        configs={
+            "training": training_config,
+            "inference": inference_config,
+            "publication": publication_config,
+        },
+        exp_dir=exp_dir,
     )
 
     out_dir = system.pack_model()
@@ -878,9 +897,12 @@ def test_pack_model_expands_globbed_include_paths(tmp_path):
         }
     )
     system = ASRSystem(
-        training_config=training_config,
-        inference_config=inference_config,
-        publication_config=publication_config,
+        configs={
+            "training": training_config,
+            "inference": inference_config,
+            "publication": publication_config,
+        },
+        exp_dir=exp_dir,
     )
 
     out_dir = system.pack_model()
@@ -926,9 +948,12 @@ def test_pack_model_preserves_symlink_name(tmp_path):
         }
     )
     system = ASRSystem(
-        training_config=training_config,
-        inference_config=inference_config,
-        publication_config=publication_config,
+        configs={
+            "training": training_config,
+            "inference": inference_config,
+            "publication": publication_config,
+        },
+        exp_dir=exp_dir,
     )
 
     out_dir = system.pack_model()
@@ -1225,6 +1250,7 @@ def test_upload_model_uses_hf_api_and_resolves_relative_pack_dir(tmp_path, monke
     recipe_dir = tmp_path / "recipe"
     pack_dir = recipe_dir / "artifacts" / "pack"
     pack_dir.mkdir(parents=True)
+    monkeypatch.chdir(recipe_dir)
     publication_config = OmegaConf.create(
         {
             "pack_model": {"out_dir": "artifacts/pack"},
@@ -1235,8 +1261,8 @@ def test_upload_model_uses_hf_api_and_resolves_relative_pack_dir(tmp_path, monke
             },
         }
     )
-    system = _make_system(
-        exp_dir="exp/run",
+    system = _make_upload_model_system(
+        exp_dir=recipe_dir / "exp" / "run",
         recipe_dir=recipe_dir,
         publication_config=publication_config,
     )
@@ -1251,7 +1277,7 @@ def test_upload_model_uses_hf_api_and_resolves_relative_pack_dir(tmp_path, monke
 
     monkeypatch.setattr(publish, "HfApi", lambda: DummyApi())
 
-    publish.upload_model(system)
+    system.upload_model()
 
     assert calls == [
         (
@@ -1279,6 +1305,7 @@ def test_upload_model_passes_private_flag_to_create_repo(tmp_path, monkeypatch):
     recipe_dir = tmp_path / "recipe"
     pack_dir = recipe_dir / "artifacts" / "pack"
     pack_dir.mkdir(parents=True)
+    monkeypatch.chdir(recipe_dir)
     publication_config = OmegaConf.create(
         {
             "pack_model": {"out_dir": "artifacts/pack"},
@@ -1289,8 +1316,8 @@ def test_upload_model_passes_private_flag_to_create_repo(tmp_path, monkeypatch):
             },
         }
     )
-    system = _make_system(
-        exp_dir="exp/run",
+    system = _make_upload_model_system(
+        exp_dir=recipe_dir / "exp" / "run",
         recipe_dir=recipe_dir,
         publication_config=publication_config,
     )
@@ -1305,7 +1332,7 @@ def test_upload_model_passes_private_flag_to_create_repo(tmp_path, monkeypatch):
 
     monkeypatch.setattr(publish, "HfApi", lambda: DummyApi())
 
-    publish.upload_model(system)
+    system.upload_model()
 
     assert create_calls == [
         {
@@ -1327,7 +1354,7 @@ def test_upload_model_surfaces_repo_name_hint_on_create_error(tmp_path, monkeypa
             "upload_model": {"hf_repo": "other-user/bad-repo", "private": True},
         }
     )
-    system = _make_system(
+    system = _make_upload_model_system(
         exp_dir=recipe_dir / "exp" / "run",
         recipe_dir=recipe_dir,
         publication_config=publication_config,
@@ -1351,7 +1378,7 @@ def test_upload_model_surfaces_repo_name_hint_on_create_error(tmp_path, monkeypa
     with pytest.raises(
         RuntimeError, match="Failed to create Hugging Face repo"
     ) as exc_info:
-        publish.upload_model(system)
+        system.upload_model()
 
     message = str(exc_info.value)
     assert "publication_config.upload_model.hf_repo" in message
@@ -1370,7 +1397,7 @@ def test_upload_model_raises_on_existing_repo_without_update(tmp_path, monkeypat
             "upload_model": {"hf_repo": "espnet/existing-repo", "update": False},
         }
     )
-    system = _make_system(
+    system = _make_upload_model_system(
         exp_dir=recipe_dir / "exp" / "run",
         recipe_dir=recipe_dir,
         publication_config=publication_config,
@@ -1392,7 +1419,7 @@ def test_upload_model_raises_on_existing_repo_without_update(tmp_path, monkeypat
     monkeypatch.setattr(publish, "HfApi", lambda: DummyApi())
 
     with pytest.raises(RuntimeError, match="already exists") as exc_info:
-        publish.upload_model(system)
+        system.upload_model()
 
     assert "upload_model.update: true" in str(exc_info.value)
 
@@ -1411,7 +1438,7 @@ def test_upload_model_empty_delete_patterns_passes_none(tmp_path, monkeypatch):
             },
         }
     )
-    system = _make_system(
+    system = _make_upload_model_system(
         exp_dir=recipe_dir / "exp" / "run",
         recipe_dir=recipe_dir,
         publication_config=publication_config,
@@ -1427,7 +1454,7 @@ def test_upload_model_empty_delete_patterns_passes_none(tmp_path, monkeypatch):
 
     monkeypatch.setattr(publish, "HfApi", lambda: DummyApi())
 
-    publish.upload_model(system)
+    system.upload_model()
 
     assert upload_calls[0]["delete_patterns"] is None
 
@@ -1441,7 +1468,9 @@ def test_upload_model_empty_delete_patterns_passes_none(tmp_path, monkeypatch):
 def test_upload_model_reads_the_upload_model_stage_config(tmp_path, monkeypatch):
     pack_dir = tmp_path / "exp" / "model_pack"
     pack_dir.mkdir(parents=True)
-    training_config = OmegaConf.create({"exp_dir": str(tmp_path / "exp")})
+    training_config = OmegaConf.create(
+        {"exp_dir": str(tmp_path / "exp"), "recipe_dir": str(tmp_path)}
+    )
     publication_config = OmegaConf.create(
         {
             "pack_model": {"out_dir": str(pack_dir)},

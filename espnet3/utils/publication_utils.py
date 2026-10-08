@@ -752,11 +752,18 @@ def upload_model(system) -> None:
     repo = upload_cfg.hf_repo
     private = bool(getattr(upload_cfg, "private", False))
 
-    # Resolve the pack directory from config. exp_dir is already resolved
-    # (its interpolations were evaluated when this stage's config was built).
+    # Resolve the pack directory the same way pack_model does: relative
+    # paths are resolved against recipe_dir, not the current directory.
     pack_cfg = getattr(publication_cfg, "pack_model", None) or OmegaConf.create({})
+    recipe_root = Path(publication_cfg.recipe_dir).resolve()
     exp_dir = Path(publication_cfg.exp_dir)
-    pack_dir = Path(getattr(pack_cfg, "out_dir", exp_dir / "model_pack")).resolve()
+    if not exp_dir.is_absolute():
+        exp_dir = recipe_root / exp_dir
+    exp_dir = exp_dir.resolve()
+    pack_dir = Path(getattr(pack_cfg, "out_dir", exp_dir / "model_pack"))
+    if not pack_dir.is_absolute():
+        pack_dir = recipe_root / pack_dir
+    pack_dir = pack_dir.resolve()
     if not pack_dir.exists():
         raise RuntimeError(f"Model pack not found: {pack_dir}")
 
