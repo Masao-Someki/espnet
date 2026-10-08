@@ -119,7 +119,7 @@ class DemoSession:
         self.input_specs = self._specs("inputs", model.inputs)
         self.output_specs = self._specs("outputs", model.outputs)
         if not self.output_specs:
-            kinds = sorted({f.kind for f in model.outputs})
+            kinds = sorted({f.kind.name for f in model.outputs})
             raise ValueError(
                 f"{type(model).__name__} declares no output the demo can show: "
                 f"no UI asset is registered for {kinds}. Set ui.outputs in "
@@ -133,12 +133,14 @@ class DemoSession:
             return [OmegaConf.to_container(spec, resolve=True) for spec in configured]
         specs = []
         for f in fields:
-            if f.kind not in self.registry.names():
+            if f.kind.name not in self.registry.names():
                 logger.info(
-                    "No UI asset for kind %r; field %r is not shown", f.kind, f.name
+                    "No UI asset for kind %r; field %r is not shown",
+                    f.kind.name,
+                    f.name,
                 )
                 continue
-            specs.append({"key": f.name, "type": f.kind, "label": f.label})
+            specs.append({"key": f.name, "type": f.kind.name, "label": f.label})
         return specs
 
     def build_input_component(self, spec: dict[str, Any]) -> Any:

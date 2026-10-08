@@ -30,12 +30,12 @@ class SegmentsKind(Kind):
                 of the three keys.
 
         Examples:
+            >>> field = Field(name="segments", kind=SegmentsKind)
             >>> SegmentsKind().check(
             ...     [{"text": "hi", "start": 0.0, "end": 0.4, "score": 0.9}],
-            ...     Field("segments", "segments"), model, output=True)
+            ...     field, model, output=True)
             [{'text': 'hi', 'start': 0.0, 'end': 0.4, 'score': 0.9}]
-            >>> SegmentsKind().check(
-            ...     [(0.0, 0.4)], Field("segments", "segments"), model, output=True)
+            >>> SegmentsKind().check([(0.0, 0.4)], field, model, output=True)
             Traceback (most recent call last):
             TypeError: 'segments' returned must be a list of dicts with text, ...
         """

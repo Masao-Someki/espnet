@@ -32,9 +32,9 @@ def check_contract(cls: type) -> None:
 
     Examples:
         >>> class Bad(InferenceAPI):
-        ...     inputs = (Field("prompt", "text", optional=True),
-        ...               Field("speech", "audio"))
-        ...     outputs = (Field("text", "text"),)
+        ...     inputs = (Field(name="prompt", kind=TextKind, optional=True),
+        ...               Field(name="speech", kind=AudioKind))
+        ...     outputs = (Field(name="text", kind=TextKind),)
         Traceback (most recent call last):
         TypeError: Bad.inputs must list required fields before optional ones, ...
     """
@@ -105,8 +105,8 @@ class InferenceAPI(ABC):
         A system whose model needs the whole input::
 
             class Inference(InferenceAPI):
-                inputs = (Field("speech", "audio"),)
-                outputs = (Field("text", "text"),)
+                inputs = (Field(name="speech", kind=AudioKind),)
+                outputs = (Field(name="text", kind=TextKind),)
 
                 @classmethod
                 def from_pretrained(cls, tag_or_dir, *, device="cpu", **kwargs):
@@ -124,8 +124,8 @@ class InferenceAPI(ABC):
         call then gathers what it yields::
 
             class Inference(InferenceAPI):
-                inputs = (Field("speech", "audio"),)
-                outputs = (Field("text", "text"),)
+                inputs = (Field(name="speech", kind=AudioKind),)
+                outputs = (Field(name="text", kind=TextKind),)
                 ...
                 def run_stream(self, chunks):
                     for chunk in chunks:
@@ -468,7 +468,8 @@ def gather(fields: tuple[Field, ...], chunks: Iterable[Mapping[str, Any]]) -> di
         One value per name seen.
 
     Examples:
-        >>> gather((Field("text", "text"),), [{"text": "hel"}, {"text": "lo"}])
+        >>> text = (Field(name="text", kind=TextKind),)
+        >>> gather(text, [{"text": "hel"}, {"text": "lo"}])
         {'text': 'hello'}
     """
     kinds = {f.name: f.kind for f in fields}

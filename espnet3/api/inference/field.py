@@ -40,6 +40,7 @@ class Field:
             below 1.
 
     Examples:
+        >>> from espnet3.api.inference.kinds import AudioKind, TextKind
         >>> Field(name="speech", kind=AudioKind).kind   # a class is instantiated
         AudioKind()
         >>> Field(name="reference_speech", kind=AudioKind, optional=True).label

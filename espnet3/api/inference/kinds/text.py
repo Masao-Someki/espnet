@@ -24,9 +24,10 @@ class TextKind(Kind):
             TypeError: If ``value`` is not a ``str``.
 
         Examples:
-            >>> TextKind().check("hello", Field("text", "text"), model, output=False)
+            >>> field = Field(name="text", kind=TextKind)
+            >>> TextKind().check("hello", field, model, output=False)
             'hello'
-            >>> TextKind().check(7, Field("text", "text"), model, output=True)
+            >>> TextKind().check(7, field, model, output=True)
             Traceback (most recent call last):
             TypeError: 'text' returned as int, must be str
         """

@@ -273,13 +273,13 @@ class AudioKind(Kind):
 
         Examples:
             >>> kind, stereo_in = AudioKind(), (16000, stereo)
-            >>> mono_field = Field("speech", "audio")
+            >>> mono_field = Field(name="speech", kind=AudioKind)
             >>> kind.check(stereo_in, mono_field, model, output=False).array.ndim
             1
-            >>> any_channels = Field("mix", "audio", channels=None)
+            >>> any_channels = Field(name="mix", kind=AudioKind, channels=None)
             >>> kind.check(stereo_in, any_channels, model, output=False).channels
             2
-            >>> two = Field("mix", "audio", channels=2)
+            >>> two = Field(name="mix", kind=AudioKind, channels=2)
             >>> kind.check((16000, mono), two, model, output=False)
             Traceback (most recent call last):
             TypeError: 'mix' given with 1 channel(s), needs 2

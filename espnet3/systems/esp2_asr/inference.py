@@ -44,7 +44,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 import numpy as np
 
-from espnet3.api.inference import Audio, Field
+from espnet3.api.inference import Audio, AudioKind, Field, TextKind
 from espnet3.systems.base.backend_inference import BackendInference, parse_rate
 
 # espnet2.asr.frontend.default.DefaultFrontend(fs=16000): what an ESPnet2
@@ -87,8 +87,8 @@ class Inference(BackendInference):
 
     backend_class = "espnet2.bin.asr_inference.Speech2Text"
     # every channel arrives; run() decides what the model gets (takes_channels)
-    inputs = (Field("speech", "audio", "Speech", channels=None),)
-    outputs = (Field("text", "text", "Transcription"),)
+    inputs = (Field(name="speech", kind=AudioKind, label="Speech", channels=None),)
+    outputs = (Field(name="text", kind=TextKind, label="Transcription"),)
 
     def __init__(
         self,

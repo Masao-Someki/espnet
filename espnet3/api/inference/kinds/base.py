@@ -25,6 +25,7 @@ class Kind(ABC):
     ``"audio"``) unless it sets one itself.
 
     Examples:
+        >>> from espnet3.api.inference.field import Field
         >>> class Messages(Kind):
         ...     def check(self, value, field, model, *, output):
         ...         if not isinstance(value, list):

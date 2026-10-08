@@ -12,8 +12,8 @@ toolkit: what a backend's config looks like is the system's knowledge
 
     class Inference(BackendInference):
         backend_class = "espnet2.bin.asr_inference.Speech2Text"
-        inputs = (Field("speech", "audio"),)
-        outputs = (Field("text", "text"),)
+        inputs = (Field(name="speech", kind=AudioKind),)
+        outputs = (Field(name="text", kind=TextKind),)
 
         def run(self, speech):
             return {"text": self.backend(speech.array)[0][0]}
