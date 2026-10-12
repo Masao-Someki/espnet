@@ -7,13 +7,12 @@ from espnet3.systems.base.inference_runner import InferenceRunner
 
 
 def _output_fn(*, data, model_output, idx):
-    return {"utt_id": data["utt_id"], "hyp": model_output[0][0], "ref": data["text"]}
+    return {"hyp": model_output[0][0], "ref": data["text"]}
 
 
 def _batch_output_fn(*, data, model_output, idx):
     return [
         {
-            "utt_id": sample["utt_id"],
             "hyp": output[0][0],
             "ref": sample["text"],
         }
@@ -22,13 +21,20 @@ def _batch_output_fn(*, data, model_output, idx):
 
 
 def _param_output_fn(*, data, model_output, idx):
-    return {"utt_id": data["utt_id"], "hyp": model_output, "ref": "ref"}
+    return {"hyp": model_output, "ref": "ref"}
+
+
+class _ItemsWithUid(list):
+    """A list of items whose id comes from the dataset, not the item dict."""
+
+    def get_uid(self, idx):
+        return self[idx]["utt_id"]
 
 
 class DummyProvider(InferenceProvider):
     @staticmethod
     def build_dataset(config):
-        return config.dataset.data
+        return _ItemsWithUid(config.dataset.data)
 
     @staticmethod
     def build_model(config):
@@ -170,7 +176,7 @@ def test_build_model_cuda_respects_explicit_device(monkeypatch):
 
 
 def test_forward_returns_hyp_and_ref():
-    dataset = [{"utt_id": "utt1", "speech": "audio", "text": "ref"}]
+    dataset = _ItemsWithUid([{"utt_id": "utt1", "speech": "audio", "text": "ref"}])
 
     class DummyModel:
         def __call__(self, speech):
@@ -208,10 +214,12 @@ def test_forward_without_output_fn_returns_raw_model_output():
 
 
 def test_forward_batch_with_batched_inputs():
-    dataset = [
-        {"utt_id": "utt1", "speech": "audio1", "text": "ref1"},
-        {"utt_id": "utt2", "speech": "audio2", "text": "ref2"},
-    ]
+    dataset = _ItemsWithUid(
+        [
+            {"utt_id": "utt1", "speech": "audio1", "text": "ref1"},
+            {"utt_id": "utt2", "speech": "audio2", "text": "ref2"},
+        ]
+    )
 
     class DummyModel:
         def __call__(self, **inputs):
@@ -243,10 +251,12 @@ def test_forward_batch_falls_back_to_single_items(caplog):
     """
     import logging
 
-    dataset = [
-        {"utt_id": "utt1", "speech": "audio1", "text": "ref1"},
-        {"utt_id": "utt2", "speech": "audio2", "text": "ref2"},
-    ]
+    dataset = _ItemsWithUid(
+        [
+            {"utt_id": "utt1", "speech": "audio1", "text": "ref1"},
+            {"utt_id": "utt2", "speech": "audio2", "text": "ref2"},
+        ]
+    )
 
     class DummyModel:
         def __call__(self, speech):
