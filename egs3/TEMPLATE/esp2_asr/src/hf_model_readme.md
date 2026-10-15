@@ -29,10 +29,7 @@ ${model_detail_section}
 ## Usage
 
 ```python
-from espnet3.publication import InferenceModel
-
-${usage_load_call}
-result = model(sample)
+${usage_python}
 ```
 
 ## Packaging

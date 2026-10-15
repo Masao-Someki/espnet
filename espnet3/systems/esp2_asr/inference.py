@@ -21,9 +21,42 @@ Examples:
         >>> from espnet3.api.inference import load
         >>> load("espnet/some_asr_pack", device="cuda:0")("utt.wav")["text"]
 
+    An ESPnet2 ASR model published without a bundle has no ``meta.yaml``
+    to name its system, so the caller does, and ``Speech2Text.from_pretrained``
+    reads it::
+
+        >>> load("espnet/some_espnet2_asr_model", system="asr")
+
+    Which ESPnet2 models that reads: those of the ``asr`` task, published
+    with ``asr_train_config`` and ``asr_model_file`` - what
+    ``Speech2Text.from_pretrained`` takes. That is any frontend, encoder and
+    decoder of the task: CTC, attention and hybrid CTC/attention models
+    (Transformer, Conformer, Branchformer, E-Branchformer, ...), the task's
+    own transducer decoder (``decoder: transducer``), a Hugging Face decoder
+    (with ``hugging_face_decoder=True``), a model trained with a
+    contextual-block (streaming) encoder, decoded here as a whole utterance,
+    and a multi-speaker model, of which the first speaker's text is
+    returned; with the language model or n-gram the tag publishes, if any.
+    Not read:
+
+    - ``s2t`` (OWSM) and ``enh_s2t`` (joint enhancement and ASR) models are
+      published with other keys and give a ``ModelTagError`` naming them;
+      each needs a system of its own.
+    - ``asr_transducer``-task models and Mask-CTC models are published with
+      the same keys, so nothing tells them apart up front: the first fails
+      while the model is built, the second at the first utterance, as its
+      decoder has no beam-search scorer. Each has its own ``Speech2Text``,
+      which no ``backend_class`` reaches here.
+    - Streaming decoding (``Speech2TextStreaming``) is not reached.
+
+    Any ``Speech2Text`` argument replaces the packed one, as ESPnet2's
+    ``from_pretrained`` takes it - decoding settings or anything else::
+
+        >>> load("espnet/some_asr_pack", beam_size=5, ctc_weight=0.3, nbest=3)
+
     In the ``infer`` stage, ``inference.yaml`` names this class where it
     named ``Speech2Text``, with the same arguments; for a transducer, name
-    that class as ``backend_class`` and set ``return_decoded_hyp: true``::
+    that class as ``backend_class``::
 
         model:
           _target_: espnet3.systems.esp2_asr.inference.Inference
@@ -34,7 +67,12 @@ Examples:
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+import inspect
+import logging
+import os
+from typing import Any, Iterable, Iterator, Mapping, Optional, Sequence
+
+import numpy as np
 
 from espnet3.api.inference import Audio, Field
 from espnet3.systems.base.backend_inference import BackendInference, parse_rate
@@ -51,7 +89,7 @@ class Inference(BackendInference):
     :class:`BackendInference`):
 
     - ``Inference.from_pretrained(tag_or_dir, device=...)`` from a
-      ``pack_model`` bundle or Hub tag;
+      ``pack_model`` bundle, or an ESPnet2 ASR model on the Hub;
     - ``Inference(asr_train_config=..., asr_model_file=..., beam_size=...)``
       from ``Speech2Text``'s own arguments, which is what ``inference.yaml``
       does, plus ``backend_class=`` for the transducer ``Speech2Text``;
@@ -60,6 +98,12 @@ class Inference(BackendInference):
     Called with one utterance (a path, a ``(rate, samples)`` pair, an array
     or an :class:`~espnet3.api.inference.Audio`) it returns ``{"text": str}``;
     ``model.batch(items)`` decodes several in one beam search.
+
+    A multichannel recording reaches the model as ESPnet2's own
+    ``Speech2Text`` would take it: every channel, ``(samples, channels)``,
+    when the model uses them (:attr:`takes_channels`), else channel 0 -
+    the one ``DefaultFrontend`` picks at inference, and the only input an
+    s3prl, Whisper or fused frontend takes.
 
     Examples:
         >>> model = Inference.from_pretrained("espnet/some_asr_pack")
@@ -72,8 +116,68 @@ class Inference(BackendInference):
     """
 
     backend_class = "espnet2.bin.asr_inference.Speech2Text"
-    inputs = (Field("speech", "audio", "Speech"),)
+    # every channel arrives; run() decides what the model gets (takes_channels)
+    inputs = (Field("speech", "audio", "Speech", channels=None),)
     outputs = (Field("text", "text", "Transcription"),)
+
+    def __init__(
+        self,
+        backend: Any = None,
+        *,
+        device: str = "cpu",
+        backend_class: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Build or keep the backend, asking a transducer for decoded text.
+
+        The transducer ``Speech2Text`` returns raw hypotheses unless built
+        with ``return_decoded_hyp=True``, and this class reads the text, so
+        it builds one that way; ``return_decoded_hyp=False`` is refused
+        rather than failing at the first utterance. Everything else is
+        :class:`BackendInference`'s.
+
+        Raises:
+            ValueError: If ``return_decoded_hyp`` is given as false for a
+                backend that takes it.
+        """
+        if backend is None:
+            built = self._backend_type(backend_class)
+            if "return_decoded_hyp" in inspect.signature(built).parameters:
+                if not kwargs.get("return_decoded_hyp", True):
+                    raise ValueError(
+                        "return_decoded_hyp=False: this class reads the decoded "
+                        "text, so the transducer Speech2Text must return it"
+                    )
+                kwargs["return_decoded_hyp"] = True
+        super().__init__(backend, device=device, backend_class=backend_class, **kwargs)
+        self._streaming_backend = None  # built on the first stream, see _streamer
+
+    @property
+    def takes_channels(self) -> bool:
+        """Whether the model uses every channel of a multichannel recording.
+
+        True for a joint enhancement-and-ASR model, and for a
+        ``DefaultFrontend`` whose enhancement stage runs WPE or a
+        beamformer before it picks a channel: ESPnet2's ``Speech2Text``
+        gets every channel there, so this class passes them. False
+        otherwise, and channel 0 is passed. That is no loss: the stage
+        ``DefaultFrontend`` builds by default enables neither, lets the
+        channels through, and channel 0 is then what it picks.
+        """
+        if getattr(self.backend, "enh_s2t_task", False):
+            return True
+        frontend = getattr(getattr(self.backend, "asr_model", None), "frontend", None)
+        enhancer = getattr(frontend, "frontend", None)
+        return bool(
+            getattr(enhancer, "use_wpe", False)
+            or getattr(enhancer, "use_beamformer", False)
+        )
+
+    def _waveform(self, speech: Audio) -> np.ndarray:
+        """Return the samples the backend takes, in ESPnet2's channel order."""
+        if speech.channels > 1 and self.takes_channels:
+            return speech.array.T  # ESPnet2 takes (samples, channels)
+        return speech.mono().array
 
     @property
     def sample_rate(self) -> int:
@@ -98,26 +202,131 @@ class Inference(BackendInference):
         """Return the best hypothesis' text.
 
         Args:
-            speech: The utterance, at :attr:`sample_rate`.
+            speech: The utterance, at :attr:`sample_rate`, every channel.
 
         Returns:
             ``{"text": str}``. For a joint enhancement-and-ASR model, which
             returns one n-best list per speaker, the first speaker's.
         """
-        return _text(self.backend(speech.array))
+        return _text(self.backend(self._waveform(speech)))
 
     def run_batch(self, items: Sequence[Mapping[str, Any]]) -> Sequence[Mapping]:
         """Decode a batch in one beam search when the backend can.
 
         ``espnet2.bin.asr_inference.Speech2Text`` decodes a list of
-        waveforms together (``batch_decode``), 1.5-2.5x faster on a GPU
-        than one at a time; a backend without it, such as the transducer
-        ``Speech2Text``, gets the items one by one.
+        waveforms together (``batch_decode``); a backend without it, such
+        as the transducer ``Speech2Text``, gets the items one by one, and
+        so does a batch with several channels for a model that takes them,
+        since ``batch_decode`` reads each utterance as one channel.
         """
         if len(items) < 2 or not callable(getattr(self.backend, "batch_decode", None)):
             return super().run_batch(items)
-        results = self.backend([item["speech"].array for item in items])
+        waves = [self._waveform(item["speech"]) for item in items]
+        if any(wave.ndim > 1 for wave in waves):
+            return super().run_batch(items)
+        results = self.backend(waves)
         return [_text(nbest) for nbest in results]
+
+    def _streamer(self) -> Any:
+        """Return the online decoder over the backend's model, or ``None``.
+
+        A model trained with a contextual-block encoder decodes online with
+        ESPnet2's ``Speech2TextStreaming``, built once over the model the
+        backend already holds and with the backend's own beam size, CTC
+        weight, length penalty and length ratios. Any other model, and a
+        backend that is not a ``Speech2Text`` with a beam search, gets
+        ``None``: it decodes whole utterances only.
+        """
+        if self._streaming_backend is not None:
+            return self._streaming_backend
+        model = getattr(self.backend, "asr_model", None)
+        search = getattr(self.backend, "beam_search", None)
+        if model is None or search is None:
+            return None
+        from espnet2.asr.encoder import contextual_block_conformer_encoder as cbc
+        from espnet2.asr.encoder import contextual_block_transformer_encoder as cbt
+
+        blockwise = (
+            cbt.ContextualBlockTransformerEncoder,
+            cbc.ContextualBlockConformerEncoder,
+        )
+        if not isinstance(getattr(model, "encoder", None), blockwise):
+            return None
+        from espnet2.bin.asr_inference_streaming import Speech2TextStreaming
+
+        weights = search.weights
+        self._streaming_backend = Speech2TextStreaming(
+            asr_model=model,
+            asr_train_args=self.backend.asr_train_args,
+            device=self.backend.device,
+            dtype=self.backend.dtype,
+            beam_size=search.beam_size,
+            ctc_weight=weights.get("ctc", 0.5),
+            penalty=weights.get("length_bonus", 0.0),
+            maxlenratio=self.backend.maxlenratio,
+            minlenratio=self.backend.minlenratio,
+            nbest=1,
+        )
+        return self._streaming_backend
+
+    def run_stream(
+        self, chunks: Iterable[Mapping[str, Any]]
+    ) -> Iterator[Mapping[str, Any]]:
+        """Decode online, a block at a time, when the model was trained for it.
+
+        Each audio chunk goes to the online decoder as it arrives, and
+        the text it has settled on since the last chunk is yielded; the
+        last chunk is flagged final, which flushes the decoder. The online
+        search cannot take back text already yielded, so a piece is only
+        ever what the running best hypothesis adds to what was yielded; if
+        the final hypothesis contradicts that, what was yielded stands and
+        the rest of the final text follows it, with a warning. A model
+        without a contextual-block encoder takes the default: the chunks
+        are gathered and :meth:`run` decodes the whole utterance.
+
+        ``run`` and ``stream`` are two decoders over one model - the
+        whole-utterance beam search and the blockwise online one - so a
+        streamed transcript need not equal the one-shot transcript.
+        """
+        streamer = self._streamer()
+        if streamer is None:
+            yield from super().run_stream(chunks)
+            return
+        streamer.reset()
+        committed = ""
+        pending = None  # one chunk behind, so the last one can be flagged final
+        for chunk in chunks:
+            if "speech" not in chunk:
+                continue
+            if pending is not None:
+                piece = _added(committed, streamer(pending, is_final=False))
+                if piece:
+                    yield {"text": piece}
+                    committed += piece
+            pending = chunk["speech"].mono().array
+        if pending is None:
+            pending = np.zeros(0, dtype=np.float32)
+        results = streamer(pending, is_final=True)
+        rest = _added(committed, results)
+        final = results[0][0] if results else None
+        if final is not None and not final.startswith(committed):
+            logging.warning(
+                "the online search revised text already streamed: %r stands, "
+                "the final hypothesis was %r",
+                committed,
+                final,
+            )
+            rest = final[len(os.path.commonprefix([committed, final])) :]
+        if rest or not committed:
+            yield {"text": rest}
+
+
+def _added(committed: str, results: Sequence[Any]) -> str:
+    """Return what the running best hypothesis in ``results`` adds to ``committed``."""
+    text = results[0][0] if results else None
+    if text is None or not text.startswith(committed):
+        return ""
+    return text[len(committed) :]
 
 
 def _text(nbest: Any) -> dict:
@@ -127,4 +336,10 @@ def _text(nbest: Any) -> dict:
     # model returns one such list per speaker, of which this is the first.
     if isinstance(best, list):
         best = best[0]
+    if not isinstance(best, tuple):
+        raise TypeError(
+            f"the backend returned a {type(best).__name__}, not a decoded "
+            "(text, tokens, token_ids, hyp) tuple; a transducer Speech2Text "
+            "built elsewhere needs return_decoded_hyp=True"
+        )
     return {"text": best[0]}

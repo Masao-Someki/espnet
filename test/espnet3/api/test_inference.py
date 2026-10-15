@@ -1,4 +1,4 @@
-"""The inference contract, checked without a model.
+"""The inference interface, checked without a model.
 
 A fake transcriber stands in for a system, so what is tested is what the
 base class promises every front end: binding, conversion and checking.
@@ -20,7 +20,8 @@ from espnet3.api.inference import (
     Audio,
     Field,
     InferenceAPI,
-    check_contract,
+    ModelTagError,
+    check_inference_api,
     gather,
     load,
     locate_pack,
@@ -104,6 +105,19 @@ def test_audio_rejects_bad_shapes_and_rates():
         Audio(np.zeros(4), 0)
 
 
+def test_audio_concat_joins_pieces_in_either_layout():
+    """Mono pieces come as (samples,) or (1, samples); three of them join alike."""
+    mono = Audio(np.ones(4, dtype=np.float32), 8000)
+    row = Audio(np.ones((1, 4), dtype=np.float32), 8000).multichannel()
+    assert row.array.shape == (1, 4)
+    joined = Audio.concat([mono, row, row])
+    assert joined.array.shape == (12,) and joined.channels == 1
+    stereo = Audio(np.ones((2, 4), dtype=np.float32), 8000)
+    assert Audio.concat([stereo, stereo]).array.shape == (2, 8)
+    with pytest.raises(ValueError, match="channels"):
+        Audio.concat([stereo, mono])
+
+
 def test_audio_resample_only_when_needed():
     audio = Audio(np.zeros(16000, dtype=np.float32), 16000)
     assert audio.resample(16000) is audio
@@ -130,10 +144,10 @@ def test_audio_coerce_every_shape_a_caller_holds(tmp_path):
         Audio.coerce(42, 16000)
 
 
-# --- the contract ----------------------------------------------------------
+# --- the declaration -------------------------------------------------------
 
 
-def test_contract_is_checked_when_the_class_is_defined():
+def test_declaration_is_checked_when_the_class_is_defined():
     with pytest.raises(TypeError, match="tuple of Field"):
 
         class NotFields(InferenceAPI):
@@ -170,7 +184,7 @@ def test_an_intermediate_base_that_declares_nothing_is_allowed():
         pass
 
     with pytest.raises(TypeError):
-        check_contract(Base)
+        check_inference_api(Base)
 
 
 def test_a_text_only_model_declares_no_task_and_no_sample_rate():
@@ -577,7 +591,9 @@ def test_load_finds_the_system_named_in_meta(tmp_path, monkeypatch):
 
 def test_load_needs_a_system_name_from_somewhere(tmp_path, monkeypatch):
     _install_fake_system(monkeypatch, "echo", Echo)
-    with pytest.raises(ValueError, match="does not name its system"):
+    with pytest.raises(
+        ModelTagError, match="does not name its system, and the bundle builds no model"
+    ):
         load(_pack(tmp_path, None))
     assert isinstance(load(_pack(tmp_path, None), system="echo"), Echo)
 
@@ -599,7 +615,7 @@ def test_load_rejects_a_system_without_the_class(tmp_path, monkeypatch):
 
 
 def test_load_says_when_the_system_has_no_inference_module(tmp_path, monkeypatch):
-    with pytest.raises(ImportError, match="system 'nosuch' has no Inference yet"):
+    with pytest.raises(ModelTagError, match="system 'nosuch' has no Inference yet"):
         load(_pack(tmp_path, "nosuch"))
 
     import importlib
@@ -633,3 +649,29 @@ def test_locate_pack_downloads_a_tag(tmp_path, monkeypatch):
     monkeypatch.setattr(downloader, "ModelDownloader", Empty)
     with pytest.raises(RuntimeError, match="not a pack_model bundle"):
         locate_pack("org/other")
+
+
+def test_locate_pack_finds_a_bundle_in_the_hub_cache(tmp_path, monkeypatch):
+    """huggingface_hub caches a download as a snapshot of symlinks into blobs/."""
+    repo = tmp_path / "models--org--model"
+    snapshot = repo / "snapshots" / "0123abc"
+    (snapshot / "conf").mkdir(parents=True)
+    (repo / "blobs").mkdir()
+    files = {
+        "meta.yaml": "yaml_files:\n  inference_config: conf/inference.yaml\n",
+        "conf/inference.yaml": "recipe_dir: .\n",
+    }
+    for index, (name, text) in enumerate(files.items()):
+        blob = repo / "blobs" / str(index)
+        blob.write_text(text)
+        (snapshot / name).symlink_to(blob)
+
+    class Downloader:
+        def download_and_unpack(self, tag):
+            return {"inference_config": str(snapshot / "conf" / "inference.yaml")}
+
+    import espnet_model_zoo.downloader as downloader
+
+    monkeypatch.setattr(downloader, "ModelDownloader", Downloader)
+    assert locate_pack("org/model") == snapshot.resolve()
+    assert (locate_pack("org/model") / "meta.yaml").is_file()
