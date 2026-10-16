@@ -36,64 +36,54 @@ autoresearch:
   tick_interval_sec_idle: 60
   tick_interval_sec_trial_active: 600
 
-  executor:
+  submission:
+    environment: slurm
+    instructions: |
+      Submit jobs with Slurm: write the script to the supplied script_path, map
+      resource limits to #SBATCH options, and submit it with sbatch. Use squeue
+      and sacct for job status and scancel to cancel jobs. Run the supplied worker
+      command from the recipe directory with the repository's pixi environment.
+      Return the Slurm job ID.
+    resources:
+      gpus: 1
+      cpus: 16
+      mem: 32G
+      time: "12:00:00"
+      partition: gpuA100x4
+      account: bbjs-delta-gpu
+      reservation: sup-27103
+      nodelist: gpua018
     controller:
-      type: local
-    trial:
-      type: slurm
-      resources:
-        gpus: 1
-        cpus: 16
-        mem: 32G
-        time: "12:00:00"
-        partition: "gpuA100x4"
-        account: bbjs-delta-gpu  # ← GPU アカウント
-        reservation: sup-27103
-        nodelist: gpua018
-
-    tick:
-      type: slurm
       resources:
         gpus: 0
         cpus: 1
         mem: 4G
         time: "06:00:00"
         partition: cpu
-        account: bbjs-delta-cpu  # ← CPU アカウント
-
-    trial_monitor:
-      type: slurm
-      resources:
-        gpus: 0
-        cpus: 1
-        mem: 4G
-        time: "01:00:00"
-        partition: cpu
         account: bbjs-delta-cpu
-
+      handoff_after_sec: 18000
   agent:
-    type: python
-    target: src.agent.UserDefinedCliAgent
-    command:
-      - codex
-      - exec
-      - -C
-      - .
-      - --skip-git-repo-check
-      - --sandbox
-      - workspace-write
-      - --json
-    output_flag: --output-last-message
-    output_mode: last_message_file
-    output_filename: agent_output.json
-    prompt_arg: "-"
-    env: {}
-
-  search:
-    type: noop
-
-  search_queries:
-    - "{dataset} ASR augmentation hyperparameter search"
+    provider: codex
+    # To use a local Codex-compatible endpoint, set Codex CLI overrides here:
+    # codex:
+    #   model: shogun-worker
+    #   config:
+    #     model_provider: vllm
+    #     model_providers.vllm.name: vLLM
+    #     model_providers.vllm.base_url: http://127.0.0.1:32425/v1
+    #     model_providers.vllm.env_key: OPENAI_API_KEY
+    #     model_providers.vllm.wire_api: responses
+    #     model_providers.vllm.supports_standalone_web_search: true
+    #     model_context_window: 131072
+    #     model_auto_compact_token_limit: 110000
+    #     disable_response_storage: true
+    #     web_search: live
+    #     developer_instructions: "For live Web searches, use the server-side browser.search tool declared in the system message, and browser.open/browser.find to read results."
+    # Use `provider: claude` and the `claude:` section for Claude Code.
+    # claude:
+    #   model: claude-sonnet-4-5
+    #   permission_mode: bypassPermissions
+    #   effort: high
 
   early_stopping:
     enabled: false   # set to false to disable keypoint-based early stopping

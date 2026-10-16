@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 
 def main() -> None:
@@ -18,11 +19,14 @@ def main() -> None:
         prog="espnet3",
         description="ESPnet3 command-line interface.",
     )
+    logging.basicConfig(level=logging.INFO)
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
     subparsers.required = True
 
+    from espnet3.cli.autoresearch.command import add_arguments as add_autoresearch
     from espnet3.cli.clone.command import add_arguments as add_clone
 
+    add_autoresearch(subparsers)
     add_clone(subparsers)
 
     args = parser.parse_args()

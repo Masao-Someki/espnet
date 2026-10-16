@@ -42,6 +42,10 @@ pyproject.toml.tmp
 build/
 logs/
 core
+!espnet3/cli/autoresearch/core/
+!espnet3/cli/autoresearch/core/**
+espnet3/cli/autoresearch/core/**/__pycache__/
+espnet3/cli/autoresearch/core/**/*.pyc
 
 out/config.yaml
 hub/

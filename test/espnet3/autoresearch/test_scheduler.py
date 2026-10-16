@@ -7,21 +7,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from espnet3.autoresearch.core.errors import ConfigValidationError
-from espnet3.autoresearch.core.scheduler import AutoResearchGraphRuntime
-from espnet3.autoresearch.core.state import StateStore
-from espnet3.autoresearch.core.trial import Trial
-from espnet3.autoresearch.agents.interface import AgentRequest, AgentResponse
-from espnet3.autoresearch.agents.session import StudySessionAgentClient
+from espnet3.cli.autoresearch.agents.interface import AgentRequest, AgentResponse
+from espnet3.cli.autoresearch.agents.session import StudySessionAgentClient
+from espnet3.cli.autoresearch.core.errors import ConfigValidationError
+from espnet3.cli.autoresearch.core.models import Trial
+from espnet3.cli.autoresearch.core.scheduler import AutoResearchGraphRuntime
+from espnet3.cli.autoresearch.core.state import StateStore
 
 
 def test_parse_training_progress_uses_latest_populated_row(tmp_path):
     metrics = tmp_path / "metrics.csv"
     metrics.write_text(
-        "epoch,step,train_loss,val_loss\n"
-        "0,10,1.0,\n"
-        "0,20,,0.9\n"
-        "1,,0.8,\n",
+        "epoch,step,train_loss,val_loss\n" "0,10,1.0,\n" "0,20,,0.9\n" "1,,0.8,\n",
         encoding="utf-8",
     )
 
@@ -83,11 +80,13 @@ def test_study_session_is_reused_by_a_new_agent_process(tmp_path):
         repo_context="",
         trial_history_csv="",
         latest_metrics={},
-        latest_logs={},
+        context_files={},
         allowed_actions=[],
         output_schema={},
     )
-    StudySessionAgentClient(FirstAgent(), state, "study", tmp_path).run(request)
+    StudySessionAgentClient(FirstAgent(), state, "study", tmp_path, tmp_path).run(
+        request
+    )
     assert state.get_agent_session_id("study") == "session-created"
 
     class LaterAgent:
@@ -95,7 +94,9 @@ def test_study_session_is_reused_by_a_new_agent_process(tmp_path):
             requests.append(request)
             return AgentResponse(status="success", message="", content="")
 
-    StudySessionAgentClient(LaterAgent(), state, "study", tmp_path).run(request)
+    StudySessionAgentClient(LaterAgent(), state, "study", tmp_path, tmp_path).run(
+        request
+    )
     assert requests[-1].resume_thread_id == "session-created"
 
 
@@ -106,12 +107,14 @@ def test_gpu_self_controller_releases_its_slot_before_submitting_next_trial():
     job = SimpleNamespace(job_id="job_1", status="running", external_id="123")
     runtime.state = SimpleNamespace(
         find_job_by_node_run=lambda run_id: job,
-        update_job_status=lambda *args, **kwargs: calls.append(("update", args, kwargs)),
+        update_job_status=lambda *args, **kwargs: calls.append(
+            ("update", args, kwargs)
+        ),
         append_event=lambda *args, **kwargs: calls.append(("event", args, kwargs)),
     )
-    runtime.run_node = lambda **kwargs: calls.append(("run_node", kwargs)) or SimpleNamespace(
-        status="success"
-    )
+    runtime.run_node = lambda **kwargs: calls.append(
+        ("run_node", kwargs)
+    ) or SimpleNamespace(status="success")
     runtime._submit_pending_trial_nodes = lambda: calls.append(("submit",))
 
     result = runtime.run_gpu_self_controller(
@@ -176,9 +179,9 @@ def test_iteration_and_elapsed_keypoints_share_one_agent_check(tmp_path):
     runtime.logger = logging.getLogger(__name__)
     calls = []
     runtime._collect_keypoint_comparison = lambda _: "No comparison"
-    runtime._call_keypoint_agent = lambda _trial, prompt, _dir: calls.append(prompt) or {
-        "should_stop": False
-    }
+    runtime._call_keypoint_agent = lambda _trial, prompt, _dir: calls.append(
+        prompt
+    ) or {"should_stop": False}
 
     runtime._maybe_check_keypoints(trial_id)
 
