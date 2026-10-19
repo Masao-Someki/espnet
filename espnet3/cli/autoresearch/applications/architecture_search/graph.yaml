@@ -22,11 +22,11 @@ nodes:
     execution: local
     "on":
       success: run_trial       # config-only change, no code modification needed
-      write_files: write_files  # agent requested code changes
+      implement_code: implement_code  # agent requested code changes
       no_budget: select_best
       failure: summarize
 
-  write_files:
+  implement_code:
     target: espnet3.cli.autoresearch.applications.architecture_search.stages.write_files.WriteFilesStage
     execution: local
     "on":
@@ -38,7 +38,7 @@ nodes:
     execution: local
     "on":
       success: run_trial
-      failure: write_files          # loop back with error context in prompt
+      failure: implement_code       # loop back with error context in prompt
       max_retries_exceeded: reflect  # give up after code_edit.max_test_retries
 
   run_trial:
@@ -46,9 +46,9 @@ nodes:
     execution: submission
     resources:
       gpus: 1
-      cpus: 16
+      cpus: 15
       mem: 32G
-      time: "12:00:00"
+      time: "24:00:00"
       partition: "gpuA100x4"
       account: bbjs-delta-gpu
     "on":
@@ -62,7 +62,7 @@ nodes:
     target: espnet3.cli.autoresearch.applications.hyperparameter_search.stages.debug_trial.DebugTrialStage
     execution: local
     "on":
-      success: write_files
+      success: implement_code
       continue: reflect
       failure: reflect
 

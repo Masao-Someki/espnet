@@ -2,7 +2,7 @@ autoresearch:
   study_name: ls100_no_early_stop
   study_dir: exp/autoresearch/ls100_no_early_stop
   graph:
-  application: hyperparameter_search
+  application: architecture_search
   objective_file: program.md
 
   task: ASR
@@ -28,13 +28,19 @@ autoresearch:
 
   budget:
     max_trials: 200
-    max_parallel_trials: 4
+    max_parallel_trials: 1
     max_failures: 10
     no_improve_stop: 10
-    max_wallclock_hours: 24
+    # Zero disables the study-wide elapsed-time limit.
+    max_wallclock_hours: 0
 
   tick_interval_sec_idle: 60
   tick_interval_sec_trial_active: 600
+
+  gpu_self_controller:
+    enabled: true
+    monitor_cpus: 1
+    monitor_interval_sec: 600
 
   submission:
     environment: slurm
@@ -46,13 +52,11 @@ autoresearch:
       Return the Slurm job ID.
     resources:
       gpus: 1
-      cpus: 16
+      cpus: 15
       mem: 32G
-      time: "12:00:00"
+      time: "24:00:00"
       partition: gpuA100x4
       account: bbjs-delta-gpu
-      reservation: sup-27103
-      nodelist: gpua018
     controller:
       resources:
         gpus: 0
@@ -64,6 +68,9 @@ autoresearch:
       handoff_after_sec: 18000
   agent:
     provider: codex
+    codex:
+      model: gpt-6-luna
+      sandbox: danger-full-access
     # To use a local Codex-compatible endpoint, set Codex CLI overrides here:
     # codex:
     #   model: shogun-worker
@@ -79,37 +86,36 @@ autoresearch:
     #     disable_response_storage: true
     #     web_search: live
     #     developer_instructions: "For live Web searches, use the server-side browser.search tool declared in the system message, and browser.open/browser.find to read results."
-    # Use `provider: claude` and the `claude:` section for Claude Code.
-    # claude:
-    #   model: claude-sonnet-4-5
-    #   permission_mode: bypassPermissions
-    #   effort: high
 
   early_stopping:
-    enabled: false   # set to false to disable keypoint-based early stopping
+    enabled: true
 
   trial:
-    timeout_sec: 50000
+    timeout_sec: 86400
 
-  # code_edit: used by architecture_search application (write_files / run_tests stages)
-  # code_edit:
-  #   allowed_dirs: [src, tests]
-  #   max_test_retries: 5
-  #   reference_files:
-  #     - /u/someki1/workspace/20_other_project/10_autoresearch_test/src/peft_model.py
-  #   doc_urls:
-  #     - https://masao-someki.github.io/espnet_draft_home_page/espnet3/guides/finetuning/custom-model.html
+  code_edit:
+    allowed_dirs: [src, tests]
+    max_test_retries: 5
+    allow_pixi: false
+    doc_urls:
+      - https://masao-someki.github.io/espnet_draft_home_page/espnet3/guides/finetuning/custom-model.html
 
   search_space:
     allowed_keys:
       - trainer.*
       - optimizer.*
       - scheduler.*
-      - model.specaug
-      - model.specaug_conf.*
+      - model.*
       - dataset.preprocessor.*
-      - tokenizer.*
     denied_keys:
+      # Keep the training horizon, data splits, and loader behavior identical
+      # across trials so the comparison only measures permitted tuning changes.
+      - trainer.max_epochs
+      - dataloader.*
+      - dataset.train
+      - dataset.train.*
+      - dataset.valid
+      - dataset.valid.*
       - data.*
       - output_dir
       - collect_stats_dir

@@ -28,10 +28,15 @@ def _build_agent(config, recipe_dir: Path):
     return CliAgent(config.autoresearch.agent, recipe_dir=recipe_dir)
 
 
-def _default_graph_path() -> Path:
-    resource = resources.files(
-        "espnet3.cli.autoresearch.applications.hyperparameter_search"
-    ).joinpath("default_graph.yaml")
+def _default_graph_path(application: str = "hyperparameter_search") -> Path:
+    """Return the packaged default graph for the selected application."""
+    if application == "architecture_search":
+        package = "espnet3.cli.autoresearch.applications.architecture_search"
+        graph_name = "graph.yaml"
+    else:
+        package = "espnet3.cli.autoresearch.applications.hyperparameter_search"
+        graph_name = "default_graph.yaml"
+    resource = resources.files(package).joinpath(graph_name)
     with resources.as_file(resource) as path:
         return Path(path)
 
@@ -69,7 +74,9 @@ def cmd_init(args) -> int:
     graph_src = (
         (recipe_dir / str(config.autoresearch.graph)).resolve()
         if getattr(config.autoresearch, "graph", None)
-        else _default_graph_path()
+        else _default_graph_path(
+            str(getattr(config.autoresearch, "application", "hyperparameter_search"))
+        )
     )
     shutil.copyfile(config_path, study_dir / "autoresearch.yaml")
     shutil.copyfile(graph_src, study_dir / "graph.yaml")
@@ -116,6 +123,8 @@ def _register_tick_job(runtime, resources: Resources):
         "--recipe-dir",
         str(recipe_dir),
         "--worker",
+        "--job-id",
+        job_id,
     ]
     metadata = {
         "job_id": job_id,
@@ -124,6 +133,12 @@ def _register_tick_job(runtime, resources: Resources):
         "workdir": str(recipe_dir),
         "job_type": "tick",
     }
+    repo_root = Path(__file__).resolve().parents[3]
+    pythonpath = os.pathsep.join(
+        path
+        for path in (str(repo_root), os.environ.get("PYTHONPATH", ""))
+        if path
+    )
     job = runtime.submit_job(
         job_id=job_id,
         job_type="tick",
@@ -133,7 +148,7 @@ def _register_tick_job(runtime, resources: Resources):
         stdout=stdout,
         stderr=stderr,
         resources=resources,
-        env={"ESPNET_AR_TICK_JOB_ID": job_id},
+        env={"PYTHONPATH": pythonpath},
         metadata=metadata,
     )
     tick_metadata = {**metadata, "backend": job.backend, "external_id": job.external_id}
@@ -157,7 +172,7 @@ def cmd_run(args) -> int:
         getattr(controller_cfg, "resources", None)
     )
     if args.worker:
-        job_id = os.environ.get("ESPNET_AR_TICK_JOB_ID")
+        job_id = args.job_id or os.environ.get("ESPNET_AR_TICK_JOB_ID")
         handoff_after = int(getattr(controller_cfg, "handoff_after_sec", 0) or 0) or None
         started = time.monotonic()
         try:
@@ -264,6 +279,7 @@ def add_arguments(subparsers) -> None:
     run.add_argument("--recipe-dir", required=True)
     run.add_argument("--poll-interval", type=float, default=None)
     run.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    run.add_argument("--job-id", default=None, help=argparse.SUPPRESS)
     run.set_defaults(func=cmd_run)
     status = commands.add_parser("status", help="Show study status and best trial.")
     status.add_argument("--study-dir", required=True)

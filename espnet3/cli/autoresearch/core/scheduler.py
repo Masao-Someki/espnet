@@ -1301,6 +1301,14 @@ class AutoResearchGraphRuntime:
                     0, int(getattr(controller_cfg, "monitor_cpus", 0) or 0)
                 )
             env = {
+                "PYTHONPATH": os.pathsep.join(
+                    path
+                    for path in (
+                        str(Path(__file__).resolve().parents[4]),
+                        os.environ.get("PYTHONPATH", ""),
+                    )
+                    if path
+                ),
                 "ESPNET_AR_STUDY_DIR": str(self.study_dir),
                 "ESPNET_AR_TRIAL_ID": trial_id or "",
                 "ESPNET_AR_ATTEMPT_ID": attempt_id,

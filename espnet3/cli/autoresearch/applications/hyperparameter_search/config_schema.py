@@ -24,7 +24,6 @@ def load_recipe_stage_config(
     return load_and_merge_config(
         recipe_dir / config_path,
         config_name=config_name,
-        default_package="egs3.TEMPLATE.asr",
         resolve=resolve,
     )
 

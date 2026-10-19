@@ -109,14 +109,28 @@ class CliAgent:
         self, request: AgentRequest, output_path: Path
     ) -> list[str]:
         options = self.config.codex
-        command = [options.executable, "exec"]
         if request.resume_thread_id:
-            command = [options.executable, "exec", "resume", request.resume_thread_id]
-        command.extend(["--json", "-C", str(self.cwd)])
+            command = [
+                options.executable,
+                "exec",
+                "resume",
+                request.resume_thread_id,
+                "--json",
+            ]
+        else:
+            command = [options.executable, "exec", "--json", "-C", str(self.cwd)]
         if options.skip_git_repo_check:
             command.append("--skip-git-repo-check")
         if options.sandbox:
-            command.extend(["--sandbox", options.sandbox])
+            if request.resume_thread_id:
+                if options.sandbox == "danger-full-access":
+                    command.append("--dangerously-bypass-approvals-and-sandbox")
+                else:
+                    command.extend(
+                        ["-c", f"sandbox_mode={_toml_value(options.sandbox)}"]
+                    )
+            else:
+                command.extend(["--sandbox", options.sandbox])
         if options.model:
             command.extend(["--model", options.model])
         for key, value in options.config.items():

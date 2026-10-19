@@ -23,6 +23,7 @@ nodes:
     skill: hyperparameter_search_propose_trial
     "on":
       success: run_trial
+      duplicate: propose_trial
       implement_code: implement_code
       no_budget: select_best
       failure: summarize

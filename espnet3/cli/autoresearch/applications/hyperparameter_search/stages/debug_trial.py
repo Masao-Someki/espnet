@@ -33,16 +33,10 @@ class DebugTrialStage(AutoResearchStage):
         search_space = context.config.autoresearch.search_space
         allowed = list(getattr(search_space, "allowed_keys", []) or [])
         denied = list(getattr(search_space, "denied_keys", []) or [])
-        # debug patches are allowed to touch dataloader keys regardless of
-        # search_space.allowed_keys — OOM and other runtime fixes require it
-        debug_always_allowed = ("dataloader.*", "trainer.accumulate_grad_batches")
         sanitized = {}
         removed = []
         for key, value in patch.items():
             key = str(key)
-            if _glob_match(debug_always_allowed, key):
-                sanitized[key] = value
-                continue
             if denied and _glob_match(denied, key):
                 removed.append(key)
                 continue

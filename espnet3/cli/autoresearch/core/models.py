@@ -300,6 +300,7 @@ StageStatus = Literal[
     "failure",
     "timeout",
     "retry",
+    "duplicate",
     "skip",
     "accepted",
     "rejected",

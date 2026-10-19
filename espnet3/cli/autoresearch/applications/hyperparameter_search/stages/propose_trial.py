@@ -2,29 +2,51 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from omegaconf import OmegaConf
 
 from espnet3.cli.autoresearch.agents.interface import AgentRequest
-from espnet3.cli.autoresearch.core.models import StageResult
+from espnet3.cli.autoresearch.applications.hyperparameter_search.config_schema import (
+    load_recipe_stage_config,
+    write_resolved_config,
+)
+from espnet3.cli.autoresearch.core.models import StageResult, Trial
 from espnet3.cli.autoresearch.core.serialization import (
     apply_dotted_patch,
     save_yaml,
     utc_now,
 )
 from espnet3.cli.autoresearch.core.stage import AutoResearchStage
-from espnet3.cli.autoresearch.core.models import Trial
-from espnet3.cli.autoresearch.applications.hyperparameter_search.config_schema import (
-    load_recipe_stage_config,
-    write_resolved_config,
-)
 
 
 def _glob_match(patterns, key: str) -> bool:
     import fnmatch
 
     return any(fnmatch.fnmatch(key, pattern) for pattern in patterns)
+
+
+def _normalize_trial_config(value, trial_dir: Path):
+    """Remove trial-specific paths before comparing effective configs."""
+    if isinstance(value, dict):
+        return {
+            key: _normalize_trial_config(item, trial_dir)
+            for key, item in value.items()
+            if key not in {"exp_dir", "exp_tag", "recipe_dir", "data_dir"}
+        }
+    if isinstance(value, list):
+        return [_normalize_trial_config(item, trial_dir) for item in value]
+    if isinstance(value, str):
+        return value.replace(str(trial_dir), "<trial_dir>")
+    return value
+
+
+def _config_signature(config, trial_dir: Path) -> str:
+    """Create a stable signature for a resolved training config."""
+    plain = OmegaConf.to_container(OmegaConf.create(config), resolve=True)
+    normalized = _normalize_trial_config(plain, trial_dir)
+    return json.dumps(normalized, sort_keys=True, ensure_ascii=False, default=str)
 
 
 class ProposeTrialStage(AutoResearchStage):
@@ -114,21 +136,6 @@ class ProposeTrialStage(AutoResearchStage):
             "exp_dir": str(trial_dir / "exp"),
         }
 
-    def _rewrite_logger_save_dirs(
-        self, train_plain: dict, trial_dir: Path
-    ) -> None:
-        trainer = train_plain.get("trainer")
-        if not isinstance(trainer, dict):
-            return
-        logger_cfg = trainer.get("logger")
-        if isinstance(logger_cfg, dict):
-            if "save_dir" in logger_cfg:
-                logger_cfg["save_dir"] = str(trial_dir / "exp" / "csv_logs")
-        elif isinstance(logger_cfg, list):
-            for entry in logger_cfg:
-                if isinstance(entry, dict) and "save_dir" in entry:
-                    entry["save_dir"] = str(trial_dir / "exp" / "csv_logs")
-
     def run(self, context) -> StageResult:
         if context.scheduler.should_stop():
             return StageResult(status="no_budget", message="Budget exhausted")
@@ -138,7 +145,9 @@ class ProposeTrialStage(AutoResearchStage):
         latest_trial = trials[-1] if trials else None
         current_trial = context.current_trial
 
-        _runtime_keys = frozenset({"exp_dir", "stats_dir", "recipe_dir", "data_dir", "exp_tag"})
+        _runtime_keys = frozenset(
+            {"exp_dir", "stats_dir", "recipe_dir", "data_dir", "exp_tag"}
+        )
 
         if self._should_reuse_current_trial(context, current_trial):
             trial = current_trial
@@ -151,15 +160,26 @@ class ProposeTrialStage(AutoResearchStage):
         # Build inflight patches from trials currently in flight
         inflight_patches = []
         for t in trials:
-            if t.status in frozenset({"running", "proposing", "proposed"}) and t.trial_id != trial_id:
-                patch = {k: v for k, v in t.config_patch.items() if k not in _runtime_keys}
+            if (
+                t.status in frozenset({"running", "proposing", "proposed"})
+                and t.trial_id != trial_id
+            ):
+                patch = {
+                    k: v for k, v in t.config_patch.items() if k not in _runtime_keys
+                }
                 inflight_patches.append(patch)
 
         # Knowledge and history
         knowledge_path = context.study_dir / "knowledge" / "knowledge_pack.md"
-        knowledge = knowledge_path.read_text(encoding="utf-8") if knowledge_path.exists() else ""
+        knowledge = (
+            knowledge_path.read_text(encoding="utf-8")
+            if knowledge_path.exists()
+            else ""
+        )
         trials_csv = context.study_dir / "trials.csv"
-        trial_history_csv = trials_csv.read_text(encoding="utf-8") if trials_csv.exists() else ""
+        trial_history_csv = (
+            trials_csv.read_text(encoding="utf-8") if trials_csv.exists() else ""
+        )
 
         # The skill reads logs on demand instead of copying them into every prompt.
         context_files = {
@@ -184,20 +204,27 @@ class ProposeTrialStage(AutoResearchStage):
             except Exception:
                 return "(unavailable)"
 
-        base_configs_context = "\n\n".join([
-            "## Base configs\n"
-            "Runtime keys (exp_dir, stats_dir, recipe_dir, data_dir, exp_tag, inference_dir) "
-            "are injected automatically — do NOT include them in your patches.\n",
-            "### training config\n```yaml\n"
-            + _load_base_config_text("training_config", "training.yaml")
-            + "```",
-            "### Fixed inference config (immutable; do not propose patches)\n```yaml\n"
-            + _load_base_config_text("inference_config", "inference.yaml")
-            + "```",
-            "### Fixed metrics config (immutable; do not propose patches)\n```yaml\n"
-            + _load_base_config_text("metrics_config", "metrics.yaml")
-            + "```",
-        ])
+        base_configs_context = "\n\n".join(
+            [
+                "## Base configs\n"
+                "Runtime keys (exp_dir, stats_dir, recipe_dir, data_dir, exp_tag, "
+                "inference_dir) "
+                "are injected automatically — do NOT include them in your patches.\n",
+                "Locked training keys: trainer.max_epochs, dataloader.*, "
+                "dataset.train, and dataset.valid. Do not propose patches for them.\n",
+                "### training config\n```yaml\n"
+                + _load_base_config_text("training_config", "training.yaml")
+                + "```",
+                "### Fixed inference config (immutable; do not propose patches)\n"
+                "```yaml\n"
+                + _load_base_config_text("inference_config", "inference.yaml")
+                + "```",
+                "### Fixed metrics config (immutable; do not propose patches)\n"
+                "```yaml\n"
+                + _load_base_config_text("metrics_config", "metrics.yaml")
+                + "```",
+            ]
+        )
 
         repo_context_parts = []
         repo_context_path = context.study_dir / "repo_context.md"
@@ -220,11 +247,14 @@ class ProposeTrialStage(AutoResearchStage):
         if "implement_code" in allowed_actions:
             extra_stages_hint = (
                 "list of stage names to run before train — "
-                "include 'implement_code' to write/modify src/ files for a new architecture, "
+                "include 'implement_code' to write/modify src/ files for a new "
+                "architecture, "
                 "or 'train_tokenizer' if a new tokenizer is needed"
             )
         else:
-            extra_stages_hint = "optional list of stage names to run before train, e.g. train_tokenizer"
+            extra_stages_hint = (
+                "optional list of stage names to run before train, e.g. train_tokenizer"
+            )
 
         request = AgentRequest(
             task="propose",
@@ -270,13 +300,24 @@ class ProposeTrialStage(AutoResearchStage):
             structured = dict(response.structured or {})
             # Support both new multi-config format and legacy single config_patch
             config_patches = dict(structured.get("config_patches", {}) or {})
-            patch = dict(config_patches.get("training", {}) or structured.get("config_patch", {}) or {})
+            patch = dict(
+                config_patches.get("training", {})
+                or structured.get("config_patch", {})
+                or {}
+            )
             rationale = str(structured.get("rationale", response.content or ""))
             expected_effect = str(structured.get("expected_effect", ""))
             risk = str(structured.get("risk", ""))
-            _known_stages = {"create_dataset", "train_tokenizer", "collect_stats", "implement_code", "write_files"}
+            _known_stages = {
+                "create_dataset",
+                "train_tokenizer",
+                "collect_stats",
+                "implement_code",
+                "write_files",
+            }
             extra_stages = [
-                str(s) for s in (structured.get("extra_stages") or [])
+                str(s)
+                for s in (structured.get("extra_stages") or [])
                 if str(s) in _known_stages
             ]
 
@@ -293,13 +334,17 @@ class ProposeTrialStage(AutoResearchStage):
             # Deduplicate
             hp_patch = {k: v for k, v in patch.items() if k not in _runtime_keys}
             for existing in trials:
-                existing_hp = {k: v for k, v in existing.config_patch.items() if k not in _runtime_keys}
+                existing_hp = {
+                    k: v
+                    for k, v in existing.config_patch.items()
+                    if k not in _runtime_keys
+                }
                 if existing_hp == hp_patch and existing.trial_id != trial_id:
                     dup_id = existing.trial_id
                     trial.status = "cancelled"
                     context.state.update_trial(trial)
                     return StageResult(
-                        status="failure",
+                        status="duplicate",
                         message=f"Duplicate patch: same as {dup_id}",
                         payload={"trial_id": trial_id},
                     )
@@ -323,7 +368,32 @@ class ProposeTrialStage(AutoResearchStage):
         train_plain = OmegaConf.to_container(
             OmegaConf.create(train_unresolved), resolve=True
         )
-        self._rewrite_logger_save_dirs(train_plain, trial_dir)
+        # Sparse patches can differ while resolving to the same effective
+        # training configuration (for example, omitting a key at its default
+        # value). Compare resolved configs too, ignoring generated trial paths.
+        candidate_signature = _config_signature(train_plain, trial_dir)
+        for existing in trials:
+            existing_path = existing.resolved_config_path
+            if (
+                existing.trial_id == trial_id
+                or existing_path is None
+                or not existing_path.is_file()
+            ):
+                continue
+            existing_config = OmegaConf.load(existing_path)
+            existing_dir = context.study_dir / "trials" / existing.trial_id
+            if _config_signature(existing_config, existing_dir) == candidate_signature:
+                trial.status = "cancelled"
+                context.state.update_trial(trial)
+                return StageResult(
+                    status="duplicate",
+                    message=(
+                        "Duplicate effective training config: same as "
+                        f"{existing.trial_id}"
+                    ),
+                    payload={"trial_id": trial_id, "duplicate_of": existing.trial_id},
+                )
+
         training_out = trial_dir / "resolved_training_config.yaml"
         write_resolved_config(training_out, OmegaConf.create(train_plain))
 
@@ -353,7 +423,9 @@ class ProposeTrialStage(AutoResearchStage):
         metrics_out = trial_dir / "resolved_metrics_config.yaml"
 
         # Save metadata
-        hp_patch_only = {k: v for k, v in effective_patch.items() if k not in _runtime_keys}
+        hp_patch_only = {
+            k: v for k, v in effective_patch.items() if k not in _runtime_keys
+        }
         save_yaml(trial_dir / "config_patch.yaml", hp_patch_only, resolve=False)
         (trial_dir / "rationale.md").write_text(rationale, encoding="utf-8")
 
