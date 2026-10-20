@@ -33,4 +33,10 @@ Guides are goal-oriented. Pick the track that matches what you want to do.
     icon="tabler:arrows-exchange"
     href="./coming-from-other-toolkits/index.html"
   />
+  <DocCard
+    title="Production deployment"
+    desc="Connect research workflows to an optional production ASR serving backend."
+    icon="tabler:server"
+    href="./deployment/funasr.html"
+  />
 </DocCards>
