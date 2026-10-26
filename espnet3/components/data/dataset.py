@@ -391,11 +391,13 @@ class CombinedDataset:
                 "espnet3.components.data.dataset.ShardedDataset."
             )
         sharded_datasets = [dataset.shard(shard_idx) for dataset in self.datasets]
-        return CombinedDataset(
+        combined = CombinedDataset(
             sharded_datasets,
             self.transforms,
             self.use_espnet_preprocessor,
         )
+        combined.use_espnet_collator = self.use_espnet_collator
+        return combined
 
     def __repr__(self) -> str:
         """Return a concise, inspectable summary of combined datasets."""
