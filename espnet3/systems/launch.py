@@ -183,9 +183,10 @@ def launch(
         if value is not None:
             cli_dir_overrides[canonical_key] = Path(value)
 
-    # Resolve each requested stage's config via saved-config search
+    # Later stages consume prerequisite configs even when their bodies are skipped.
+    last_stage = max((names.index(stage) for stage in stages_to_run), default=-1)
     stage_configs = {}
-    for stage in stages_to_run:
+    for stage in names[: last_stage + 1]:
         stage_configs[stage] = merge_stage_config_from_snapshots(
             system_cls,
             stage,
