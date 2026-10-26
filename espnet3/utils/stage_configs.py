@@ -668,7 +668,7 @@ def merge_stage_config_from_snapshots(
 
     result = per_stage[requested_stage]
     for key, value in cli_dir_overrides.items():
-        OmegaConf.update(result, key, value, merge=False)
+        OmegaConf.update(result, key, str(value), merge=False)
 
     resolve_loaded_configs({requested_stage: result})
     return result
