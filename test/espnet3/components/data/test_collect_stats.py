@@ -61,6 +61,7 @@ class DummyDataset:
         # Precompute lengths to keep things deterministic
         self.lengths = [self.base_len + (i % 3) for i in range(self.n)]
         self.use_espnet_preprocessor = use_espnet_preprocessor
+        self.use_espnet_collator = use_espnet_preprocessor
 
     def __len__(self):
         return self.n
@@ -71,7 +72,7 @@ class DummyDataset:
         # Create a simple pattern to let us verify sums deterministically
         # Shape: [T, D]
         x = torch.full((T, self.dim), float(idx), dtype=torch.float32)
-        if self.use_espnet_preprocessor:
+        if self.use_espnet_collator:
             return uid, {"x": x, "length": T}
         else:
             return {"x": x, "length": T}

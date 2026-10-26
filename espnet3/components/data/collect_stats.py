@@ -41,11 +41,9 @@ def collect_stats_batch(
     structured_items: List[Tuple[str, Any]] = []
     for i in idxs:
         item = dataset[i]
-        # We assume dataset should be DataOrganizer in espnet3.
-        if (
-            hasattr(dataset, "use_espnet_preprocessor")
-            and dataset.use_espnet_preprocessor
-        ):
+        # CombinedDataset's collator flag controls UID pairs independently of
+        # preprocessing. Also accept custom datasets returning pairs directly.
+        if isinstance(item, tuple) and len(item) == 2:
             # Then it is a tuple with (uid, dict) and type(uid) is str.
             uid, sample = item
         else:
