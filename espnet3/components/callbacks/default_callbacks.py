@@ -13,6 +13,7 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     TQDMProgressBar,
 )
+from lightning.pytorch.callbacks.checkpoint import Checkpoint
 from typeguard import typechecked
 
 from espnet2.torch_utils.safe_torch_load import safe_torch_load
@@ -69,7 +70,7 @@ def _format_metrics(metrics: dict[str, float], time_keys: tuple[str, ...]) -> st
 
 
 @typechecked
-class AverageCheckpointsCallback(Callback):
+class AverageCheckpointsCallback(Checkpoint):
     """A custom callback for weight averaging over the top-K checkpoints.
 
     This can be useful to smooth out fluctuations in weights across the best-performing
@@ -119,10 +120,14 @@ class AverageCheckpointsCallback(Callback):
 
     def on_validation_end(self, trainer, pl_module):
         """At the end of validation, average the top-K checkpoints and save."""
+        if getattr(trainer, "sanity_checking", False):
+            return
         if trainer.is_global_zero:
             reference_model_keys = set(pl_module.state_dict().keys())
             for ckpt_callback in self.best_ckpt_callbacks:
-                checkpoints = list(ckpt_callback.best_k_models.keys())
+                checkpoints = [
+                    path for path in ckpt_callback.best_k_models if Path(path).is_file()
+                ]
                 if not checkpoints:
                     continue
 
@@ -197,6 +202,10 @@ class AverageCheckpointsCallback(Callback):
                     + f"ave_{len(checkpoints)}best.pth"
                 )
                 torch.save(new_avg_state_dict, avg_ckpt_path)
+
+    def on_train_epoch_end(self, trainer, pl_module):
+        """Average after ModelCheckpoint's epoch-end save, including the last epoch."""
+        self.on_validation_end(trainer, pl_module)
 
 
 @typechecked

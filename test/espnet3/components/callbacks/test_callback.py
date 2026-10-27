@@ -82,6 +82,8 @@ def test_average_checkpoints_callback_on_validation_end(tmp_path, dummy_state_di
     Ensure AverageCheckpointsCallback correctly averages and saves model.
     """
     ckpt_paths = [tmp_path / f"ckpt_{i}.ckpt" for i in range(2)]
+    for path in ckpt_paths:
+        path.touch()
 
     with (
         mock.patch("torch.load", return_value=dummy_state_dict),
@@ -98,6 +100,7 @@ def test_average_checkpoints_callback_on_validation_end(tmp_path, dummy_state_di
             ],
         )
         trainer = mock.Mock()
+        trainer.sanity_checking = False
         trainer.is_global_zero = True
 
         pl_module = _mock_pl_module(
@@ -140,7 +143,11 @@ def test_get_default_callbacks_structure():
 def test_average_checkpoints_with_multiple_metrics(tmp_path, dummy_state_dict):
     """Test averaging for multiple ModelCheckpoints with different monitor names."""
     ckpt_paths_1 = [tmp_path / f"ckpt_loss_{i}.ckpt" for i in range(2)]
+    for path in ckpt_paths_1:
+        path.touch()
     ckpt_paths_2 = [tmp_path / f"ckpt_acc_{i}.ckpt" for i in range(2)]
+    for path in ckpt_paths_2:
+        path.touch()
 
     with (
         mock.patch("torch.load", return_value=dummy_state_dict),
@@ -160,6 +167,7 @@ def test_average_checkpoints_with_multiple_metrics(tmp_path, dummy_state_dict):
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module(
             "layer.weight", "layer.bias", "bn.num_batches_tracked"
         )
@@ -174,6 +182,8 @@ def test_average_checkpoints_with_multiple_metrics(tmp_path, dummy_state_dict):
 def test_output_filename_format(tmp_path, dummy_state_dict):
     """Ensure output filename is formatted properly."""
     ckpt_paths = [tmp_path / f"ckpt_{i}.ckpt" for i in range(3)]
+    for path in ckpt_paths:
+        path.touch()
 
     with (
         mock.patch("torch.load", return_value=dummy_state_dict),
@@ -189,6 +199,7 @@ def test_output_filename_format(tmp_path, dummy_state_dict):
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module(
             "layer.weight", "layer.bias", "bn.num_batches_tracked"
         )
@@ -211,6 +222,7 @@ def test_average_checkpoint_on_non_global_zero(tmp_path, dummy_state_dict):
             ],
         )
         trainer = mock.Mock(is_global_zero=False)
+        trainer.sanity_checking = False
         callback.on_validation_end(trainer, pl_module=mock.Mock())
 
         mock_save.assert_not_called()
@@ -219,7 +231,9 @@ def test_average_checkpoint_on_non_global_zero(tmp_path, dummy_state_dict):
 def test_average_checkpoint_with_inconsistent_keys(tmp_path):
     """Raise error when checkpoints have inconsistent keys."""
     ckpt_path1 = tmp_path / "ckpt_1.ckpt"
+    ckpt_path1.touch()
     ckpt_path2 = tmp_path / "ckpt_2.ckpt"
+    ckpt_path2.touch()
 
     inconsistent_state_dicts = [
         {"state_dict": {"model.layer.weight": torch.tensor([1.0])}},  # 1 key
@@ -248,6 +262,7 @@ def test_average_checkpoint_with_inconsistent_keys(tmp_path):
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module("layer.weight")
         callback.on_validation_end(trainer, pl_module=pl_module)
 
@@ -255,7 +270,9 @@ def test_average_checkpoint_with_inconsistent_keys(tmp_path):
 def test_average_checkpoint_with_int_and_float_mix(tmp_path):
     """Ensure float params are averaged, int params are accumulated."""
     ckpt_path1 = tmp_path / "ckpt_1.ckpt"
+    ckpt_path1.touch()
     ckpt_path2 = tmp_path / "ckpt_2.ckpt"
+    ckpt_path2.touch()
 
     mock_state_dicts = [
         {
@@ -289,6 +306,7 @@ def test_average_checkpoint_with_int_and_float_mix(tmp_path):
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module("weight", "counter")
         callback.on_validation_end(trainer, pl_module=pl_module)
 
@@ -308,7 +326,9 @@ def test_average_checkpoint_without_model_prefix(tmp_path):
     prefix. Averaging must not silently drop these parameters.
     """
     ckpt_path1 = tmp_path / "ckpt_1.ckpt"
+    ckpt_path1.touch()
     ckpt_path2 = tmp_path / "ckpt_2.ckpt"
+    ckpt_path2.touch()
 
     mock_state_dicts = [
         {
@@ -342,6 +362,7 @@ def test_average_checkpoint_without_model_prefix(tmp_path):
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module("encoder.weight", "decoder.bias")
         callback.on_validation_end(trainer, pl_module=pl_module)
 
@@ -359,6 +380,8 @@ def test_average_checkpoint_keys_mismatch_current_model(tmp_path, dummy_state_di
     ordinary `model.`-prefix ambiguity.
     """
     ckpt_paths = [tmp_path / f"ckpt_{i}.ckpt" for i in range(2)]
+    for path in ckpt_paths:
+        path.touch()
 
     with (
         mock.patch("torch.load", return_value=dummy_state_dict),
@@ -375,6 +398,7 @@ def test_average_checkpoint_keys_mismatch_current_model(tmp_path, dummy_state_di
             ],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         pl_module = _mock_pl_module("totally.unrelated.param")
         callback.on_validation_end(trainer, pl_module=pl_module)
 
@@ -387,6 +411,7 @@ def test_average_checkpoint_with_no_checkpoints(tmp_path):
             best_ckpt_callbacks=[mock.Mock(best_k_models={}, monitor="valid/loss")],
         )
         trainer = mock.Mock(is_global_zero=True)
+        trainer.sanity_checking = False
         # This should not raise an exception
         callback.on_validation_end(trainer, pl_module=_mock_pl_module())
 
