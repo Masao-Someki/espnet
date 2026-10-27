@@ -14,7 +14,10 @@ from espnet3.components.data.dataset import (
     DatasetWithTransform,
     do_nothing,
 )
-from espnet3.components.data.dataset_module import instantiate_dataset_reference
+from espnet3.components.data.dataset_module import (
+    _to_plain_dict,
+    instantiate_dataset_reference,
+)
 from espnet3.utils.logging_utils import build_callable_name, build_qualified_name
 
 logger = logging.getLogger(__name__)
@@ -422,7 +425,7 @@ class DataOrganizer:
                 if isinstance(config, DictConfig):
                     raw_config = OmegaConf.to_container(config, resolve=True)
                 else:
-                    raw_config = config
+                    raw_config = _to_plain_dict(config)
                 dataset = instantiate_dataset_reference(
                     raw_config,
                     recipe_dir=self.recipe_dir,
@@ -482,7 +485,7 @@ class DataOrganizer:
             if isinstance(config, DictConfig):
                 raw_config = OmegaConf.to_container(config, resolve=True)
             else:
-                raw_config = config
+                raw_config = _to_plain_dict(config)
             dataset = instantiate_dataset_reference(
                 raw_config,
                 recipe_dir=self.recipe_dir,

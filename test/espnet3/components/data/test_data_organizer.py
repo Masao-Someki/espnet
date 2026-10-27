@@ -80,6 +80,15 @@ DUMMY_TRANSFORM_TARGET = (
 )
 DUMMY_DATASET_TARGET = "test.espnet3.components.data.test_data_organizer.DummyDataset"
 DUMMY_DATA_SRC = "dummy/asr"
+
+
+def test_dataclass_entries_build_all_splits():
+    config = DatasetConfig(name="example", data_src=DUMMY_DATA_SRC)
+    organizer = DataOrganizer(train=[config], valid=[config], test=[config])
+    assert organizer.train[0].keys() == organizer.valid[0].keys()
+    assert organizer.test_sets["example"][0].keys() == organizer.train[0].keys()
+
+
 DUMMY_SHARDED_DATA_SRC = "dummy/sharded"
 
 DUMMY_PREPROCESSOR_TARGET = (
