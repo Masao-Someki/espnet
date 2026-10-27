@@ -631,3 +631,23 @@ def test_worker_setup_failure_closes_client_and_cluster(
         with parallel_module.get_client(setup_fn=lambda: {}):
             raise AssertionError("Must not yield an uninitialized client")
     assert closed == ["client", "cluster"]
+
+
+@pytest.mark.parametrize("input_key", ["recipe_dir", "dataset_root"])
+def test_resume_tracks_implicit_data_but_not_experiment_outputs(tmp_path, input_key):
+    data = tmp_path / "data"
+    data.mkdir()
+    manifest = data / "manifest.tsv"
+    manifest.write_text("old")
+    experiment = tmp_path / "exp"
+    provider = DummyProvider()
+    provider.config = OmegaConf.create(
+        {input_key: str(tmp_path), "exp_dir": str(experiment)}
+    )
+    runner = DummyRunner(provider, output_dir=experiment / "infer")
+    assert runner([0])["records"] == [0]
+    (experiment / "train.log").write_text("new operational log")
+    assert runner([0])["records"] == [0]
+    manifest.write_text("new")
+    with pytest.raises(RuntimeError, match="identity"):
+        runner([0])

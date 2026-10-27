@@ -1,6 +1,7 @@
 """Fingerprint runner configuration and explicitly referenced input files."""
 
 import hashlib
+import os
 from pathlib import Path
 
 import cloudpickle
@@ -24,6 +25,60 @@ def resume_fingerprint(provider, runner_type, output_dir):
 
     files = {}
     output_root = Path(output_dir).resolve()
+
+    output_keys = {"exp_dir", "inference_dir", "stats_dir", "output_dir", "log_dir"}
+    output_paths = {output_root}
+
+    def collect_output_paths(value):
+        if isinstance(value, dict):
+            for name, child in value.items():
+                if name in output_keys and isinstance(child, (str, Path)):
+                    output_paths.add(Path(child).resolve())
+                else:
+                    collect_output_paths(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                collect_output_paths(child)
+
+    collect_output_paths(identity)
+
+    def directory_identity(root):
+        excluded = output_paths
+        entries = []
+        seen = set()
+        transient = {
+            ".git",
+            "__pycache__",
+            ".pytest_cache",
+            ".stage_sync",
+            ".config_history",
+        }
+        for current, directories, names in os.walk(root, followlinks=True):
+            current = Path(current)
+            stat = current.stat()
+            inode = (stat.st_dev, stat.st_ino)
+            if inode in seen:
+                directories[:] = []
+                continue
+            seen.add(inode)
+            directories[:] = [
+                name
+                for name in directories
+                if name not in transient and (current / name).resolve() not in excluded
+            ]
+            for name in names:
+                child = current / name
+                if child.is_file() and not name.endswith((".lock", ".tmp", ".partial")):
+                    stat = child.stat()
+                    entries.append(
+                        (
+                            str(child.relative_to(root)),
+                            stat.st_size,
+                            stat.st_mtime_ns,
+                            stat.st_ctime_ns,
+                        )
+                    )
+        return sorted(entries)
 
     def visit(value, key=""):
         if isinstance(value, dict):
@@ -60,22 +115,12 @@ def resume_fingerprint(provider, runner_type, output_dir):
                 return
             if directory:
                 if (
-                    path == output_root
-                    or path in output_root.parents
+                    key in output_keys
+                    or path == output_root
                     or output_root in path.parents
                 ):
                     return
-                files[str(path)] = sorted(
-                    (
-                        str(child.relative_to(path)),
-                        stat.st_size,
-                        stat.st_mtime_ns,
-                        stat.st_ctime_ns,
-                    )
-                    for child in path.rglob("*")
-                    if child.is_file()
-                    for stat in [child.stat()]
-                )
+                files[str(path)] = directory_identity(path)
             elif regular_file:
                 # Once a referenced input is identified, read errors must not
                 # silently remove it from identity checking.
