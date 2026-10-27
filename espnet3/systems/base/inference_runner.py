@@ -100,7 +100,9 @@ def _materialize_output_value(
             field_config=artifact_config,
         ).as_posix()
 
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple)) and not (
+        artifact_config and artifact_config.get("type") == "json"
+    ):
         raise TypeError(
             f"Top-level list outputs are not supported for '{field_key}'. "
             "Return a single value per field, or wrap structured content in a "
@@ -437,9 +439,17 @@ class InferenceRunner(BaseRunner):
         **env,
     ) -> Dict[str, Any]:
         """Open per-shard SCP writers for worker-side inference outputs."""
+        artifact_configs = dict(output_artifacts or {})
+        contract = resolve_inference_contract(
+            env.get("inference_contract"), env.get("inference_contract_root")
+        )
+        if contract is not None:
+            for spec in contract.outputs:
+                if spec.kind == "segments":
+                    artifact_configs.setdefault(spec.name, {"type": "json"})
         return {
             "shard_dir": shard_dir,
-            "artifact_configs": output_artifacts or {},
+            "artifact_configs": artifact_configs,
             "scp_handles": {},
             "field_keys": set(),
         }
