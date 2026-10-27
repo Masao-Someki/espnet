@@ -290,11 +290,11 @@ def test_run_stages_dry_run_and_other_ranks_do_not_bake(monkeypatch):
     assert system.calls == []
 
     # then rank 2 (_get_process_rank -> 2),
-    # real run -> calls == [], system.calls == ["a", "b"]
+    # Non-training bodies are owned by rank zero as well.
     monkeypatch.setattr(stages_utils, "_get_process_rank", lambda: 2)
     run_stages(system, ["stage_a", "stage_b"])
     assert calls == []
-    assert system.calls == ["a", "b"]
+    assert system.calls == []
 
 
 def test_run_stages_train_unknown_log_mode_falls_back_to_rank0(

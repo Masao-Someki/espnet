@@ -16,16 +16,17 @@ from espnet3.utils.logging_utils import (
     set_stage_log_handler,
 )
 from espnet3.utils.stage_configs import bake, snapshot_config
+from espnet3.utils.stage_execution import stage_execution
 
 logger = logging.getLogger(__name__)
 
 _RANK_ENV_KEYS = (
     "RANK",
-    "LOCAL_RANK",
     "SLURM_PROCID",
     "OMPI_COMM_WORLD_RANK",
     "PMI_RANK",
     "MPI_RANK",
+    "LOCAL_RANK",
 )
 
 
@@ -112,76 +113,82 @@ def run_stages(
         if fn is None:
             raise AttributeError(f"System has no stage method: {stage}")
 
-        with log_stage(stage):
-            rank = _get_process_rank()
-            config = system.stage_configs[stage]
-
-            if not dry_run and rank == 0:
-                bake(system.exp_dir, stage, config, own_keys=system.own_keys[stage])
-
-            if dry_run:
-                log.info("[DRY RUN] would run stage: %s", stage)
+        with stage_execution(
+            system.exp_dir, stage, _get_process_rank(), dry_run=dry_run
+        ) as execute:
+            if not execute:
                 continue
+            with log_stage(stage):
+                rank = _get_process_rank()
+                config = system.stage_configs[stage]
 
-            spec = find_stage_spec(type(system), stage)
-            log_dir = (
-                resolve_stage_log_dir(config, spec)
-                or system.exp_dir
-                or Path.cwd() / "logs"
-            )
+                if not dry_run and rank == 0:
+                    bake(system.exp_dir, stage, config, own_keys=system.own_keys[stage])
 
-            # Persist full config snapshot to <log_dir>/<stage>.yaml
-            snapshot_config(
-                log_dir=log_dir,
-                stage=stage,
-                resolved=config,
-                dry_run=dry_run,
-                is_rank0=(rank == 0),
-            )
-            filename = f"{stage}.log"
+                if dry_run:
+                    log.info("[DRY RUN] would run stage: %s", stage)
+                    continue
 
-            if stage == "train":
-                # stage_log_mode controls per-rank logging: "rank0" or "per_rank".
-                # rank0 avoids multi-process rotation races;
-                # per_rank writes per-rank logs.
-                stage_log_mode = _get_stage_log_mode(system)
-                if stage_log_mode not in {"rank0", "per_rank"}:
-                    log.error(
-                        "Unknown stage_log_mode=%r (expected 'rank0' or 'per_rank'); "
-                        "falling back to 'rank0'.",
-                        stage_log_mode,
-                    )
-                    stage_log_mode = "rank0"
-                if stage_log_mode == "rank0" and rank != 0:
-                    # Non-zero ranks skip file logging in rank0 mode.
-                    log_dir = None
-
-                filename = (
-                    f"{stage}.log"
-                    if stage_log_mode == "rank0"
-                    else f"{stage}_rank{rank}.log"
+                spec = find_stage_spec(type(system), stage)
+                log_dir = (
+                    resolve_stage_log_dir(config, spec)
+                    or system.exp_dir
+                    or Path.cwd() / "logs"
                 )
 
-            set_stage_log_handler(
-                Path(log_dir) if log_dir else None,
-                filename=filename,
-            )
-            log_stage_metadata(log, stage=stage, config=config, args=args)
+                # Persist full config snapshot to <log_dir>/<stage>.yaml
+                snapshot_config(
+                    log_dir=log_dir,
+                    stage=stage,
+                    resolved=config,
+                    dry_run=dry_run,
+                    is_rank0=(rank == 0),
+                )
+                filename = f"{stage}.log"
 
-            start = time.perf_counter()
-            log.info("=== [START] stage: %s ===", stage)
-            try:
-                fn()
-            except TypeError as e:
-                log.exception("Stage '%s' failed (bad arguments)", stage)
-                raise TypeError(
-                    f"Stage '{stage}' does not accept CLI arguments; "
-                    "put all settings in the YAML config."
-                ) from e
-            except Exception:
-                elapsed = time.perf_counter() - start
-                log.exception("Stage '%s' failed after %.2fs", stage, elapsed)
-                raise
-            else:
-                elapsed = time.perf_counter() - start
-                log.info("=== [DONE] stage: %s (%.2fs) ===", stage, elapsed)
+                if stage == "train":
+                    # stage_log_mode controls per-rank logging: "rank0" or "per_rank".
+                    # rank0 avoids multi-process rotation races;
+                    # per_rank writes per-rank logs.
+                    stage_log_mode = _get_stage_log_mode(system)
+                    if stage_log_mode not in {"rank0", "per_rank"}:
+                        log.error(
+                            "Unknown stage_log_mode=%r "
+                            "(expected 'rank0' or 'per_rank'); "
+                            "falling back to 'rank0'.",
+                            stage_log_mode,
+                        )
+                        stage_log_mode = "rank0"
+                    if stage_log_mode == "rank0" and rank != 0:
+                        # Non-zero ranks skip file logging in rank0 mode.
+                        log_dir = None
+
+                    filename = (
+                        f"{stage}.log"
+                        if stage_log_mode == "rank0"
+                        else f"{stage}_rank{rank}.log"
+                    )
+
+                set_stage_log_handler(
+                    Path(log_dir) if log_dir else None,
+                    filename=filename,
+                )
+                log_stage_metadata(log, stage=stage, config=config, args=args)
+
+                start = time.perf_counter()
+                log.info("=== [START] stage: %s ===", stage)
+                try:
+                    fn()
+                except TypeError as e:
+                    log.exception("Stage '%s' failed (bad arguments)", stage)
+                    raise TypeError(
+                        f"Stage '{stage}' does not accept CLI arguments; "
+                        "put all settings in the YAML config."
+                    ) from e
+                except Exception:
+                    elapsed = time.perf_counter() - start
+                    log.exception("Stage '%s' failed after %.2fs", stage, elapsed)
+                    raise
+                else:
+                    elapsed = time.perf_counter() - start
+                    log.info("=== [DONE] stage: %s (%.2fs) ===", stage, elapsed)
