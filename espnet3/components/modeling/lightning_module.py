@@ -292,7 +292,7 @@ class ESPnetLightningModule(lightning.LightningModule):
         # see below:
         # https://github.com/Lightning-AI/lightning/issues/5243#issuecomment-1552650013
         # gathering a tensor across all workers and then reduce it using or
-        if self.config.num_device == 1:
+        if not torch.distributed.is_initialized():
             any_invalid = flag_skip
         else:
             world_size = torch.distributed.get_world_size()
@@ -974,7 +974,7 @@ class ESPnetLightningModule(lightning.LightningModule):
         if not isinstance(schedulers, (list, tuple)):
             schedulers = [schedulers]
         self._named_schedulers_cache = dict(
-            zip(self._multi_optimizer_names, schedulers)
+            zip([spec.name for spec in self._scheduler_specs], schedulers)
         )
         return self._named_schedulers_cache
 
@@ -1004,6 +1004,11 @@ class ESPnetLightningModule(lightning.LightningModule):
 
         This method also updates per-optimizer runtime state.
 
+        Each update averages every microbatch since that optimizer's previous
+        update. Deferred updates can span more than ``accum_grad_steps`` batches;
+        the denominator is the actual contributing count. Epoch end flushes an
+        incomplete window. Checkpoints preserve both the counter and gradients.
+
         This path exists to support GAN and other multi-loss training without
         introducing a new model hook. The model still returns `(loss, stats, weight)`.
         Only the `loss` field changes shape:
@@ -1032,7 +1037,27 @@ class ESPnetLightningModule(lightning.LightningModule):
             if state.accum_counter == 0:
                 optimizer.zero_grad()
 
-            self.manual_backward(step.loss / spec.accum_grad_steps)
+            owned = {
+                id(parameter)
+                for group in optimizer.param_groups
+                for parameter in group["params"]
+            }
+            # DDP must see the full backward graph. Restricting backward(inputs=)
+            # can leave its reducer waiting for reachable non-owned parameters.
+            # Preserve their pending gradients while allowing normal reduction.
+            preserved = [
+                (
+                    parameter,
+                    None if parameter.grad is None else parameter.grad.detach().clone(),
+                )
+                for parameter in self.parameters()
+                if id(parameter) not in owned
+            ]
+            try:
+                self.manual_backward(self._weighted_distributed_loss(step.loss, weight))
+            finally:
+                for parameter, gradient in preserved:
+                    parameter.grad = gradient
             state.accum_counter += 1
             extra_stats[f"{step.name}/loss"] = step.loss.detach()
 
@@ -1041,21 +1066,43 @@ class ESPnetLightningModule(lightning.LightningModule):
             if not (meets_accum and meets_iter):
                 continue
 
-            if spec.gradient_clip_val is not None:
-                self.clip_gradients(
-                    optimizer,
-                    gradient_clip_val=spec.gradient_clip_val,
-                    gradient_clip_algorithm=spec.gradient_clip_algorithm,
-                )
-
-            optimizer.step()
-            optimizer.zero_grad()
-            state.accum_counter = 0
-            state.update_step += 1
+            self._apply_named_update(step.name, optimizer, spec, state)
             extra_stats[f"{step.name}/update_step"] = float(state.update_step)
-            self._step_named_scheduler_on_update(step.name)
 
         self._log_stats("train", stats, weight, extra_stats=extra_stats)
+
+    def _weighted_distributed_loss(self, loss, weight):
+        """Make DDP averaging equal the global sample-weighted mean."""
+        if not torch.distributed.is_initialized() or weight is None:
+            return loss
+        local_weight = (
+            torch.as_tensor(weight, device=loss.device, dtype=torch.float32)
+            .detach()
+            .sum()
+        )
+        total_weight = local_weight.clone()
+        torch.distributed.all_reduce(total_weight)
+        if not torch.isfinite(total_weight) or total_weight <= 0:
+            raise ValueError("Distributed loss requires a positive finite total weight")
+        return loss * local_weight * torch.distributed.get_world_size() / total_weight
+
+    def _apply_named_update(self, name, optimizer, spec, state):
+        """Normalize by the actual contributing microbatches and apply one update."""
+        for group in optimizer.param_groups:
+            for parameter in group["params"]:
+                if parameter.grad is not None:
+                    parameter.grad.div_(state.accum_counter)
+        if spec.gradient_clip_val is not None:
+            self.clip_gradients(
+                optimizer,
+                gradient_clip_val=spec.gradient_clip_val,
+                gradient_clip_algorithm=spec.gradient_clip_algorithm,
+            )
+        optimizer.step()
+        optimizer.zero_grad()
+        state.accum_counter = 0
+        state.update_step += 1
+        self._step_named_scheduler_on_update(name)
 
     def _step(self, batch, batch_idx, mode):
         """Run one train/valid iteration for single or multiple optimizer modes.
@@ -1111,7 +1158,9 @@ class ESPnetLightningModule(lightning.LightningModule):
             return None
 
         self._log_stats(mode, stats, weight)
-        return loss
+        return (
+            self._weighted_distributed_loss(loss, weight) if mode == "train" else loss
+        )
 
     def training_step(self, batch, batch_idx):
         """Training step logic."""
@@ -1134,6 +1183,13 @@ class ESPnetLightningModule(lightning.LightningModule):
             # automatic optimization, so this hook only handles named multi-path
             # schedulers.
             return
+
+        for spec in self._optimizer_specs:
+            state = self._optimizer_states[spec.name]
+            if state.accum_counter:
+                self._apply_named_update(
+                    spec.name, self._get_named_optimizers()[spec.name], spec, state
+                )
 
         scheduler_by_name = self._get_named_schedulers()
         for spec in self._scheduler_specs:
@@ -1174,6 +1230,7 @@ class ESPnetLightningModule(lightning.LightningModule):
 
         - `accum_counter`
         - `update_step`
+        - Pending parameter gradients (cloned to CPU for exact mid-window resume).
 
         Scheduler state is not saved here because Lightning's
         checkpoint already contains each scheduler's internal state. Additional
@@ -1189,6 +1246,12 @@ class ESPnetLightningModule(lightning.LightningModule):
                 for name, state in self._optimizer_states.items()
             }
 
+            checkpoint["espnet3_accumulated_gradients"] = {
+                name: parameter.grad.detach().cpu().clone()
+                for name, parameter in self.named_parameters()
+                if parameter.grad is not None
+            }
+
     def on_load_checkpoint(self, checkpoint: Dict[str, object]) -> None:
         """Restore custom per-optimizer runtime state from checkpoints."""
         runtime_state = checkpoint.get("espnet3_optimizer_runtime_state")
@@ -1196,11 +1259,22 @@ class ESPnetLightningModule(lightning.LightningModule):
             return
         self._optimizer_states = {
             name: OptimizerRuntimeState(
-                accum_counter=state["accum_counter"],
+                accum_counter=(
+                    state["accum_counter"]
+                    if "espnet3_accumulated_gradients" in checkpoint
+                    else 0
+                ),
                 update_step=state["update_step"],
             )
             for name, state in runtime_state.items()
         }
+
+        gradients = checkpoint.get("espnet3_accumulated_gradients", {})
+        for name, parameter in self.named_parameters():
+            gradient = gradients.get(name)
+            parameter.grad = (
+                None if gradient is None else gradient.to(parameter).clone()
+            )
 
     def train_dataloader(self):
         """Build the training DataLoader using ESPnet's DataLoaderBuilder.

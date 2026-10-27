@@ -295,13 +295,11 @@ def prepare_manual_optimization(module, configured):
         spec.name: scheduler
         for spec, scheduler in zip(module._scheduler_specs, configured[1])
     }
-    module.manual_backward = lambda loss: loss.backward()
+    module.manual_backward = lambda loss, **kwargs: loss.backward(**kwargs)
     module.optimizers = lambda use_pl_optimizer=True: [
         optimizer_map[name] for name in module._multi_optimizer_names
     ]
-    module.lr_schedulers = lambda: [
-        scheduler_map[name] for name in module._multi_optimizer_names
-    ]
+    module.lr_schedulers = lambda: list(configured[1])
     module._trainer = type("DummyTrainer", (), {"current_epoch": 0})()
     logged = {}
     module.log_dict = lambda payload, **kwargs: logged.update(payload)
@@ -1042,18 +1040,6 @@ class DummyGANModel(nn.Module):
         return steps, stats, None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "lightning-module#01: manual_backward(g_loss) is not restricted to the "
-        "generator's parameters, so while the discriminator optimizer is "
-        "mid-accumulation (accum_grad_steps=2) it silently absorbs the "
-        "generator loss's gradient contribution through discriminator(fake). "
-        "Fixing this requires a design decision (e.g. manual_backward(inputs=...) "
-        "or zeroing other optimizers' grads before each backward) tracked as a "
-        "separate issue; this test documents the gap per lightning-module#19."
-    ),
-)
 def test_discriminator_grad_has_no_generator_loss_contamination():
     """(b) D.grad after a full accumulation cycle must contain only d_loss."""
     config = make_multi_config(accum_grad_steps=2)
@@ -1061,6 +1047,16 @@ def test_discriminator_grad_has_no_generator_loss_contamination():
     configured = module.configure_optimizers()
     prepare_manual_optimization(module, configured)
 
+    applied = {}
+    optimizer = configured[0][1]
+    original_step = optimizer.step
+
+    def record_step(*args, **kwargs):
+        applied["weight"] = module.model.discriminator.weight.grad.clone()
+        applied["bias"] = module.model.discriminator.bias.grad.clone()
+        return original_step(*args, **kwargs)
+
+    optimizer.step = record_step
     batch0 = _make_microbatch([0.1, 0.2])
     batch1 = _make_microbatch([0.5, 0.6])
 
@@ -1076,12 +1072,8 @@ def test_discriminator_grad_has_no_generator_loss_contamination():
     module.training_step(batch0, 0)
     module.training_step(batch1, 1)
 
-    assert torch.allclose(
-        module.model.discriminator.weight.grad, pure_discriminator.weight.grad
-    )
-    assert torch.allclose(
-        module.model.discriminator.bias.grad, pure_discriminator.bias.grad
-    )
+    assert torch.allclose(applied["weight"], pure_discriminator.weight.grad)
+    assert torch.allclose(applied["bias"], pure_discriminator.bias.grad)
 
 
 def test_gradient_clip_val_invokes_clip_grad_norm_with_real_trainer(monkeypatch):

@@ -764,7 +764,9 @@ def test_on_load_checkpoint_restores_optimizer_state(
     model.on_load_checkpoint(checkpoint)
 
     assert model._optimizer_states["gen"].update_step == 7
-    assert model._optimizer_states["gen"].accum_counter == 3
+    assert (
+        model._optimizer_states["gen"].accum_counter == 0
+    )  # Legacy checkpoints omit gradients.
 
 
 def test_collect_stats_raises_without_stats_dir(
