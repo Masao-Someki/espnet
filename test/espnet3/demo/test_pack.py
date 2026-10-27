@@ -31,6 +31,30 @@ def app_script(tmp_path):
     return path
 
 
+@pytest.mark.parametrize("existing", ["same", "other", "broken", "file"])
+def test_local_model_link_is_repeatable(tmp_path, existing):
+    model = tmp_path / "model"
+    model.mkdir()
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    dest = demo / "model_pack"
+    if existing == "file":
+        dest.write_text("keep")
+    else:
+        target = model if existing == "same" else tmp_path / "other"
+        if existing == "other":
+            target.mkdir()
+        dest.symlink_to(target, target_is_directory=True)
+    config = OmegaConf.create({"model": {"dir_or_tag": str(model)}})
+    if existing == "file":
+        with pytest.raises(RuntimeError, match="conflicts"):
+            demo_packing._link_local_model_into_bundle(config, demo)
+        assert dest.read_text() == "keep"
+    else:
+        demo_packing._link_local_model_into_bundle(config, demo)
+        assert dest.resolve() == model
+
+
 def test_pack_demo_writes_assets(
     app_script: Path,
     tmp_path: Path,
@@ -527,3 +551,53 @@ def test_pack_demo_requires_recipe_application(tmp_path):
 
     with pytest.raises(ValueError, match="ui.app_script is required"):
         pack_demo(_system_for_demo_config(tmp_path, demo_config))
+
+
+def test_demo_upload_keeps_curated_requirements(tmp_path, monkeypatch):
+    from argparse import Namespace
+
+    from espnet3.publication.demo import packing
+    from espnet3.utils import logging_utils
+    from espnet3.utils.stages_utils import run_stages
+
+    uploaded = []
+
+    class Hub:
+        def create_repo(self, **kwargs):
+            pass
+
+        def upload_folder(self, folder_path, **kwargs):
+            root = Path(folder_path)
+            uploaded.extend(path.name for path in root.iterdir())
+            assert (root / "requirements.txt").read_text() == "espnet==1.2.3\n"
+
+    monkeypatch.setattr(packing, "HfApi", Hub)
+    monkeypatch.setattr(logging_utils, "_run_pip_freeze", lambda: "unrelated==99\n")
+    app = tmp_path / "app.py"
+    app.write_text("print('demo')")
+    config = OmegaConf.create(
+        {
+            "model": {"dir_or_tag": "account/model"},
+            "ui": {"app_script": str(app)},
+            "pack": {
+                "out_dir": str(tmp_path / "demo"),
+                "requirements": ["espnet==1.2.3"],
+            },
+            "upload_demo": {"hf_repo": "account/demo", "update": False},
+        }
+    )
+    system = BaseSystem(
+        configs={
+            "training": OmegaConf.create({"exp_dir": str(tmp_path / "exp")}),
+            "demo": config,
+        }
+    )
+    run_stages(system, ["pack_demo", "upload_demo"], Namespace(write_requirements=True))
+    assert "demo.yaml" in uploaded
+    assert not {
+        "pack_demo.log",
+        "upload_demo.log",
+        "pack_demo.yaml",
+        "upload_demo.yaml",
+    }.intersection(uploaded)
+    assert (system.exp_dir / "logs" / "upload_demo" / "upload_demo.yaml").exists()

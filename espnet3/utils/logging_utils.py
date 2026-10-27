@@ -358,14 +358,17 @@ def _run_pip_freeze() -> str:
 
 def _get_log_dir_from_logger(logger: logging.Logger) -> Path | None:
     """Return the log directory from any configured file handler."""
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler) and getattr(
-            handler, "baseFilename", None
-        ):
-            return Path(handler.baseFilename).resolve().parent
-
-    root = logging.getLogger()
-    for handler in root.handlers:
+    handlers = []
+    current = logger
+    while current is not None:
+        handlers.extend(current.handlers)
+        if not current.propagate:
+            break
+        current = current.parent
+    ordered = sorted(
+        handlers, key=lambda h: not getattr(h, "_espnet3_stage_log", False)
+    )
+    for handler in ordered:
         if isinstance(handler, logging.FileHandler) and getattr(
             handler, "baseFilename", None
         ):

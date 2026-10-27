@@ -136,6 +136,10 @@ def run_stages(
                     or Path.cwd() / "logs"
                 )
 
+                if stage in {"pack_demo", "upload_demo"}:
+                    # Keep operational metadata outside the uploaded demo assets.
+                    log_dir = Path(system.exp_dir) / "logs" / stage
+
                 # Persist full config snapshot to <log_dir>/<stage>.yaml
                 snapshot_config(
                     log_dir=log_dir,
