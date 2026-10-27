@@ -1,6 +1,7 @@
 """DataOrganizer class for managing datasets in ESPnet3."""
 
 import copy
+import inspect
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -459,6 +460,13 @@ class DataOrganizer:
             and isinstance(partial_preprocessor.func, type)
             and issubclass(partial_preprocessor.func, AbsPreprocessor)
         )
+        if not is_espnet and hasattr(partial_preprocessor, "func"):
+            try:
+                is_espnet = (
+                    "train" in inspect.signature(partial_preprocessor.func).parameters
+                )
+            except (TypeError, ValueError):
+                pass
         if is_espnet:
             if "train" in preprocessor_cfg:
                 logger.warning(

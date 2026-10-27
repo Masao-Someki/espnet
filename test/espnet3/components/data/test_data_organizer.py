@@ -1057,17 +1057,6 @@ def test_espnet_preprocessor_train_flag_auto_set_from_dictconfig():
     assert organizer.valid[0]["was_train"] is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "data-organizer#26: _instantiate_preprocessor_from_config detects "
-        "an ESPnet AbsPreprocessor via "
-        "isinstance(partial_preprocessor.func, type), which is False for a "
-        "_target_ factory *function* (as opposed to the class itself), so "
-        "the per-split train flag is never auto-set for factory-based "
-        "shared preprocessor configs."
-    ),
-)
 def test_espnet_preprocessor_train_flag_auto_set_from_factory_function():
     """A _target_ that is a factory function should still get train auto-set."""
     config = {
