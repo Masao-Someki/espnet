@@ -2,8 +2,11 @@
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
+import numpy as np
 from hydra.utils import get_class, instantiate
 from omegaconf import DictConfig, OmegaConf, open_dict
 
@@ -263,7 +266,26 @@ def measure(metrics_config: DictConfig, inference_config: DictConfig | None = No
             results[get_class_path(metric)].update({test_name: metric_result})
 
     out_path = Path(metrics_config.inference_dir) / "metrics.json"
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    def json_scalar(value):
+        if isinstance(value, np.integer):
+            return int(value)
+        if isinstance(value, np.floating):
+            return float(value)
+        if isinstance(value, np.generic):
+            return value.item()
+        raise TypeError(f"{type(value).__name__} is not JSON serializable")
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=out_path.parent, delete=False
+        ) as f:
+            temporary = Path(f.name)
+            json.dump(results, f, indent=2, ensure_ascii=False, default=json_scalar)
+        os.replace(temporary, out_path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
     return results
