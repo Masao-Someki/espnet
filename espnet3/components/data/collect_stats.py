@@ -572,7 +572,10 @@ def collect_stats(
         dataloader_config: Dataloader configuration.
         mode: Name of the dataset split to process (``train`` or ``valid``).
         output_dir: Directory where aggregated statistics and optionally
-            collected features are written.
+            collected features are written. Sharded datasets write local-ID shape
+            files under ``shard.<index>/<mode>/`` and aggregate normalization
+            statistics under ``<mode>/``. Use ``shard.{shard_idx}`` in iterator
+            shape-file paths so the loader selects the matching index space.
         task: Name of the ESPnet task. If ``None``, ``model_config`` should be
             directly instantiable.
         parallel_config: Configuration for parallel execution.
@@ -597,17 +600,30 @@ def collect_stats(
         )
     if parallel_config is not None:
         set_parallel(parallel_config)
-    sum_dict, sq_dict, count_dict = _collect_stats_common(
-        model_config=model_config,
-        dataset_config=dataset_config,
-        dataloader_config=dataloader_config,
-        mode=mode,
-        output_dir=output_dir,
-        task=task,
-        write_collected_feats=write_collected_feats,
-        batch_size=batch_size,
-        train_mode=train_mode,
-    )
+    dataset = _instantiate_dataset(dataset_config, mode, train_mode)
+    total_shards = getattr(dataset, "total_shards", None)
+    shard_indices = range(total_shards) if total_shards is not None else [None]
+    sum_dict, sq_dict, count_dict = {}, {}, {}
+    for shard_idx in shard_indices:
+        shard_output = (
+            output_dir / f"shard.{shard_idx}" if shard_idx is not None else output_dir
+        )
+        sums, squares, counts = _collect_stats_common(
+            model_config=model_config,
+            dataset_config=dataset_config,
+            dataloader_config=dataloader_config,
+            mode=mode,
+            output_dir=shard_output,
+            task=task,
+            write_collected_feats=write_collected_feats,
+            batch_size=batch_size,
+            shard_idx=shard_idx,
+            train_mode=train_mode,
+        )
+        for key in sums:
+            sum_dict[key] = sum_dict.get(key, 0) + sums[key]
+            sq_dict[key] = sq_dict.get(key, 0) + squares[key]
+            count_dict[key] = count_dict.get(key, 0) + counts[key]
 
     mode_dir = output_dir / mode
     mode_dir.mkdir(parents=True, exist_ok=True)

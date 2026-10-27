@@ -149,7 +149,10 @@ class DataLoaderBuilder:
             )
 
         shard_idx = ((self.epoch * runtime_world_size) + rank) % total_shards
-        return dataset.shard(shard_idx)
+        selected = dataset.shard(shard_idx)
+        selected.shard_index = shard_idx
+        selected.rank_sharded = runtime_world_size > 1
+        return selected
 
     def build(self, mode: str):
         """Build and return a DataLoader for the specified mode ("train" or "valid").
@@ -280,6 +283,20 @@ class DataLoaderBuilder:
         if hasattr(self.config, "batch_sampler"):
             batch_sampler = instantiate(self.config.batch_sampler, dataset)
 
+        if getattr(dataset, "rank_sharded", False):
+            if sampler is not None or batch_sampler is not None:
+                raise RuntimeError(
+                    "Rank-sharded standard loaders require the default sampler"
+                )
+            # Lightning recognizes an existing DistributedSampler and leaves it
+            # alone. One replica preserves every sample in this rank's shard.
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                dataset,
+                num_replicas=1,
+                rank=0,
+                shuffle=config.pop("shuffle", False),
+            )
+
         assert not (
             sampler and batch_sampler
         ), "Cannot specify both sampler and batch_sampler"
@@ -295,6 +312,23 @@ class DataLoaderBuilder:
             collate_fn=self.collate_fn,
             **config,
         )
+        if (
+            getattr(dataset, "rank_sharded", False)
+            and torch.distributed.is_initialized()
+        ):
+            device = (
+                torch.device("cuda", torch.cuda.current_device())
+                if torch.distributed.get_backend() == "nccl"
+                else torch.device("cpu")
+            )
+            counts = torch.tensor([len(loader), -len(loader)], device=device)
+            torch.distributed.all_reduce(counts, op=torch.distributed.ReduceOp.MIN)
+            if counts[0] != -counts[1]:
+                raise RuntimeError(
+                    "Rank-sharded standard loaders need equal batch counts "
+                    "across ranks; "
+                    "rebalance shards or use a synchronized iter_factory."
+                )
         log_dataloader(
             logger,
             loader,
@@ -312,6 +346,18 @@ class DataLoaderBuilder:
         if batch_distribution == "global" and torch.distributed.is_initialized():
             # Match ESPnet2: every shared batch must be splittable across ranks.
             sampler_config["min_batch_size"] = torch.distributed.get_world_size()
+        if hasattr(dataset, "shard_index"):
+            shape_files = sampler_config.get("shape_files", [])
+            if any("{shard_idx}" not in str(path) for path in shape_files):
+                raise RuntimeError(
+                    "Sharded iterators require shard-local shape_files using "
+                    "shard.{shard_idx}/<mode>/<field>_shape; global shape IDs "
+                    "cannot index a shard-local dataset. Re-run collect_stats."
+                )
+            sampler_config["shape_files"] = [
+                str(path).replace("{shard_idx}", str(dataset.shard_index))
+                for path in shape_files
+            ]
         batches = build_batch_sampler(**sampler_config)
 
         if batch_distribution == "global":
@@ -353,7 +399,7 @@ class DataLoaderBuilder:
                         "adjust the sampler's minimum batch size or use per_gpu."
                     )
             batches = [batch[rank::world_size] for batch in batches]
-        elif self.num_device > 1:
+        elif self.num_device > 1 and not getattr(dataset, "rank_sharded", False):
             batches = list(batches)
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()

@@ -506,12 +506,17 @@ class DatasetWithTransform:
         )
 
 
-class ShardedDataset(ABC, Dataset):
+class ShardedDataset(Dataset, ABC):
     """Abstract base class for datasets that support sharding.
 
     This interface is used when datasets are split into shards for parallel or
     distributed data loading. Any dataset subclassing `ShardedDataset` must
-    implement the `shard()` method.
+    implement the `shard()` method. Recipe datasets may also inherit
+    ``BaseDataset`` to declare their fields. Numeric IDs are local to each
+    selected shard: collect_stats writes shape files to
+    ``stats_dir/shard.<index>/<mode>/<field>_shape``. Configure the iterator's
+    ``batches.shape_files`` using ``shard.{shard_idx}`` so DataLoaderBuilder
+    selects the matching shape file without guessing a global-to-local map.
 
     Attributes:
         total_shards (int): Total number of shards in the dataset.
