@@ -325,6 +325,31 @@ def test_pack_model_creates_output_dir_and_copies_exp_dir(tmp_path):
     assert "torch" in meta
 
 
+@pytest.mark.parametrize("destination", ["experiment", "ancestor", "symlink"])
+def test_pack_model_rejects_destructive_destination(tmp_path, destination):
+    exp = tmp_path / "exp"
+    exp.mkdir()
+    sentinel = exp / "weights.pth"
+    sentinel.write_text("keep")
+    out = exp if destination == "experiment" else tmp_path
+    if destination == "symlink":
+        out = tmp_path / "alias"
+        out.symlink_to(exp, target_is_directory=True)
+    with pytest.raises(RuntimeError, match="Unsafe pack_model out_dir"):
+        publish.pack_model(
+            OmegaConf.create({"recipe_dir": str(tmp_path), "exp_dir": str(exp)}),
+            OmegaConf.create(
+                {
+                    "pack_model": {
+                        "out_dir": str(out),
+                        "allow_overwrite": True,
+                    }
+                }
+            ),
+        )
+    assert sentinel.read_text() == "keep"
+
+
 def test_pack_model_resolves_repo_root_readme_path_outside_cwd(tmp_path, monkeypatch):
     recipe_dir = tmp_path
     exp_dir = recipe_dir / "exp"

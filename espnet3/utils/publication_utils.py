@@ -565,6 +565,11 @@ def pack_model(
     if not out_dir.is_absolute():
         out_dir = recipe_root / out_dir
     out_dir = out_dir.resolve()
+    for source in (exp_dir, recipe_root):
+        if out_dir == source or out_dir in source.parents:
+            raise RuntimeError(
+                f"Unsafe pack_model out_dir {out_dir}: contains source {source}"
+            )
     if out_dir.exists():
         if not getattr(pack_cfg, "allow_overwrite", False):
             raise RuntimeError(
