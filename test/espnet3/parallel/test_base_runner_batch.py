@@ -389,7 +389,7 @@ def test_parallel_config_can_replace_stale_lock(tmp_path):
     pending = runner._filter_pending_shards([{"shard_id": 0, "items": [[0, 1]]}])
 
     assert pending == [{"shard_id": 0, "items": [[0, 1]]}]
-    assert lock_path.read_text(encoding="utf-8") != "stale\n"
+    assert not lock_path.exists()  # acquired lazily when the worker starts
 
 
 def test_failed_shard_releases_lock(tmp_path):
@@ -554,3 +554,80 @@ def test_generic_runner_does_not_interpret_inference_environment(tmp_path):
     }
     runner = DummyRunner(provider, output_dir=tmp_path, resume=False)
     assert runner([0, 1])["records"] == [0, 1]
+
+
+@pytest.mark.parametrize("change", ["config", "file", "directory", "legacy"])
+def test_resume_rejects_changed_identity(tmp_path, change):
+    checkpoint = tmp_path / "model.pth"
+    checkpoint.write_bytes(b"old")
+    provider = DummyProvider()
+    provider.config = OmegaConf.create({"model": str(checkpoint), "beam": 1})
+    if change == "directory":
+        inputs = tmp_path / "data"
+        inputs.mkdir()
+        (inputs / "sample.txt").write_text("old")
+        provider.config.dataset_dir = str(inputs)
+    runner = DummyRunner(provider, output_dir=tmp_path / "out")
+    assert runner([0])["records"] == [0]
+    assert runner([0])["records"] == [0]
+    if change == "config":
+        provider.config.beam = 2
+    elif change == "file":
+        checkpoint.write_bytes(b"new")
+    elif change == "directory":
+        (inputs / "sample.txt").write_text("new")
+    else:
+        path = runner._get_manifest_path(runner.output_dir, runner.shard_subdir)
+        import json
+
+        manifest = json.loads(path.read_text())
+        manifest.pop("identity")
+        path.write_text(json.dumps(manifest))
+    with pytest.raises(RuntimeError, match="identity"):
+        runner([0])
+    runner.resume = False
+    assert runner([0])["records"] == [0]
+
+
+def test_resume_does_not_treat_split_names_as_directories(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "test"
+    data.mkdir()
+    provider = DummyProvider()
+    provider.config = OmegaConf.create({"dataset": {"name": "test"}})
+    runner = DummyRunner(provider, output_dir=tmp_path / "out")
+    assert runner([0])["records"] == [0]
+
+    (data / "new.txt").write_text("unrelated")
+    assert runner([0])["records"] == [0]
+
+
+@pytest.mark.parametrize("client_close_fails", [False, True])
+def test_worker_setup_failure_closes_client_and_cluster(
+    monkeypatch, client_close_fails
+):
+    from types import SimpleNamespace
+
+    import espnet3.parallel.parallel as parallel_module
+
+    closed = []
+
+    def close_client():
+        closed.append("client")
+        if client_close_fails:
+            raise RuntimeError("close failed")
+
+    client = SimpleNamespace(
+        close=close_client,
+        cluster=SimpleNamespace(close=lambda: closed.append("cluster")),
+    )
+    monkeypatch.setattr(parallel_module, "build_client", lambda config: client)
+
+    def fail_setup(*args, **kwargs):
+        raise RuntimeError("setup failed")
+
+    monkeypatch.setattr(parallel_module, "_register_worker_plugin", fail_setup)
+    with pytest.raises(RuntimeError):
+        with parallel_module.get_client(setup_fn=lambda: {}):
+            raise AssertionError("Must not yield an uninitialized client")
+    assert closed == ["client", "cluster"]

@@ -333,23 +333,25 @@ def get_client(
         ...     results = client.map(lambda x: x**2, range(10))
     """
     client = build_client(config)
-    if setup_fn is not None:
-        plugin = DictReturnWorkerPlugin(setup_fn)
-        _register_worker_plugin(client, plugin, name="env")
     try:
+        if setup_fn is not None:
+            plugin = DictReturnWorkerPlugin(setup_fn)
+            _register_worker_plugin(client, plugin, name="env")
         yield client
     finally:
         # Avoid shutdown for LocalCluster and LocalCUDACluster
         cluster = getattr(client, "cluster", None)
 
-        # always close the client first
-        client.close()
-
-        if cluster is not None:
-            close = getattr(cluster, "close", None)
-            if callable(close):
-                close()
-            else:
-                shutdown = getattr(cluster, "shutdown", None)
-                if callable(shutdown):
-                    shutdown()
+        # Worker initialization can fail before yielding the client. Even if
+        # closing the client also fails, the allocated cluster must be closed.
+        try:
+            client.close()
+        finally:
+            if cluster is not None:
+                close = getattr(cluster, "close", None)
+                if callable(close):
+                    close()
+                else:
+                    shutdown = getattr(cluster, "shutdown", None)
+                    if callable(shutdown):
+                        shutdown()

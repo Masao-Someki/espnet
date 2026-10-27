@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -16,6 +17,7 @@ from espnet3.parallel.parallel import (
     get_parallel_config,
     wrap_func_with_worker_env,
 )
+from espnet3.parallel.resume import resume_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +258,8 @@ class BaseRunner(ABC):
         manifest_path = self._get_manifest_path(self.output_dir, self.shard_subdir)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
         data = {
-            "version": 1,
+            "version": 2,
+            "identity": resume_fingerprint(self.provider, type(self), self.output_dir),
             "output_dir": str(self.output_dir),
             "shard_subdir": self.shard_subdir,
             "shards": list(shards),
@@ -329,12 +332,18 @@ class BaseRunner(ABC):
                 "batching configuration. Re-run with the original settings or "
                 "remove the existing shard outputs before starting over."
             )
+        identity = resume_fingerprint(self.provider, type(self), self.output_dir)
+        if manifest.get("identity") != identity:
+            raise RuntimeError(
+                "Cannot resume: provider, model or input identity changed, or the "
+                "manifest predates identity checking. Use resume=False to recompute."
+            )
         return manifest_shards
 
     def _filter_pending_shards(
         self, shards: Sequence[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Return locked shards; skips done-marked ones when resume=True.
+        """Select pending shards without acquiring worker-owned resources.
 
         Set ``parallel.allow_overwrite_lock: true`` to replace an existing
         shard lock. This is intended for a stale lock left by an interrupted
@@ -349,23 +358,18 @@ class BaseRunner(ABC):
             shard_dir = self._resolve_shard_dir(
                 str(self.output_dir), self.shard_subdir, int(shard["shard_id"])
             )
-            if self.resume and self.is_shard_done(shard_dir):
-                continue
-            locked = self._try_lock_shard(shard_dir)
-            if not locked:
-                if self.resume and self.is_shard_done(shard_dir):
-                    continue
+            lock = self._get_lock_path(shard_dir)
+            if lock.exists():
                 if allow_overwrite_lock:
-                    self._get_lock_path(shard_dir).unlink(missing_ok=True)
-                    locked = self._try_lock_shard(shard_dir)
-            if not locked:
-                raise RuntimeError(
-                    "Shard is already locked by another runner: " f"{shard_dir}"
-                )
-            if self.resume and self.is_shard_done(shard_dir):
-                self._unlock_shard(shard_dir)
-                continue
-            pending.append(shard)
+                    lock.unlink(missing_ok=True)
+                else:
+                    raise RuntimeError(
+                        f"Shard is already locked by another runner: {shard_dir}"
+                    )
+            if not (self.resume and self.is_shard_done(shard_dir)):
+                pending.append(shard)
+        # Workers acquire their own locks immediately before opening writers.
+        # Unstarted work never owns resources that the driver must roll back.
         return pending
 
     def _get_completed_shard_dirs(self, shards: Sequence[Dict[str, Any]]) -> List[Path]:
@@ -392,10 +396,19 @@ class BaseRunner(ABC):
         env: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Process one shard end-to-end; used by _run_local and _run_parallel_dask."""
-        state = cls.init_state(shard_id=shard_id, **env)
-        shard_dir = Path(state["shard_dir"])
+        shard_dir = cls._resolve_shard_dir(
+            env["output_dir"], env.get("shard_subdir", ""), shard_id
+        )
+        if not cls._try_lock_shard(shard_dir):
+            raise RuntimeError(
+                f"Shard is already locked by another runner: {shard_dir}"
+            )
+        state = None
         try:
+            if env.get("_runner_resume", False) and cls.is_shard_done(shard_dir):
+                return {"shard_id": shard_id, "shard_dir": str(shard_dir)}
             cls._get_done_path(shard_dir).unlink(missing_ok=True)
+            state = cls.init_state(shard_id=shard_id, **env)
             for item in items:
                 result = cls.forward(item, **env)
                 state = cls.reduce_state(state, result, shard_id=shard_id, **env)
@@ -403,12 +416,25 @@ class BaseRunner(ABC):
             cls._get_done_path(shard_dir).write_text("", encoding="utf-8")
             return state
         finally:
-            cls._unlock_shard(shard_dir)
+            pending_error = sys.exc_info()[0] is not None
+            try:
+                if state is not None and "_writers" in state:
+                    try:
+                        cls.close_writers(
+                            state.pop("_writers"), state, shard_id=shard_id, **env
+                        )
+                    except Exception:
+                        if not pending_error:
+                            raise
+                        logger.exception("Closing writers after shard failure")
+            finally:
+                cls._unlock_shard(shard_dir)
 
     def _run_local(self, shards: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Run pending shards sequentially on the driver."""
         env = self.provider.build_env_local()
         env.setdefault("output_dir", str(self.output_dir))
+        env["_runner_resume"] = self.resume
         if self.shard_subdir:
             env.setdefault("shard_subdir", self.shard_subdir)
         cls = self.__class__
@@ -432,9 +458,11 @@ class BaseRunner(ABC):
         provider_setup = self.provider.build_worker_setup_fn()
         output_dir_str = str(self.output_dir)
         shard_subdir = self.shard_subdir
+        resume = self.resume
 
         def setup_fn():
             env = provider_setup()
+            env["_runner_resume"] = resume
             env.setdefault("output_dir", output_dir_str)
             if shard_subdir:
                 env.setdefault("shard_subdir", shard_subdir)
