@@ -14,6 +14,7 @@ from espnet3.contract.stages import (
 )
 from espnet3.utils.config_utils import load_and_merge_config
 from espnet3.utils.logging_utils import configure_logging
+from espnet3.utils.stage_cli import _sanitize_dest_key
 from espnet3.utils.stage_configs import merge_stage_config_from_snapshots
 from espnet3.utils.stages_utils import resolve_stages, run_stages
 
@@ -179,7 +180,7 @@ def launch(
     if args.exp_dir is not None:
         cli_dir_overrides["exp_dir"] = Path(args.exp_dir)
     for canonical_key in set(generate_stage_flag_mapping(system_cls.stages).values()):
-        value = getattr(args, canonical_key, None)
+        value = getattr(args, _sanitize_dest_key(canonical_key), None)
         if value is not None:
             cli_dir_overrides[canonical_key] = Path(value)
 

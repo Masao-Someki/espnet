@@ -31,7 +31,7 @@ recipe_dir: .
 data_dir: ${recipe_dir}/data
 exp_tag: ${self_name:}
 exp_dir: ${recipe_dir}/exp/${exp_tag}
-stats_dir: ${recipe_dir}/exp/stats
+stats_dir: ${exp_dir}/stats
 
 # Directory where this recipe stores prepared manifests and any recipe-local
 # dataset artifacts.

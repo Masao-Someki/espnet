@@ -2,7 +2,7 @@
 #                 METRIC SCORING SETTING                 #
 ##########################################################
 # Quick usage:
-#   python run.py --stages measure --metrics_config conf/metrics.yaml
+#   python run.py --stages measure --metrics_config conf/metrics.yaml --training_config conf/training.yaml
 # Or, to reuse the identity (and inference_dir) baked by a previous
 # training/infer run, without passing any config explicitly:
 #   python run.py --stages measure --exp_dir exp/train_asr_transformer

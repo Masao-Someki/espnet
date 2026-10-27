@@ -39,6 +39,45 @@ class _TrainOnlySystem:
     stages = (StageSpec(name="train", config="training", log_dir="exp_dir"),)
 
 
+@pytest.mark.parametrize("replace_stale", [False, True])
+def test_stage_specific_snapshots_do_not_conflict(tmp_path, replace_stale):
+    exp = str(tmp_path)
+    infer = tmp_path / "infer"
+    snapshot_config(
+        tmp_path,
+        "train",
+        OmegaConf.create(
+            {
+                "exp_dir": exp,
+                "model": {"encoder": "train"},
+                "dataset": "train",
+                "seed": 1,
+            }
+        ),
+    )
+    snapshot_config(
+        infer,
+        "infer",
+        OmegaConf.create(
+            {
+                "exp_dir": exp,
+                "inference_dir": str(infer),
+                "model": {"backend": "inference"},
+                "dataset": "test",
+                "seed": 2,
+            }
+        ),
+    )
+    own = OmegaConf.create({"model": {"backend": "new"}}) if replace_stale else None
+    result = merge_stage_config_from_snapshots(
+        _System,
+        "measure",
+        {"inference": own},
+        {"exp_dir": exp, "inference_dir": str(infer)},
+    )
+    assert result.model.backend == ("new" if replace_stale else "inference")
+
+
 # ---------------------------------------------------------------------------
 # resolve_search_directories
 # ---------------------------------------------------------------------------
@@ -727,3 +766,18 @@ def test_merge_still_rejects_unresolved_directory_after_inheritance():
     configs = {"inference": OmegaConf.create({"inference_dir": "${exp_dir}/infer"})}
     with pytest.raises(ConfigError, match="exp_dir"):
         merge_stage_config_from_snapshots(_System, "infer", configs, {})
+
+
+def test_template_stats_directory_is_per_experiment(tmp_path):
+    template = (
+        Path(__file__).resolve().parents[3]
+        / "egs3/TEMPLATE/esp2_asr/conf/training.yaml"
+    )
+    config = OmegaConf.load(template)
+    config.recipe_dir = str(tmp_path)
+    directories = []
+    for tag in ["conformer", "transformer"]:
+        config.exp_tag = tag
+        directories.append(config.stats_dir)
+        assert Path(config.stats_dir).parent == Path(config.exp_dir)
+    assert directories[0] != directories[1]

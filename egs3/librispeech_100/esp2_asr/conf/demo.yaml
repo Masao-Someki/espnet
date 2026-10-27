@@ -2,8 +2,8 @@
 #                      DEMO SETTING                      #
 ##########################################################
 # Quick usage:
-#   python run.py --stages pack_demo   --demo_config conf/demo.yaml
-#   python run.py --stages upload_demo --demo_config conf/demo.yaml
+#   python run.py --stages pack_demo   --demo_config conf/demo.yaml --training_config conf/training.yaml
+#   python run.py --stages upload_demo --demo_config conf/demo.yaml --training_config conf/training.yaml
 #
 # Assumptions:
 # - `pack_model` has already created the model pack referenced by

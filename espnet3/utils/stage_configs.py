@@ -533,9 +533,9 @@ def merge_stage_config_from_snapshots(
 
     Raises:
         ConfigError: `requested_stage` is not declared; a snapshot file
-            exists but cannot be parsed; two loaded snapshots disagree on
-            the value of a top-level key they both define (a sign of two
-            different parent experiments being mixed); or a required
+            exists but cannot be parsed; effective stage configs disagree on
+            experiment identity (exp_dir or exp_tag), indicating two
+            different parent experiments are being mixed; or a required
             interpolation in the final config cannot be resolved.
     """
     if visited is None:
@@ -625,27 +625,10 @@ def merge_stage_config_from_snapshots(
             except ConfigError:
                 pass
 
-    # Detect snapshots that disagree on a key they both define - mixing two
-    # different parent experiments rather than one shared lineage.
+    # Only experiment identity must agree. Models and datasets legitimately
+    # differ between stages. Compare effective configs after explicit configs
+    # have replaced stale own-stage snapshots.
     seen_values: Dict[str, Tuple[str, object]] = {}
-    for spec in in_scope:
-        snapshot = loaded.get(spec.name)
-        if snapshot is None:
-            continue
-        for key in snapshot.keys():
-            value = snapshot[key]
-            if key in seen_values:
-                other_stage, other_value = seen_values[key]
-                if other_value != value:
-                    raise ConfigError(
-                        f"conflicting saved configs: stage {spec.name!r} "
-                        f"and stage {other_stage!r} disagree on {key!r} "
-                        f"({value!r} vs {other_value!r}); refusing to mix "
-                        "them into one lineage"
-                    )
-            else:
-                seen_values[key] = (spec.name, value)
-
     per_stage: Dict[str, DictConfig] = {}
     for spec in in_scope:
         base: dict = {}
@@ -665,6 +648,21 @@ def merge_stage_config_from_snapshots(
                 base.update(OmegaConf.to_container(own_snapshot, resolve=False))
 
         per_stage[spec.name] = OmegaConf.create(base)
+        for key in ("exp_dir", "exp_tag"):
+            if key not in per_stage[spec.name]:
+                continue
+            value = per_stage[spec.name][key]
+            if key == "exp_dir" and value is not None:
+                value = str(Path(value).resolve())
+            if key in seen_values and seen_values[key][1] != value:
+                other_stage, other_value = seen_values[key]
+                raise ConfigError(
+                    f"conflicting saved configs: stage {spec.name!r} "
+                    f"and stage {other_stage!r} disagree on {key!r} "
+                    f"({value!r} vs {other_value!r}); refusing to mix "
+                    "them into one lineage"
+                )
+            seen_values[key] = (spec.name, value)
 
     result = per_stage[requested_stage]
     for key, value in cli_dir_overrides.items():

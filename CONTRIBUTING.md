@@ -60,8 +60,8 @@ ESPnet3 recipes are Python entry points rather than shell stages. A recipe runs 
 ``` console
 $ python run.py --stages create_dataset --training_config conf/training.yaml
 $ python run.py --stages train          --training_config conf/training.yaml
-$ python run.py --stages infer          --inference_config conf/inference.yaml
-$ python run.py --stages measure        --metrics_config conf/metrics.yaml
+$ python run.py --stages infer          --inference_config conf/inference.yaml --training_config conf/training.yaml
+$ python run.py --stages measure        --metrics_config conf/metrics.yaml --training_config conf/training.yaml
 ```
 
 See [egs3/TEMPLATE](https://github.com/espnet/espnet/tree/master/egs3/TEMPLATE) for the

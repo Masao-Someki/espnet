@@ -2,7 +2,7 @@
 #                   Inference SETTING                    #
 ##########################################################
 # Quick usage:
-#   python run.py --stages infer --inference_config conf/inference.yaml
+#   python run.py --stages infer --inference_config conf/inference.yaml --training_config conf/training.yaml
 #
 # Shared default merged under every F5-TTS recipe's inference config.
 # `recipe_dir`, `exp_tag` and `exp_dir` are inherited from the training

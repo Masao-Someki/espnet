@@ -365,6 +365,7 @@ def test_native_asr_recipe_writes_the_backends_text(tmp_path, batch_size):
     )
     overrides = OmegaConf.create(
         {
+            "recipe_dir": str(tmp_path),
             "inference_dir": str(tmp_path / "decode"),
             "dataset": {"test": [{"name": "test"}]},
             "model": {
