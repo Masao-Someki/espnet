@@ -482,6 +482,11 @@ def test_iter_factory_drops_tail_batches_for_ddp(monkeypatch, rank):
         return [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
 
     monkeypatch.setattr(dl, "build_batch_sampler", _fake_build_batch_sampler)
+    monkeypatch.setattr(dl.torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(
+        dl.torch.distributed, "all_reduce", lambda tensor, op=None: None
+    )
+    monkeypatch.setattr(dl.torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(dl.torch.distributed, "get_world_size", lambda: 2)
     monkeypatch.setattr(dl.torch.distributed, "get_rank", lambda: rank)
 
@@ -611,6 +616,9 @@ def test_sharded_dataset_multi_gpu_assignment(
     rank,
     expected,
 ):
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(torch.distributed, "get_world_size", lambda: world_size)
     monkeypatch.setattr(torch.distributed, "get_rank", lambda: rank)
     organizer = DataOrganizer(
@@ -636,6 +644,9 @@ def test_sharded_dataset_multi_gpu_rotates_with_epoch(monkeypatch):
     def _get_rank():
         return 0
 
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(torch.distributed, "get_world_size", _get_world_size)
     monkeypatch.setattr(torch.distributed, "get_rank", _get_rank)
 
@@ -675,6 +686,9 @@ def test_sharded_dataset_multi_gpu_rotates_epochs_0_to_3(
     def _get_world_size():
         return 2
 
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(torch.distributed, "get_world_size", _get_world_size)
 
     organizer = build_organizer(
@@ -703,6 +717,9 @@ def test_sharded_dataset_invalid_shard_count(monkeypatch, total_shards):
     def _get_rank():
         return 0
 
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(torch.distributed, "get_world_size", _get_world_size)
     monkeypatch.setattr(torch.distributed, "get_rank", _get_rank)
 
@@ -741,6 +758,9 @@ def test_sharded_dataset_world_size_mismatch(monkeypatch):
     def _get_rank():
         return 0
 
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(torch.distributed, "get_world_size", _get_world_size)
     monkeypatch.setattr(torch.distributed, "get_rank", _get_rank)
 
@@ -786,6 +806,11 @@ def test_iter_factory_allows_batches_smaller_than_world_size(
     # 4 single-utterance batches (as ChunkIterFactory emits); previously this
     # raised "batch-size must be equal or more than world_size"
     monkeypatch.setattr(dl, "build_batch_sampler", lambda **kw: [[0], [1], [2], [3]])
+    monkeypatch.setattr(dl.torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(
+        dl.torch.distributed, "all_reduce", lambda tensor, op=None: None
+    )
+    monkeypatch.setattr(dl.torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(dl.torch.distributed, "get_world_size", lambda: 2)
     monkeypatch.setattr(dl.torch.distributed, "get_rank", lambda: rank)
 
@@ -827,6 +852,11 @@ def test_iter_factory_syncs_iterator_when_distributed_initialized(monkeypatch):
     monkeypatch.setattr(
         dl, "build_batch_sampler", lambda **kw: [[0, 1], [2, 3], [4, 5], [6, 7]]
     )
+    monkeypatch.setattr(dl.torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(
+        dl.torch.distributed, "all_reduce", lambda tensor, op=None: None
+    )
+    monkeypatch.setattr(dl.torch.distributed, "get_backend", lambda: "gloo")
     monkeypatch.setattr(dl.torch.distributed, "get_world_size", lambda: 2)
     monkeypatch.setattr(dl.torch.distributed, "get_rank", lambda: 0)
     monkeypatch.setattr(

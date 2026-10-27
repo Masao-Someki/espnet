@@ -74,8 +74,8 @@ class EpochSyncIterator:
     def __len__(self):
         """Return the number of batches in one pass over the source.
 
-        In distributed runs this is an upper bound: the epoch ends earlier on
-        every rank when the first rank runs out of batches. A callable source
+        Distributed ranks agree on the minimum sized-source length, keeping
+        Lightning's validation boundary identical on every rank. A callable source
         is called to obtain the object to measure, so a factory returning a
         sized loader still reports its length. The result is cached: the
         trainer asks for the length several times per epoch, and building a
@@ -112,6 +112,18 @@ class EpochSyncIterator:
                 # factory pays O(corpus) per call, so the probe must not cost
                 # an extra one.
                 self._pending_pass = new_pass
+        if torch.distributed.is_initialized() and not getattr(
+            self, "_length_synced", False
+        ):
+            device = (
+                torch.device("cuda", torch.cuda.current_device())
+                if torch.distributed.get_backend() == "nccl"
+                else torch.device("cpu")
+            )
+            length = torch.tensor(self._length, dtype=torch.long, device=device)
+            torch.distributed.all_reduce(length, op=torch.distributed.ReduceOp.MIN)
+            self._length = int(length.item())
+            self._length_synced = True
         if self._length == _UNSIZED:
             raise TypeError(
                 f"{type(self).__name__} wraps an unsized source, so it has no len()"

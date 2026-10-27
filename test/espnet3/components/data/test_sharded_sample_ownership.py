@@ -14,6 +14,14 @@ from espnet3.components.data.dataset import ShardedDataset
 from espnet3.contract import Field
 
 
+@pytest.fixture(autouse=True)
+def initialized_topology(monkeypatch):
+    """Simulate collective calls while checking every rank's actual samples."""
+    monkeypatch.setattr(torch.distributed, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.distributed, "get_backend", lambda: "gloo")
+    monkeypatch.setattr(torch.distributed, "all_reduce", lambda tensor, op=None: None)
+
+
 class _Partition(ShardedDataset, BaseDataset):
     fields = (Field("speech", "audio"),)
     total_shards = 2

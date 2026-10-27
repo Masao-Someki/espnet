@@ -69,13 +69,15 @@ def test_sync_yields_all_batches_when_ranks_aligned(monkeypatch):
     iterator = EpochSyncIterator(["a", "b", "c"])
     assert list(iterator) == ["a", "b", "c"]
     # 3 has-next=1 flags plus the final has-next=0 on local exhaustion
-    assert seen == [1.0, 1.0, 1.0, 0.0]
+    assert seen == [3, 1.0, 1.0, 1.0, 0.0]
 
 
 def test_sync_stops_when_another_rank_is_exhausted(monkeypatch):
     calls = {"n": 0}
 
     def fake_all_reduce(tensor, op=None):
+        if tensor.dtype == epoch_sync_iterator_module.torch.long:
+            return
         calls["n"] += 1
         if calls["n"] >= 3:  # simulated other rank runs out at 3rd batch
             tensor.zero_()
@@ -245,6 +247,15 @@ def test_nccl_backend_resolves_a_cuda_device(monkeypatch):
         epoch_sync_iterator_module.torch.cuda, "current_device", lambda: 0
     )
     seen_devices = []
+    real_tensor = epoch_sync_iterator_module.torch.tensor
+    monkeypatch.setattr(
+        epoch_sync_iterator_module.torch,
+        "tensor",
+        lambda value, dtype=None, device=None: (
+            seen_devices.append(device),
+            real_tensor(value, dtype=dtype),
+        )[1],
+    )
     real_ones = epoch_sync_iterator_module.torch.ones
     real_zeros = epoch_sync_iterator_module.torch.zeros
     monkeypatch.setattr(

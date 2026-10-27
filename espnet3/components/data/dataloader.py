@@ -92,7 +92,7 @@ class DataLoaderBuilder:
         self.epoch = epoch
 
     def _get_world_info(self):
-        if self.num_device > 1:
+        if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
         else:
@@ -399,7 +399,11 @@ class DataLoaderBuilder:
                         "adjust the sampler's minimum batch size or use per_gpu."
                     )
             batches = [batch[rank::world_size] for batch in batches]
-        elif self.num_device > 1 and not getattr(dataset, "rank_sharded", False):
+        elif (
+            torch.distributed.is_initialized()
+            and torch.distributed.get_world_size() > 1
+            and not getattr(dataset, "rank_sharded", False)
+        ):
             batches = list(batches)
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
