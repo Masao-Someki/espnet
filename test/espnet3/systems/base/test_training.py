@@ -208,7 +208,7 @@ def test_build_trainer_assembles_components(tmp_path, monkeypatch):
         calls["model"] = model
         return "lit_model"
 
-    def fake_trainer(*, model, exp_dir, config, best_model_criterion):
+    def fake_trainer(*, model, exp_dir, config, best_model_criterion, init=None):
         calls["trainer_args"] = {
             "model": model,
             "exp_dir": exp_dir,

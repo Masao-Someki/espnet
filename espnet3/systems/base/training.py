@@ -42,6 +42,7 @@ def _build_trainer(config: DictConfig) -> ESPnet3LightningTrainer:
         exp_dir=config.exp_dir,
         config=config.trainer,
         best_model_criterion=config.best_model_criterion,
+        init=config.get("init"),
     )
     return trainer
 

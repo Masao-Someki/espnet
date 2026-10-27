@@ -50,6 +50,7 @@ class ESPnet3LightningTrainer:
         exp_dir: str = None,
         config: Union[DictConfig, Namespace, Dict[str, Any]] = None,
         best_model_criterion=None,
+        init: str | None = None,
     ):
         """Initialize the trainer with model, configuration, and training setup.
 
@@ -62,6 +63,7 @@ class ESPnet3LightningTrainer:
             exp_dir (str, optional): Experiment directory for logs and checkpoints.
             config (DictConfig | Namespace | Dict[str, Any], optional): Training config.
             best_model_criterion (ListConfig, optional): Criteria for selecting ckpt.
+            init: Top-level model initializer; overrides the legacy nested setting.
         """
         if best_model_criterion is None:
             best_model_criterion = ListConfig([("valid/loss", 3, "min")])
@@ -71,8 +73,9 @@ class ESPnet3LightningTrainer:
 
         # Instantiate the Lightning Model
         self.model = model
-        if getattr(self.config, "init", None) is not None:
-            initialize(self.model, self.config.init)
+        initializer = init if init is not None else getattr(self.config, "init", None)
+        if initializer is not None:
+            initialize(self.model, initializer)
 
         # Accelerator
         accelerator = _get_or_initialize(self.config, "accelerator", "auto")
@@ -145,6 +148,7 @@ class ESPnet3LightningTrainer:
             "profiler",
             "plugins",
             "callbacks",
+            "init",
         ):
             self._del_config_key_on(trainer_config, key)
 

@@ -149,6 +149,8 @@ def _build_model(config: DictConfig):
     model_config = config.model_config
     if not isinstance(model_config, DictConfig):
         model_config = OmegaConf.create(model_config)
+    model_config = OmegaConf.create(OmegaConf.to_container(model_config, resolve=True))
+    model_config.pop("freeze_param", None)
     task = config.get("task")
     if task:
         model = get_espnet_model(task, model_config)
