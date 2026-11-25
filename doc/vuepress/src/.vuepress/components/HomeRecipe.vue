@@ -201,6 +201,7 @@ const guides = [
       { label: 'Recipe structure',         href: './guides/migrating-from-espnet2/recipe-structure.html' },
       { label: 'Task to System',           href: './guides/migrating-from-espnet2/task-to-system.html' },
       { label: 'Config diff',              href: './guides/migrating-from-espnet2/config-diff.html' },
+      { label: 'ATLAS',                    href: './guides/atlas/index.html' },
     ],
   },
   {

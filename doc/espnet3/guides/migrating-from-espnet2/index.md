@@ -34,4 +34,10 @@ config by pipeline area.
     icon="tabler:binary-tree-2"
     href="./cluster-and-parallel.html"
   />
+  <DocCard
+    title="ATLAS"
+    desc="Once your recipe runs on ESPnet3, let a coding agent run its hyperparameter/architecture search loop."
+    icon="tabler:robot"
+    href="../atlas/index.html"
+  />
 </DocCards>

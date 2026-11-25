@@ -20,6 +20,7 @@ import XVectorAnimation from "./components/XVectorAnimation.vue";
 import XVectorConfig from "./components/XVectorConfig.vue";
 import DemoConfigEditor from "./components/DemoConfigEditor.vue";
 import ShardingDemo from "./components/ShardingDemo.vue";
+import AtlasDemoV2 from "./components/AtlasDemoV2.vue";
 
 export default defineClientConfig({
   enhance({ app }) {
@@ -44,5 +45,6 @@ export default defineClientConfig({
     app.component("XVectorAnimation", XVectorAnimation);
     app.component("XVectorConfig", XVectorConfig);
     app.component("ShardingDemo", ShardingDemo);
+    app.component("AtlasDemoV2", AtlasDemoV2);
   },
 });
